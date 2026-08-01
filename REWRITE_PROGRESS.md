@@ -16,7 +16,16 @@ when something non-obvious happened.
 - [x] Jest + jest-expo + RNTL 14 with a component smoke test that renders through the real providers
 - [x] Bundles for Android (`expo export --platform android`, 5.2 MB hbc) and web
 - [x] Web verified running: static export renders the real UI text and Tamagui CSS; dev server returns 200
-- [ ] **Open:** run on a physical Android device / emulator. This machine has no Android SDK or emulator, so only the bundle was verified. Needs a run through Expo Go before M1 is called finished.
+- [ ] **Open:** run on Android. The SDK and an emulator are now installed and working, but Expo Go cannot load the project — see "Android runtime blocker" below.
+
+**Android dev environment (2026-08-01) — configured and working**
+- Android Studio + SDK at `%LOCALAPPDATA%\Android\Sdk`: platform-tools, emulator, cmdline-tools, build-tools, platforms `android-36`/`36.1`/`37.0`, system image `android-36.1/google_apis/x86_64`
+- AVD `Pixel_10` boots and is reachable: `adb devices` → `emulator-5554`, API 36, `sdk_gphone64_x86_64`
+- User-level `ANDROID_HOME` set, and `platform-tools` + `emulator` added to the user `Path`
+- Hardware acceleration is available (`HypervisorPresent` = true), so no HAXM/AEHD setup is needed
+
+Start the emulator with:
+`%LOCALAPPDATA%\Android\Sdk\emulator\emulator.exe -avd Pixel_10`
 
 **Notes (2026-08-01)**
 - SDK 57 ships React Native 0.86, React 19.2, TypeScript 6, with typed routes and the React Compiler enabled.
@@ -85,4 +94,33 @@ when something non-obvious happened.
 
 ## Blockers / open questions
 
-- Android on-device run is unverified — no Android SDK or emulator on the development machine. Needs a pass through Expo Go on a real phone.
+### Android runtime blocker: Expo Go cannot load the project on the emulator
+
+**Symptom:** Expo Go opens the experience and sits on its loading spinner forever. With
+`expo start --localhost` it fails outright with `java.io.IOException: Failed to download
+remote update` (visible via "View error log" on Expo Go's error screen). No JavaScript ever
+executes — logcat contains no `ReactNativeJS` output and no crash.
+
+**Not caused by our code.** The provider tree was bisected down to a bare
+`<View><Text>` screen with no Tamagui, no providers and no charts, and it fails identically.
+Metro does build the bundle when asked (1392 modules for the minimal app, 2469 for the real
+one), so bundling is fine — delivery to Expo Go is what breaks.
+
+**What was ruled out**
+- Emulator networking: Chrome *inside the emulator* loads `http://127.0.0.1:8081/status`
+  from Metro successfully, so `adb reverse tcp:8081 tcp:8081` works.
+- Expo Go version mismatch: Expo Go 57.0.2 vs Expo SDK 57 — correct pairing.
+- Stale state: `adb shell pm clear host.exp.exponent` and `expo start --clear` change nothing.
+- Bundle host: tried the LAN IP, `127.0.0.1` (with `adb reverse`) and `10.0.2.2`, and
+  `REACT_NATIVE_PACKAGER_HOSTNAME` pinned to each. In the failing runs Metro logs **no
+  request at all**, so Expo Go is giving up before it reaches the server.
+
+**Worth knowing:** `expo start --localhost` makes Metro bind to `::1` (IPv6 loopback) only.
+`adb reverse` forwards to IPv4 `127.0.0.1`, which is then refused. Do not use `--localhost`
+with an emulator here; leave Metro on its default dual-stack `::` bind.
+
+**Next step to try:** a development build (`npx expo run:android`) instead of Expo Go. That
+embeds the runtime in a real APK and removes the Expo Go manifest/download path entirely.
+It needs a JDK (Android Studio ships one) and a first Gradle build, and it would generate an
+`android/` folder — which is currently gitignored. **This contradicts the standing Expo Go
+constraint in AGENTS.md, so it needs the owner's decision before proceeding.**
