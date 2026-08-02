@@ -1,31 +1,33 @@
-﻿# Rewrite Progress
+# Rewrite Progress
 
 Tracks execution of [REWRITE_PLAN.md](REWRITE_PLAN.md). Update this file in the same
 commit as the work it describes. One line per task; add dated notes under each milestone
 when something non-obvious happened.
 
-**Current status:** M0 complete (except on-device Android check â€” see note). Next up: M1 domain, storage, data layer.
+**Current status:** M0 complete — runs on Android, web and in tests. Next up: M1 domain, storage, data layer.
 
 ## Milestones
 
-### M0 â€” Scaffold â€” `done` (2026-08-01)
+### M0 — Scaffold — `done` (2026-08-01)
 - [x] git init + .gitignore + initial commit of docs
 - [x] create-expo-app (SDK 57, TS) + expo-router + strict tsconfig + ESLint flat config
-- [x] Tamagui configured (`@tamagui/config/v5`, dark default) â€” `src/theme/tamagui.config.ts`
+- [x] Tamagui configured (`@tamagui/config/v5`, dark default) — `src/theme/tamagui.config.ts`
 - [x] Victory Native XL + Skia + Reanimated + gesture-handler + Zustand + TanStack Query + AsyncStorage installed
 - [x] Jest + jest-expo + RNTL 14 with a component smoke test that renders through the real providers
 - [x] Bundles for Android (`expo export --platform android`, 5.2 MB hbc) and web
 - [x] Web verified running: static export renders the real UI text and Tamagui CSS; dev server returns 200
-- [x] **Runs on Android** â€” verified on the Pixel_7 emulator (API 36, x86_64): the dashboard screen renders with the dark Tamagui theme and `ReactNativeJS: Running "main"` in logcat. Uses a **dev build**, not Expo Go (see below).
+- [x] **Runs on Android** — verified on the emulator (API 36, x86_64): the dashboard screen renders with the dark Tamagui theme and `ReactNativeJS: Running "main"` in logcat. Uses a **dev build**, not Expo Go (see below).
 
-**Android dev environment (2026-08-01) â€” configured and working**
-- Android Studio + SDK at `%LOCALAPPDATA%\Android\Sdk`: platform-tools, emulator, cmdline-tools, build-tools, platforms `android-36`/`36.1`/`37.0`, system image `android-36.1/google_apis/x86_64`
-- AVD `Pixel_10` boots and is reachable: `adb devices` â†’ `emulator-5554`, API 36, `sdk_gphone64_x86_64`
+**Android dev environment — configured and working**
+- Android Studio + SDK at `%LOCALAPPDATA%\Android\Sdk`: platform-tools, emulator, cmdline-tools, build-tools, platforms `android-36`/`36.1`/`37.0`
+- AVDs: `Pixel_10` (android-36.1, **google_apis** — rootable, preferred) and `Pixel_7` (android-36, google_apis_playstore — cannot `adb root`)
 - User-level `ANDROID_HOME` set, and `platform-tools` + `emulator` added to the user `Path`
 - Hardware acceleration is available (`HypervisorPresent` = true), so no HAXM/AEHD setup is needed
 
 Start the emulator with:
 `%LOCALAPPDATA%\Android\Sdk\emulator\emulator.exe -avd Pixel_10`
+
+then `npx expo start` in one shell and `npm run android:emulator` in another.
 
 **Notes (2026-08-01)**
 - SDK 57 ships React Native 0.86, React 19.2, TypeScript 6, with typed routes and the React Compiler enabled.
@@ -33,7 +35,7 @@ Start the emulator with:
 - TypeScript 6 does not auto-include `@types` globals the way TS 5 did; `types: ["jest", "node"]` is now explicit in tsconfig.
 - Small cleanup deferred to M1: the template pulled in `@expo/ui`, `expo-glass-effect`, `expo-symbols`, `expo-device`, `expo-web-browser`, `expo-image` and `expo-font`, none of which this app uses. Removing them should shrink the bundle; re-run both exports afterwards.
 
-### M1 â€” Domain, storage, data layer â€” `not started`
+### M1 — Domain, storage, data layer — `not started`
 - [ ] Types: GlancesServer, WidgetConfig (size/order model)
 - [ ] Zustand stores + AsyncStorage persistence
 - [ ] Port widgetData.ts / chartColors.ts / widgetFactory.ts with unit tests
@@ -41,14 +43,14 @@ Start the emulator with:
 - [ ] pluginslist + system endpoints wired
 - [ ] Settings: server list CRUD + refresh interval + connection test
 
-### M2 â€” Dashboard shell + text widget â€” `not started`
+### M2 — Dashboard shell + text widget — `not started`
 - [ ] Dashboard screen + header + empty state
 - [ ] Widget card frame (tokens in title, edit-mode actions, loading/error)
-- [ ] Add-widget flow: type picker â†’ config screen
+- [ ] Add-widget flow: type picker → config screen
 - [ ] Config screen v1 (server, metric, title, fields, live preview)
 - [ ] Text widget end-to-end
 
-### M3 â€” Chart widgets â€” `not started`
+### M3 — Chart widgets — `not started`
 - [ ] ChartView abstraction over Victory Native XL
 - [ ] Donut (options + center label), pie, bar
 - [ ] Per-field colors + picker; formatter display labels
@@ -56,28 +58,28 @@ Start the emulator with:
 - [ ] Component tests per chart kind
 - [ ] Early web smoke check of charts (risk item)
 
-### M4 â€” Processes widget + parity sweep â€” `not started`
+### M4 — Processes widget + parity sweep — `not started`
 - [ ] Processes table (columns, labels, 50-row cap, scrolling)
 - [ ] Per-field formatter UI
-- [ ] Parity checklist sweep (REWRITE_PLAN.md Â§2)
+- [ ] Parity checklist sweep (REWRITE_PLAN.md §2)
 
-### M5 â€” Layout, reorder, immersive, tablet â€” `not started`
+### M5 — Layout, reorder, immersive, tablet — `not started`
 - [ ] Responsive columns; S/M/L/XL size presets
 - [ ] Long-press drag reorder, persisted order
 - [ ] Immersive mode (keep-awake, tap/back exit)
 - [ ] Tablet pass
 
-### M6 â€” Web target â€” `not started`
+### M6 — Web target — `not started`
 - [ ] CanvasKit/Skia web setup; charts verified in browser
 - [ ] Reorder fallback decision for web
 - [ ] PWA manifest + icons; Esc exits immersive
 - [ ] Glances CORS requirement documented
 
-### M7 â€” Windows desktop â€” `not started`
-- [ ] Tauri wrapper of web build (or Electron fallback â€” record the decision here)
+### M7 — Windows desktop — `not started`
+- [ ] Tauri wrapper of web build (or Electron fallback — record the decision here)
 - [ ] Icon, window config, reproducible .exe build
 
-### M8 â€” Hardening & release â€” `not started`
+### M8 — Hardening & release — `not started`
 - [ ] Component tests: settings + config screens, error paths
 - [ ] Perf pass (memoization, background polling pause, processlist cost)
 - [ ] EAS Android build profile
@@ -87,17 +89,19 @@ Start the emulator with:
 
 | Date | Decision | Why |
 |---|---|---|
-| 2026-08-01 | Expo, Android+tablet+web+Windows-desktop, Tamagui, Victory Native XL, multi-server per widget, reorderable grid with size presets, Tauri/Electron for desktop, no migration, logic+component tests | Confirmed with owner during planning (see REWRITE_PLAN.md Â§1) |
+| 2026-08-01 | Expo, Android+tablet+web+Windows-desktop, Tamagui, Victory Native XL, multi-server per widget, reorderable grid with size presets, Tauri/Electron for desktop, no migration, logic+component tests | Confirmed with owner during planning (see REWRITE_PLAN.md §1) |
 | 2026-08-01 | Routes under `src/app` are thin re-exports; screen components live in `src/screens` | Expo Router turns any file in the app directory into a route, so colocated `*.test.tsx` would become routes |
 | 2026-08-01 | Test helper `renderWithProviders` is async | RNTL 14 changed `render` to return a Promise; the global `screen` stays empty unless it is awaited |
 | 2026-08-01 | Style props use Tamagui v5 shorthands (`p`, `px`, `text`, `items`, `justify`) | The v5 config drops the React Native long names `padding` and `textAlign`; the shorthands are what typecheck accepts |
-| 2026-08-02 | Local Android runs use a **dev build** (`expo run:android`), not Expo Go | The emulator's broken host routing makes Expo Go unable to download a bundle at all; a dev build plus an adb tunnel works. Expo Go compatibility is now a library-selection guideline rather than a runtime requirement. |
+| 2026-08-02 | Local Android runs use a **dev build** (`expo run:android`), not Expo Go | The emulator's NAT cannot deliver an 11 MB bundle; a dev build pulls it over adb instead. Expo Go compatibility is now a library-selection guideline rather than a runtime requirement. |
+| 2026-08-03 | Prefer the **google_apis** AVD (`Pixel_10`) over the Play Store one | Only google_apis images allow `adb root`, which is required to repair the emulator's networking so the app can reach a Glances server |
 
 ## Blockers / open questions
 
-_None. Android, web and the test suite all run._
+- Expo Go does not work on the local emulator (details below). The dev build does, so this
+  does not block development. Untested on a physical device.
 
-## Android emulator: solved
+## Android emulator networking
 
 **Root cause.** The API 36 emulator images bring up both `eth0` (10.0.2.15) and `wlan0`
 (10.0.2.16) on `10.0.2.0/24` **with no default route**. Android prefers `wlan0`, whose
@@ -105,15 +109,15 @@ network has no host alias, so nothing on the device can reach the host: not `10.
 the LAN IP, and DNS fails outright (`Unable to resolve host "localhost"`). Check with
 `adb shell ip route` — no `default via ...` line means you are hitting this.
 
-That single fault explains every symptom seen along the way: Expo Go's endless spinner and
-its `java.io.IOException: Failed to download remote update`, and the dev build's
-`Unable to load script`. Our code was never involved — a bare `<View><Text>` screen failed
-identically.
+Our code was never involved: a bare `<View><Text>` screen with no providers failed identically.
 
-**Fix (automated in `scripts/run-android.ps1`, run via `npm run android:emulator`):**
-1. `adb reverse tcp:8081 tcp:8081` — tunnels Metro over adb, needing no device routing.
-2. Write `debug_http_host=127.0.0.1:8081` into the app's shared preferences so React Native
-   uses the tunnel instead of `10.0.2.2`.
+**Fixes (automated in `scripts/run-android.ps1`, run via `npm run android:emulator`):**
+1. `adb root` + `svc wifi disable` — drops the phantom `wlan0` so `eth0` becomes the default
+   network and gains `default via 10.0.2.2`. **Needed for the app to reach a Glances server
+   at all**, not just Metro. Requires a `google_apis` image (`Pixel_10`); `google_apis_playstore`
+   images (`Pixel_7`) refuse `adb root`.
+2. `adb reverse tcp:8081 tcp:8081` + `debug_http_host=127.0.0.1:8081` in the app's shared
+   preferences — reaches Metro over adb instead of the emulator's NAT.
 3. Build `x86_64` only and with **JDK 17**.
 
 **Two build traps**
@@ -122,6 +126,15 @@ identically.
   the script auto-detects it.
 - Building all four ABIs takes ~3x longer and arm64 fails first. Use
   `-PreactNativeArchitectures=x86_64`.
+
+**Expo Go remains unusable on this emulator** (2026-08-03). After the routing fix the device
+genuinely reaches Metro — Chrome on the emulator loads `packager-status:running`, and Expo Go
+gets far enough to trigger a full 2469-module build. But the ~11 MB bundle transfer then
+stalls over the emulator's NAT and never completes; earlier it surfaced as
+`java.io.IOException: Failed to download remote update`. Tried: `10.0.2.2`, the LAN IP,
+`127.0.0.1` over `adb reverse`, cleared app data, and MTU lowered to 1400. The dev build is
+immune because it pulls the bundle through adb. Expo Go on a **physical device over Wi-Fi**
+is untested and would likely work, since the fault is the emulator's NAT.
 
 **Also worth knowing:** `expo start --localhost` binds Metro to `::1` (IPv6 loopback) only,
 which `adb reverse` (IPv4) cannot reach. Leave Metro on its default dual-stack `::` bind.

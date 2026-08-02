@@ -55,8 +55,20 @@ the adb tunnel, points React Native's dev-server setting at it, and launches the
 prefers `wlan0`, whose network has no host alias, so nothing on the device can reach the
 host — not `10.0.2.2`, not the LAN IP, not DNS (`localhost` does not even resolve). Verify
 with `adb shell ip route`: if there is no `default via …` line, this is what you are hitting.
-The fix is `adb reverse tcp:8081 tcp:8081` plus `debug_http_host=127.0.0.1:8081` in the app's
-shared preferences, which is exactly what the script does.
+
+Two independent fixes, both applied by the script:
+1. **`adb root` + `svc wifi disable`** drops the phantom `wlan0`, so `eth0` becomes the
+   default network and `ip route show table eth0` gains `default via 10.0.2.2`. **This one
+   matters beyond Metro** — without it the app has no working network at all and cannot
+   reach a Glances server. It requires a **`google_apis`** system image; `google_apis_playstore`
+   images refuse `adb root` (the `Pixel_10` AVD is google_apis, `Pixel_7` is playstore).
+2. **`adb reverse tcp:8081 tcp:8081` + `debug_http_host=127.0.0.1:8081`** in the app's shared
+   preferences, so Metro is reached over adb rather than the emulator's NAT.
+
+Fix 2 is not redundant: even with routing repaired, the emulator's NAT stalls on large
+transfers. Small responses come through, but the ~11 MB dev bundle never finishes — which is
+exactly why **Expo Go cannot work here** (it has no adb tunnel to fall back on) while the dev
+build does. Lowering the MTU to 1400 does not help.
 
 Two more traps worth knowing:
 - **Build with JDK 17.** Android Studio ships JDK 25, and AGP's CMake step dies on it with
