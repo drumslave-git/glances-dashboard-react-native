@@ -126,6 +126,8 @@ Verify against installed types (`node_modules/**/*.d.ts`) rather than memory —
 ## Glances API cheatsheet
 
 - Base: `http://<host>:61208`, REST under `/api/4/…`, all plain GET returning JSON.
+- A Glances behind a reverse proxy is served on the scheme's default port (`https://host/api/4/…`), so **only default the port when the user omitted the scheme** — see `coerceServerUrl`.
+- Real captured payloads live in `src/__fixtures__/glances.ts` — use them in tests rather than inventing shapes. Two traps they record: `fs` leads with bind mounts rather than real disks on a containerised server, and `processlist` entries carry an array `cmdline` and a nested `memory_info`.
 - `/api/4/pluginslist` → string[] of available plugins/metrics.
 - `/api/4/system` → `{ hostname, linux_distro, os_name, ... }`.
 - `/api/4/{plugin}` (e.g. `cpu`, `mem`, `load`, `fs`, `gpu`, `processlist`) → object **or array** (fs/gpu/processlist are arrays; widget logic takes the first element except processes, which uses the whole array).

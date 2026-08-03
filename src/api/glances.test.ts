@@ -1,3 +1,5 @@
+import { cpuFixture, pluginsListFixture, systemFixture } from '@/__fixtures__/glances';
+
 import {
   buildEndpointUrl,
   coerceServerUrl,
@@ -39,16 +41,67 @@ describe('coerceServerUrl', () => {
     expect(coerceServerUrl('192.168.1.10:1234')).toBe('http://192.168.1.10:1234');
   });
 
-  it('keeps an explicit scheme', () => {
-    expect(coerceServerUrl('https://glances.example.com')).toBe('https://glances.example.com:61208');
+  it('leaves an explicit https url alone, so proxied servers keep port 443', () => {
+    expect(coerceServerUrl('https://glances.example.com')).toBe('https://glances.example.com');
+    expect(coerceServerUrl('https://glances.example.com/')).toBe('https://glances.example.com');
   });
 
-  it('preserves a path suffix', () => {
-    expect(coerceServerUrl('http://host/glances')).toBe('http://host:61208/glances');
+  it('leaves an explicit http url alone', () => {
+    expect(coerceServerUrl('http://host')).toBe('http://host');
+    expect(coerceServerUrl('http://host:1234')).toBe('http://host:1234');
+  });
+
+  it('preserves a path suffix on a bare host', () => {
+    expect(coerceServerUrl('host/glances')).toBe('http://host:61208/glances');
   });
 
   it('returns empty for blank input', () => {
     expect(coerceServerUrl('   ')).toBe('');
+  });
+});
+
+describe('against real captured payloads', () => {
+  const originalFetch = global.fetch;
+
+  afterEach(() => {
+    global.fetch = originalFetch;
+  });
+
+  it('reads a real system payload for the header', async () => {
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: true,
+      json: async () => systemFixture,
+    }) as unknown as typeof fetch;
+
+    await expect(testGlancesConnection('https://glances.example.com')).resolves.toEqual({
+      ok: true,
+      hostname: 'TCloud',
+    });
+  });
+
+  it('reads a real pluginslist as a string array', async () => {
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: true,
+      json: async () => pluginsListFixture,
+    }) as unknown as typeof fetch;
+
+    const plugins = await fetchGlances<string[]>('https://glances.example.com', '/api/4/pluginslist');
+    expect(plugins).toContain('cpu');
+    expect(plugins).toContain('processlist');
+  });
+
+  it('reads a real cpu payload as an object of numbers', async () => {
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: true,
+      json: async () => cpuFixture,
+    }) as unknown as typeof fetch;
+
+    const cpu = await fetchGlances<Record<string, number>>(
+      'https://glances.example.com',
+      '/api/4/cpu',
+    );
+    expect(cpu.total).toBeCloseTo(46.8);
+    expect(cpu.cpucore).toBe(12);
   });
 });
 

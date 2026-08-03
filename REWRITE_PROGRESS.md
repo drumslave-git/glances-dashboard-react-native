@@ -135,6 +135,7 @@ then `npx expo start` in one shell and `npm run android:emulator` in another.
 | 2026-08-03 | Servers carry their own `refreshMs`; widgets store only `serverId` | Multi-server-per-widget means polling cadence belongs to the server, and keeps widget config free of duplicated connection details |
 | 2026-08-03 | Query key is `[serverId, url, endpointPath]` | Without the url, editing a server's address kept serving the previous address's cached result until the next poll |
 | 2026-08-03 | Widget type picker lives at `/widget/pick`, not `/widget/new` | A static `/widget/new` route takes precedence over `/widget/[id]` with `id: 'new'`, so the picker navigated to itself |
+| 2026-08-03 | `coerceServerUrl` only defaults the port when the scheme was inferred | A typed-out `https://glances.example.com` is served on 443 behind a reverse proxy; appending `:61208` broke it. A bare host still gets `http://…:61208`. |
 
 ## Blockers / open questions
 

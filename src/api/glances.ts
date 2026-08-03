@@ -41,14 +41,20 @@ export function buildEndpointUrl(baseUrl: string, endpointPath: string): string 
 /**
  * Users type "192.168.1.10" far more often than a full URL, so fill in the
  * scheme and the default Glances port when they are missing.
+ *
+ * A typed-out scheme is taken as deliberate and left alone — a Glances behind a
+ * reverse proxy (https://glances.example.com) is served on the scheme's default
+ * port, and forcing :61208 onto it would break the address.
  */
 export function coerceServerUrl(input: string): string {
   const trimmed = input.trim();
   if (!trimmed) return '';
-  const withScheme = /^https?:\/\//i.test(trimmed) ? trimmed : `http://${trimmed}`;
-  const normalized = normalizeBaseUrl(withScheme);
-  // Add the default port only when the authority carries none of its own.
-  const match = /^(https?:\/\/)([^/:]+)(:\d+)?(.*)$/i.exec(normalized);
+
+  if (/^https?:\/\//i.test(trimmed)) return normalizeBaseUrl(trimmed);
+
+  const normalized = normalizeBaseUrl(`http://${trimmed}`);
+  // Bare host: assume a direct `glances -w`, which listens on 61208.
+  const match = /^(http:\/\/)([^/:]+)(:\d+)?(.*)$/i.exec(normalized);
   if (!match) return normalized;
   const [, scheme, host, port, rest] = match;
   return `${scheme}${host}${port ?? `:${GLANCES_DEFAULT_PORT}`}${rest}`;
