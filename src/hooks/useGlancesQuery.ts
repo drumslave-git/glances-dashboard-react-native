@@ -15,8 +15,10 @@ export interface UseGlancesQueryOptions {
 /**
  * The single way this app reads from Glances.
  *
- * The query key is [serverId, endpointPath], so several widgets pointing at the
- * same metric on the same server share one request instead of each polling.
+ * The query key is [serverId, url, endpointPath], so several widgets pointing at
+ * the same metric on the same server share one request instead of each polling.
+ * The url is part of the key so that editing a server's address refetches at once
+ * rather than serving the old address's cached result until the next poll.
  */
 export function useGlancesQuery<T = unknown>(
   server: GlancesServer | undefined,
@@ -27,7 +29,7 @@ export function useGlancesQuery<T = unknown>(
   const enabled = (options.enabled ?? true) && Boolean(server?.url) && Boolean(endpointPath);
 
   return useQuery<T, Error>({
-    queryKey: [server?.id ?? 'no-server', endpointPath ?? 'no-endpoint'],
+    queryKey: [server?.id ?? 'no-server', server?.url ?? '', endpointPath ?? 'no-endpoint'],
     queryFn: ({ signal }) => fetchGlances<T>(server!.url, endpointPath!, signal),
     enabled,
     refetchInterval: refreshMs > 0 ? refreshMs : false,

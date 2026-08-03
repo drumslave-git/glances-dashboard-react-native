@@ -1,64 +1,83 @@
 import { useRouter } from 'expo-router';
+import { useMemo, useState } from 'react';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Button, H1, Paragraph, SizableText, XStack, YStack } from 'tamagui';
+import { Button, Paragraph, YStack } from 'tamagui';
 
-import { selectServerById, useServersStore } from '@/state/servers';
+import { DashboardHeader } from '@/components/dashboard/dashboard-header';
+import { WidgetGrid } from '@/components/dashboard/widget-grid';
 import { useSystemInfo } from '@/hooks/useGlancesQuery';
+import { selectServerById, useServersStore } from '@/state/servers';
+import { selectOrderedWidgets, useWidgetsStore } from '@/state/widgets';
+import { nextSize } from '@/utils/widgetLayout';
 
-/**
- * Placeholder dashboard: proves the data layer end to end until M2 replaces it
- * with the real header and widget grid.
- */
 export function DashboardScreen() {
   const router = useRouter();
-  const defaultServer = useServersStore((state) =>
-    selectServerById(state, state.defaultServerId),
-  );
-  const serverCount = useServersStore((state) => state.servers.length);
-  const { data: system, isError } = useSystemInfo(defaultServer);
+  const [editMode, setEditMode] = useState(false);
 
+  const defaultServer = useServersStore((state) => selectServerById(state, state.defaultServerId));
+  const serverCount = useServersStore((state) => state.servers.length);
+  // Selecting the sorted array directly would hand useSyncExternalStore a new
+  // reference on every render and loop, so sort outside the selector.
+  const storedWidgets = useWidgetsStore((state) => state.widgets);
+  const widgets = useMemo(() => selectOrderedWidgets({ widgets: storedWidgets }), [storedWidgets]);
+  const removeWidget = useWidgetsStore((state) => state.removeWidget);
+  const setWidgetSize = useWidgetsStore((state) => state.setWidgetSize);
+
+  const { data: system, isError } = useSystemInfo(defaultServer);
   const hostname = typeof system?.hostname === 'string' ? system.hostname : undefined;
   const distro = typeof system?.linux_distro === 'string' ? system.linux_distro : undefined;
 
+  const handleResize = (widgetId: string) => {
+    const widget = widgets.find((w) => w.id === widgetId);
+    if (widget) setWidgetSize(widgetId, nextSize(widget.size));
+  };
+
   return (
     <SafeAreaView style={{ flex: 1 }} edges={['top', 'left', 'right']}>
-      <YStack flex={1} p="$4" gap="$4">
-        <XStack items="center" gap="$3">
-          <H1 size="$8" flex={1}>
-            Glances
-          </H1>
-          <Button size="$3" onPress={() => router.push('/settings')} testID="open-settings">
-            Settings
-          </Button>
-        </XStack>
+      <YStack flex={1} p="$3" gap="$3">
+        <DashboardHeader
+          server={defaultServer}
+          hostname={hostname}
+          linuxDistro={distro}
+          unreachable={Boolean(defaultServer) && isError}
+          editMode={editMode}
+          onToggleEditMode={() => setEditMode((previous) => !previous)}
+          onOpenSettings={() => router.push('/settings')}
+        />
 
-        <YStack flex={1} justify="center" items="center" gap="$2">
-          {serverCount === 0 ? (
+        {serverCount === 0 ? (
+          <YStack flex={1} justify="center" items="center" gap="$3">
             <Paragraph text="center" opacity={0.7} testID="dashboard-no-servers">
-              No servers configured. Add one in Settings to load data.
+              No servers configured. Add one to start reading metrics.
             </Paragraph>
-          ) : (
-            <>
-              <SizableText size="$6" testID="dashboard-server-name">
-                {defaultServer?.name}
-              </SizableText>
-              {hostname && (
-                <Paragraph opacity={0.8} testID="dashboard-hostname">
-                  {hostname}
-                  {distro ? ` · ${distro}` : ''}
-                </Paragraph>
-              )}
-              {isError && (
-                <Paragraph theme="red" text="center" testID="dashboard-error">
-                  Could not reach {defaultServer?.url}
-                </Paragraph>
-              )}
-              <Paragraph size="$2" opacity={0.5} text="center">
-                Widgets arrive in the next milestone.
-              </Paragraph>
-            </>
-          )}
-        </YStack>
+            <Button theme="blue" onPress={() => router.push('/settings')} testID="dashboard-add-server">
+              Open settings
+            </Button>
+          </YStack>
+        ) : widgets.length === 0 ? (
+          <YStack flex={1} justify="center" items="center" gap="$3">
+            <Paragraph text="center" opacity={0.7} testID="dashboard-no-widgets">
+              No widgets yet.
+            </Paragraph>
+            <Button theme="blue" onPress={() => router.push('/widget/pick')} testID="dashboard-add-first-widget">
+              Add a widget
+            </Button>
+          </YStack>
+        ) : (
+          <WidgetGrid
+            widgets={widgets}
+            editMode={editMode}
+            onEdit={(id) => router.push({ pathname: '/widget/[id]', params: { id } })}
+            onRemove={removeWidget}
+            onResize={handleResize}
+          />
+        )}
+
+        {editMode && widgets.length > 0 && (
+          <Button theme="blue" onPress={() => router.push('/widget/pick')} testID="dashboard-add-widget">
+            Add widget
+          </Button>
+        )}
       </YStack>
     </SafeAreaView>
   );

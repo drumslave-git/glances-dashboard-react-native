@@ -100,6 +100,12 @@ Verify against installed types (`node_modules/**/*.d.ts`) rather than memory —
 - **RNTL 14's `render` is async.** It returns a Promise, and the global `screen` stays unbound until it resolves. Always `await renderWithProviders(...)` and prefer the returned queries over `screen`.
 - **TypeScript 6 does not auto-include `@types` globals.** Anything needed globally must be listed in `tsconfig.json` → `compilerOptions.types` (currently `["jest", "node"]`).
 - **Shell working directory persists between tool calls.** Use absolute paths for npm commands; a stray `cd` into `node_modules/...` will silently install into the wrong package.
+- **Never run Metro with `CI=1` while developing.** CI mode disables the file watcher, so Metro keeps serving a stale cached bundle and your changes never reach the device — even after reinstalling the app. Plain `npx expo start` works fine in a background process.
+- **A static route beats a dynamic one.** `/widget/new` as a file would swallow `router.push({ pathname: '/widget/[id]', params: { id: 'new' } })`, which navigates to itself instead of the config screen. The picker therefore lives at `/widget/pick` and `id: 'new'` means "create".
+- **`toHaveTextContent` compares the whole string.** Use a regex for substring assertions: `toHaveTextContent(/total = 12/)`.
+- **Tamagui `Card` does not reliably receive touches** even with `onPress`; component tests pass because they call the handler directly. Use `Button` (with `height="auto"`) for anything tappable.
+- **Zustand selectors must return stable references.** `useStore(selectOrderedWidgets)` sorts into a new array each call and loops via `useSyncExternalStore`. Select raw state and derive with `useMemo`.
+- **Edit source files with the editor tools, not PowerShell `Set-Content`** — it writes a BOM and can double-encode UTF-8, which trips the `unicode-bom` lint rule and mangles em-dashes.
 
 ## Hard rules
 

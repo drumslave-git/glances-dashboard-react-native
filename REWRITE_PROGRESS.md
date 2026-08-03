@@ -4,7 +4,7 @@ Tracks execution of [REWRITE_PLAN.md](REWRITE_PLAN.md). Update this file in the 
 commit as the work it describes. One line per task; add dated notes under each milestone
 when something non-obvious happened.
 
-**Current status:** M1 complete — domain, persisted stores, Glances client and settings all run on device. Next up: M2 dashboard shell + text widget.
+**Current status:** M2 complete — dashboard, add-widget flow and the text widget all run on device against a live server. Next up: M3 chart widgets.
 
 ## Milestones
 
@@ -61,12 +61,29 @@ then `npx expo start` in one shell and `npm run android:emulator` in another.
 - Query keys are `[serverId, endpointPath]`, and there is a test proving two widgets on the same
   server and endpoint share a single request.
 
-### M2 — Dashboard shell + text widget — `not started`
-- [ ] Dashboard screen + header + empty state
-- [ ] Widget card frame (tokens in title, edit-mode actions, loading/error)
-- [ ] Add-widget flow: type picker → config screen
-- [ ] Config screen v1 (server, metric, title, fields, live preview)
-- [ ] Text widget end-to-end
+### M2 — Dashboard shell + text widget — `done` (2026-08-03)
+- [x] Dashboard screen + header (server name, hostname/distro, unreachable state) + empty states
+- [x] Widget card frame: title with resolved tokens, edit-mode edit/remove/resize, loading and error states
+- [x] Add-widget flow: type picker (`/widget/pick`) → config screen (`/widget/[id]`)
+- [x] Config screen v1: server select, metric list from `pluginslist`, title, field picker discovered from the live payload, live preview
+- [x] Text widget end-to-end
+- [x] Responsive grid with S/M/L/XL size presets (`src/utils/widgetLayout.ts`); drag-reorder still M5
+- [x] 159 tests across 14 suites; typecheck and lint clean
+- [x] Verified on the emulator against a stub Glances server: metric discovery, field discovery, preview, save, and a widget polling live values
+
+**Notes (2026-08-03)**
+- Charts and the process table are offered in the type picker but disabled, labelled with the
+  milestone they arrive in (M3/M4), and `WidgetContent` says the same in place of a body.
+- **Two real bugs the tests and the device run caught:**
+  - `useWidgetsStore(selectOrderedWidgets)` looped forever — the selector sorts into a new array
+    each call, which `useSyncExternalStore` treats as a change. Sorting now happens in a `useMemo`.
+  - A static `/widget/new` route swallowed `push({pathname:'/widget/[id]', params:{id:'new'}})`,
+    so choosing a widget type navigated back to the picker. The picker moved to `/widget/pick`.
+- The query key gained the server URL (`[serverId, url, endpointPath]`) so editing a server's
+  address refetches immediately instead of showing the old address's cached error until the
+  next poll. De-duplication across widgets is unaffected and still covered by a test.
+- Verification used a stub Glances server (`node scripts/../fake-glances.js` in the scratchpad)
+  tunnelled to the emulator with `adb reverse tcp:61208 tcp:61208`. Handy for M3/M4 too.
 
 ### M3 — Chart widgets — `not started`
 - [ ] ChartView abstraction over Victory Native XL
@@ -116,6 +133,8 @@ then `npx expo start` in one shell and `npm run android:emulator` in another.
 | 2026-08-03 | Web output is `single` (SPA), not `static` | Static rendering runs the app in Node during export, where AsyncStorage touches `localStorage` and crashes the build; a live dashboard gains nothing from prerendering |
 | 2026-08-03 | `shorten` formatter fixed instead of ported verbatim | The reference rendered negatives as `--1.5k`; a visibly wrong output is not behaviour worth preserving |
 | 2026-08-03 | Servers carry their own `refreshMs`; widgets store only `serverId` | Multi-server-per-widget means polling cadence belongs to the server, and keeps widget config free of duplicated connection details |
+| 2026-08-03 | Query key is `[serverId, url, endpointPath]` | Without the url, editing a server's address kept serving the previous address's cached result until the next poll |
+| 2026-08-03 | Widget type picker lives at `/widget/pick`, not `/widget/new` | A static `/widget/new` route takes precedence over `/widget/[id]` with `id: 'new'`, so the picker navigated to itself |
 
 ## Blockers / open questions
 

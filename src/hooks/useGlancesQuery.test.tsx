@@ -98,6 +98,25 @@ describe('useGlancesQuery', () => {
     expect(result.current.error?.message).toContain('500');
   });
 
+  it('refetches immediately when the server address changes', async () => {
+    mockJson({ total: 1 });
+    const wrapper = createWrapper();
+
+    const { result, rerender } = await renderHook(
+      ({ current }: { current: typeof server }) => useGlancesQuery(current, '/api/4/cpu'),
+      { wrapper, initialProps: { current: server } },
+    );
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(global.fetch).toHaveBeenCalledWith('http://host:61208/api/4/cpu', expect.anything());
+
+    await rerender({ current: { ...server, url: 'http://other:61208' } });
+
+    await waitFor(() =>
+      expect(global.fetch).toHaveBeenCalledWith('http://other:61208/api/4/cpu', expect.anything()),
+    );
+  });
+
   it('shares one request between widgets on the same server and endpoint', async () => {
     mockJson({ total: 1 });
     const wrapper = createWrapper();
