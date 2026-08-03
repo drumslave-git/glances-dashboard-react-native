@@ -138,6 +138,86 @@ describe('WidgetConfigScreen — creating', () => {
   });
 });
 
+describe('WidgetConfigScreen — per-field options', () => {
+  beforeEach(() => {
+    mockGlances({
+      '/api/4/pluginslist': ['cpu'],
+      '/api/4/cpu': { total: 12.3456, user: 4, system: 2 },
+    });
+  });
+
+  it('saves a per-field formatter', async () => {
+    const { findByTestId, getByTestId, user } = await renderWithProviders(<WidgetConfigScreen />);
+
+    await user.press(await findByTestId('widget-fields-option-total'));
+    await user.press(getByTestId('widget-field-total'));
+    await user.press(getByTestId('widget-field-total-formatter-kind-round'));
+    // Defaults to 2 decimals; step down to 1 to prove the stepper is wired up.
+    await user.press(getByTestId('widget-field-total-formatter-decimals-decrease'));
+    await user.press(getByTestId('widget-save'));
+
+    expect(useWidgetsStore.getState().widgets[0].fieldFormatters).toEqual({ total: 'round(1)' });
+  });
+
+  it('applies the formatter to the live preview', async () => {
+    const { findByTestId, getByTestId, user } = await renderWithProviders(<WidgetConfigScreen />);
+
+    await user.press(await findByTestId('widget-fields-option-total'));
+    await user.press(getByTestId('widget-field-total'));
+    await user.press(getByTestId('widget-field-total-formatter-kind-round'));
+
+    expect(getByTestId('widget-preview-content-body')).toHaveTextContent('total = 12.35');
+  });
+
+  it('offers truncate length and position, and summarises the choice', async () => {
+    const { findByTestId, getByTestId, user } = await renderWithProviders(<WidgetConfigScreen />);
+
+    await user.press(await findByTestId('widget-fields-option-total'));
+    await user.press(getByTestId('widget-field-total'));
+    await user.press(getByTestId('widget-field-total-formatter-kind-truncate'));
+    await user.press(getByTestId('widget-field-total-formatter-position-middle'));
+
+    expect(getByTestId('widget-field-total-formatter-summary')).toHaveTextContent(
+      'Truncate 10 middle',
+    );
+  });
+
+  it('clears a formatter when the kind goes back to none', async () => {
+    const { findByTestId, getByTestId, user } = await renderWithProviders(<WidgetConfigScreen />);
+
+    await user.press(await findByTestId('widget-fields-option-total'));
+    await user.press(getByTestId('widget-field-total'));
+    await user.press(getByTestId('widget-field-total-formatter-kind-gb'));
+    await user.press(getByTestId('widget-field-total-formatter-kind-none'));
+    await user.press(getByTestId('widget-save'));
+
+    expect(useWidgetsStore.getState().widgets[0].fieldFormatters).toEqual({});
+  });
+
+  it('forgets formatters for fields that were deselected', async () => {
+    const { findByTestId, getByTestId, user } = await renderWithProviders(<WidgetConfigScreen />);
+
+    await user.press(await findByTestId('widget-fields-option-total'));
+    await user.press(getByTestId('widget-field-total'));
+    await user.press(getByTestId('widget-field-total-formatter-kind-gb'));
+    await user.press(getByTestId('widget-fields-option-total'));
+    await user.press(getByTestId('widget-save'));
+
+    expect(useWidgetsStore.getState().widgets[0].fieldFormatters).toEqual({});
+  });
+
+  it('reorders the selected fields, which is also their display order', async () => {
+    const { findByTestId, getByTestId, user } = await renderWithProviders(<WidgetConfigScreen />);
+
+    await user.press(await findByTestId('widget-fields-option-total'));
+    await user.press(getByTestId('widget-fields-option-user'));
+    await user.press(getByTestId('widget-field-user-up'));
+    await user.press(getByTestId('widget-save'));
+
+    expect(useWidgetsStore.getState().widgets[0].fields).toEqual(['user', 'total']);
+  });
+});
+
 describe('WidgetConfigScreen — chart widgets', () => {
   beforeEach(() => {
     mockParams = { id: 'new', kind: 'donut' };
@@ -162,9 +242,9 @@ describe('WidgetConfigScreen — chart widgets', () => {
     const { findByTestId, getByTestId, user } = await renderWithProviders(<WidgetConfigScreen />);
 
     await user.press(await findByTestId('widget-fields-option-user'));
-    await user.press(getByTestId('widget-field-color-user'));
+    await user.press(getByTestId('widget-field-user'));
     // The third palette entry, so the assertion does not depend on the default.
-    await user.press(getByTestId('widget-field-color-user-option-2'));
+    await user.press(getByTestId('widget-field-user-option-2'));
     await user.press(getByTestId('widget-save'));
 
     expect(useWidgetsStore.getState().widgets[0].fieldColors).toEqual({ user: CHART_PALETTE[2] });
@@ -174,8 +254,8 @@ describe('WidgetConfigScreen — chart widgets', () => {
     const { findByTestId, getByTestId, user } = await renderWithProviders(<WidgetConfigScreen />);
 
     await user.press(await findByTestId('widget-fields-option-user'));
-    await user.press(getByTestId('widget-field-color-user'));
-    await user.press(getByTestId('widget-field-color-user-option-2'));
+    await user.press(getByTestId('widget-field-user'));
+    await user.press(getByTestId('widget-field-user-option-2'));
     await user.press(getByTestId('widget-fields-option-user'));
     await user.press(getByTestId('widget-save'));
 

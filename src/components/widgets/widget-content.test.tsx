@@ -1,4 +1,4 @@
-import { cpuFixture, memFixture } from '@/__fixtures__/glances';
+import { cpuFixture, memFixture, processListFixture } from '@/__fixtures__/glances';
 import { renderWithProviders } from '@/test-utils/render';
 
 import { getStatusMessage, WidgetContent } from './widget-content';
@@ -73,12 +73,18 @@ describe('WidgetContent', () => {
     expect(queryByTestId('w-body')).toBeNull();
   });
 
-  it('is explicit about kinds that are not built yet', async () => {
+  it('renders a process widget as a table', async () => {
     const { getByTestId } = await renderWithProviders(
-      <WidgetContent kind="processes" data={[{ a: 1 }]} config={{ metric: 'processlist' }} testID="w" />,
+      <WidgetContent
+        kind="processes"
+        data={processListFixture}
+        config={{ metric: 'processlist' }}
+        testID="w"
+      />,
     );
 
-    expect(getByTestId('w-pending')).toHaveTextContent(/M4/);
+    expect(getByTestId('w-processes-header-cpu_percent')).toHaveTextContent('CPU %');
+    expect(getByTestId('w-processes-row-1')).toHaveTextContent(/systemd/);
   });
 });
 

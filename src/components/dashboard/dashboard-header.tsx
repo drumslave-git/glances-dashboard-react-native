@@ -28,6 +28,11 @@ export function DashboardHeader({
     return server.url;
   })();
 
+  // The reference app shows the polling cadence as a badge; the same information
+  // fits beside the subtitle here. 0 means "fetch once", which has no cadence.
+  const refresh =
+    server && server.refreshMs > 0 ? `${Math.round(server.refreshMs / 100) / 10}s` : null;
+
   return (
     <YStack gap="$1">
       <XStack items="center" gap="$2">
@@ -46,15 +51,23 @@ export function DashboardHeader({
           Settings
         </Button>
       </XStack>
-      <Paragraph
-        size="$2"
-        opacity={0.7}
-        numberOfLines={1}
-        theme={unreachable ? 'red' : undefined}
-        testID="dashboard-subtitle"
-      >
-        {subtitle}
-      </Paragraph>
+      <XStack items="center" gap="$2">
+        <Paragraph
+          size="$2"
+          opacity={0.7}
+          flex={1}
+          numberOfLines={1}
+          theme={unreachable ? 'red' : undefined}
+          testID="dashboard-subtitle"
+        >
+          {subtitle}
+        </Paragraph>
+        {refresh && (
+          <Paragraph size="$1" opacity={0.6} testID="dashboard-refresh">
+            {refresh} refresh
+          </Paragraph>
+        )}
+      </XStack>
     </YStack>
   );
 }

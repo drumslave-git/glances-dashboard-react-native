@@ -2,6 +2,7 @@ import { Platform } from 'react-native';
 import { Paragraph, ScrollView, Text } from 'tamagui';
 
 import { ChartView, type ChartKind } from '@/components/charts/chart-view';
+import { ProcessesTable } from '@/components/widgets/processes-table';
 import type { DonutChartOptions, WidgetKind } from '@/types/dashboard';
 import { getChartData, getTextBody, resolveTitleTokens } from '@/utils/widgetData';
 
@@ -52,11 +53,6 @@ export function isChartKind(kind: WidgetKind): kind is ChartKind {
   return kind === 'donut' || kind === 'pie' || kind === 'bar';
 }
 
-/** The process table lands in M4; until then it says so plainly. */
-const NOT_YET_IMPLEMENTED: Partial<Record<WidgetKind, string>> = {
-  processes: 'The process table arrives in milestone M4.',
-};
-
 export function WidgetContent({
   kind,
   data,
@@ -77,12 +73,14 @@ export function WidgetContent({
     );
   }
 
-  const pending = NOT_YET_IMPLEMENTED[kind];
-  if (pending) {
+  if (kind === 'processes') {
     return (
-      <Paragraph size="$2" opacity={0.6} testID={testID ? `${testID}-pending` : undefined}>
-        {pending}
-      </Paragraph>
+      <ProcessesTable
+        data={data}
+        fields={fields}
+        {...(config.fieldFormatters ? { fieldFormatters: config.fieldFormatters } : {})}
+        {...(testID ? { testID: `${testID}-processes` } : {})}
+      />
     );
   }
 

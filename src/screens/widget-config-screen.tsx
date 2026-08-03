@@ -5,13 +5,15 @@ import { Button, Card, H2, Input, Label, Paragraph, ScrollView, XStack, YStack }
 
 import { FALLBACK_METRICS } from '@/api/glances';
 import { ChartOptionsSection } from '@/components/config/chart-options-section';
-import { FieldColorsSection } from '@/components/config/field-colors-section';
+import { FieldOptionsSection } from '@/components/config/field-options-section';
 import { OptionList } from '@/components/config/option-list';
 import { isChartKind, WidgetContent } from '@/components/widgets/widget-content';
 import { useGlancesQuery, usePluginsList } from '@/hooks/useGlancesQuery';
 import { selectServerById, useServersStore } from '@/state/servers';
 import { useWidgetsStore, type WidgetPatch } from '@/state/widgets';
 import type { DonutChartOptions, WidgetKind } from '@/types/dashboard';
+import { pickFormatters } from '@/utils/formatterSpec';
+import { DEFAULT_PROCESS_FIELDS } from '@/utils/processTable';
 import { getRecordFromPayload, resolveTitleTokens } from '@/utils/widgetData';
 import { defaultWidgetTitle, metricToEndpoint, resolveMetricForKind } from '@/utils/widgetFactory';
 
@@ -46,6 +48,9 @@ export function WidgetConfigScreen() {
   const [fields, setFields] = useState<string[]>(existing?.fields ?? []);
   const [fieldColors, setFieldColors] = useState<Record<string, string>>(
     existing?.fieldColors ?? {},
+  );
+  const [fieldFormatters, setFieldFormatters] = useState<Record<string, string>>(
+    existing?.fieldFormatters ?? {},
   );
   const [chartOptions, setChartOptions] = useState<DonutChartOptions>(
     existing?.donutChartOptions ?? {},
@@ -88,6 +93,7 @@ export function WidgetConfigScreen() {
     // Fields belong to the previous payload shape.
     setFields([]);
     setFieldColors({});
+    setFieldFormatters({});
   };
 
   const canSave = Boolean(serverId);
@@ -95,6 +101,7 @@ export function WidgetConfigScreen() {
   const previewConfig = {
     metric,
     fields,
+    fieldFormatters,
     ...(isChart && {
       fieldColors,
       donutChartOptions: chartOptions,
@@ -112,6 +119,7 @@ export function WidgetConfigScreen() {
       metric,
       title: resolvedTitle,
       fields: fields.length > 0 ? fields : undefined,
+      fieldFormatters: pickFormatters(fieldFormatters, fields),
       ...(isChart && {
         fieldColors: pickColors(fieldColors, fields),
         donutChartOptions: chartOptions,
@@ -181,7 +189,7 @@ export function WidgetConfigScreen() {
             </YStack>
 
             <YStack gap="$2">
-              <Label>Fields</Label>
+              <Label>{isProcesses ? 'Columns' : 'Fields'}</Label>
               <OptionList
                 options={availableFields}
                 value={fields}
@@ -197,24 +205,30 @@ export function WidgetConfigScreen() {
                 testID="widget-fields"
               />
               <Paragraph size="$1" opacity={0.6}>
-                {isChart
-                  ? 'Leave empty to chart every numeric field in the payload.'
-                  : 'Leave empty to show the whole payload.'}
+                {isProcesses
+                  ? `Leave empty for the default columns: ${DEFAULT_PROCESS_FIELDS.join(', ')}.`
+                  : isChart
+                    ? 'Leave empty to chart every numeric field in the payload.'
+                    : 'Leave empty to show the whole payload.'}
               </Paragraph>
+            </YStack>
+
+            <YStack gap="$2">
+              <Label>{isProcesses ? 'Column order' : 'Selected fields'}</Label>
+              <FieldOptionsSection
+                fields={fields}
+                fieldColors={fieldColors}
+                fieldFormatters={fieldFormatters}
+                showColors={isChart}
+                onFieldsChange={setFields}
+                onColorsChange={setFieldColors}
+                onFormattersChange={setFieldFormatters}
+                testID="widget-field"
+              />
             </YStack>
 
             {isChart && (
               <>
-                <YStack gap="$2">
-                  <Label>Segment colours</Label>
-                  <FieldColorsSection
-                    fields={fields}
-                    fieldColors={fieldColors}
-                    onChange={setFieldColors}
-                    testID="widget-field-color"
-                  />
-                </YStack>
-
                 <XStack items="center" gap="$2">
                   <YStack flex={1}>
                     <Paragraph size="$2">Split percentage into Used / Free</Paragraph>

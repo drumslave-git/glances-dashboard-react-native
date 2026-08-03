@@ -22,47 +22,49 @@ cross-platform React Native app.
 ## 2. What the source app does (parity checklist)
 
 Everything below must exist in the rewrite for parity. Items marked *(adapted)* change shape
-for mobile but keep the capability.
+for mobile but keep the capability. Checkboxes were swept at the end of M4 (2026-08-03);
+everything still open is layout work scheduled for M5–M6.
 
 ### Settings & servers
-- [ ] Glances server configuration: URL + refresh interval (ms). *(adapted: becomes a **server list** — `{ id, name, url, refreshMs }` — with add/edit/delete and a default server)*
-- [ ] Settings persisted locally (web: localStorage → RN: AsyncStorage via persisted store)
-- [ ] "Set Glances URL in settings to load data" empty-state hint
+- [x] Glances server configuration: URL + refresh interval (ms). *(adapted: becomes a **server list** — `{ id, name, url, refreshMs }` — with add/edit/delete and a default server)*
+- [x] Settings persisted locally (web: localStorage → RN: AsyncStorage via persisted store)
+- [x] "Set Glances URL in settings to load data" empty-state hint *(adapted: "No servers configured" plus a button into Settings)*
 
 ### Data layer (Glances REST API v4)
-- [ ] Generic polling of `GET {base}/api/4/{plugin}` with configurable interval, loading/error state, URL normalization
-- [ ] `/api/4/pluginslist` → available metric options (fallback list: `cpu, mem, load, fs, gpu`)
-- [ ] `/api/4/system` polled every 10 s → hostname + `linux_distro` shown in the header
-- [ ] Widgets sharing the same server+endpoint must not duplicate requests *(improvement over source, required once N widgets × M servers exist)*
+- [x] Generic polling of `GET {base}/api/4/{plugin}` with configurable interval, loading/error state, URL normalization
+- [x] `/api/4/pluginslist` → available metric options (fallback list: `cpu, mem, load, fs, gpu`)
+- [x] `/api/4/system` polled every 10 s → hostname + `linux_distro` shown in the header
+- [x] Widgets sharing the same server+endpoint must not duplicate requests *(improvement over source, required once N widgets × M servers exist)*
 
 ### Widget kinds
-- [ ] **text** — payload rendered as `field = value` lines (selected fields) or pretty-printed JSON (no fields selected)
-- [ ] **donut** — segments per numeric field; options: size, thickness, paddingAngle, withLabels; center label
-- [ ] **pie** — segments per numeric field, with/without labels
-- [ ] **bar** — one bar group, one bar per numeric field
-- [ ] **processes** — table over `/api/4/processlist`; default columns `name, cpu_percent, memory_percent, username`; friendly header labels (`cpu_percent` → "CPU %", etc.); capped at 50 rows; scrollable
+- [x] **text** — payload rendered as `field = value` lines (selected fields) or pretty-printed JSON (no fields selected)
+- [x] **donut** — segments per numeric field; options: size, thickness, paddingAngle, withLabels; center label
+- [x] **pie** — segments per numeric field, with/without labels
+- [x] **bar** — one bar group, one bar per numeric field
+- [x] **processes** — table over `/api/4/processlist`; default columns `name, cpu_percent, memory_percent, username`; friendly header labels (`cpu_percent` → "CPU %", etc.); capped at 50 rows; scrollable
 
 ### Widget configuration
-- [ ] Add-widget flow: pick widget type → configure *(adapted: modals become screens/sheets)*
-- [ ] Metric select (from pluginslist; `processlist` excluded for non-process widgets, forced for process widgets)
-- [ ] Title with live tokens: `{{field}}` and `{{field:formatter}}` (e.g. `VRAM {{mem:round(2)}}%`)
-- [ ] Field multi-select, populated from a **live fetch** of the chosen endpoint's payload keys
-- [ ] Per-field color overrides (missing fields get a deterministic default color — port `chartColors.ts`)
-- [ ] Per-field formatters: `round(n)`, `bytes`, `kb`, `mb`, `gb`, `shorten`, `truncate(len, start|middle|end)`
-- [ ] Donut chart options section (size/thickness/paddingAngle/withLabels)
-- [ ] Chart center label with token support
-- [ ] "Split percentage into Used/Free" toggle (single 0–100 field → Used + Free segments)
-- [ ] Live preview of the widget inside the config UI
-- [ ] Per-widget **server select** *(new — multi-server feature)*
-- [ ] Legacy `dataKey` handling can be dropped (no migration), but keep the `fields` semantics
+- [x] Add-widget flow: pick widget type → configure *(adapted: modals become screens/sheets)*
+- [x] Metric select (from pluginslist; `processlist` excluded for non-process widgets, forced for process widgets)
+- [x] Title with live tokens: `{{field}}` and `{{field:formatter}}` (e.g. `VRAM {{mem:round(2)}}%`)
+- [x] Field multi-select, populated from a **live fetch** of the chosen endpoint's payload keys
+- [x] Per-field color overrides (missing fields get a deterministic default color — port `chartColors.ts`)
+- [x] Per-field formatters: `round(n)`, `bytes`, `kb`, `mb`, `gb`, `shorten`, `truncate(len, start|middle|end)`
+- [x] Donut chart options section (size/thickness/paddingAngle/withLabels)
+- [x] Chart center label with token support
+- [x] "Split percentage into Used/Free" toggle (single 0–100 field → Used + Free segments)
+- [x] Live preview of the widget inside the config UI
+- [x] Per-widget **server select** *(new — multi-server feature)*
+- [x] Legacy `dataKey` handling can be dropped (no migration), but keep the `fields` semantics
+- [x] Selected-field display order, changed with move up/down *(reference: `FieldsSection`)*
 
 ### Dashboard & modes
-- [ ] Edit mode toggle: shows Add widget, per-widget configure/remove, and enables reordering
-- [ ] Reorderable widget list/grid with size presets *(adapted from 12-col drag/resize grid)*
-- [ ] Responsive columns: 1–2 on phone, 3–4 on tablet/web by window width
-- [ ] Immersive mode: hide header/chrome *(adapted: exit via tap or back gesture instead of Esc; on web, Esc still works)*
-- [ ] Header: hostname, distro, server info, refresh indicator, edit toggle, settings, immersive buttons
-- [ ] Per-widget loading / error / no-server states
+- [x] Edit mode toggle: shows Add widget, per-widget configure/remove, and enables reordering
+- [ ] Reorderable widget list/grid with size presets *(adapted from 12-col drag/resize grid)* — size presets done, drag reorder is **M5**
+- [ ] Responsive columns: 1–2 on phone, 3–4 on tablet/web by window width — **M5**
+- [ ] Immersive mode: hide header/chrome *(adapted: exit via tap or back gesture instead of Esc; on web, Esc still works)* — **M5**
+- [x] Header: hostname, distro, server info, refresh indicator, edit toggle, settings *(immersive button lands with immersive mode in M5)*
+- [x] Per-widget loading / error / no-server states
 
 ## 3. Architecture
 

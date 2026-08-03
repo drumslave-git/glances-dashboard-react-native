@@ -91,6 +91,24 @@ describe('DashboardScreen - header', () => {
 
     await waitFor(() => expect(getByTestId('dashboard-subtitle')).toHaveTextContent(/Cannot reach/));
   });
+
+  it('shows the polling cadence', async () => {
+    mockGlances({ '/api/4/system': { hostname: 'nas' } });
+    useServersStore.getState().addServer({ name: 'NAS', url: '10.0.0.1', refreshMs: 2500 });
+
+    const { getByTestId } = await renderWithProviders(<DashboardScreen />);
+
+    expect(getByTestId('dashboard-refresh')).toHaveTextContent('2.5s refresh');
+  });
+
+  it('shows no cadence for a server that is fetched once', async () => {
+    mockGlances({ '/api/4/system': { hostname: 'nas' } });
+    useServersStore.getState().addServer({ name: 'NAS', url: '10.0.0.1', refreshMs: 0 });
+
+    const { queryByTestId } = await renderWithProviders(<DashboardScreen />);
+
+    expect(queryByTestId('dashboard-refresh')).toBeNull();
+  });
 });
 
 describe('DashboardScreen - widgets', () => {

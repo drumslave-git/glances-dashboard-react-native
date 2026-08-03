@@ -4,7 +4,7 @@ Tracks execution of [REWRITE_PLAN.md](REWRITE_PLAN.md). Update this file in the 
 commit as the work it describes. One line per task; add dated notes under each milestone
 when something non-obvious happened.
 
-**Current status:** M3 complete — donut, pie and bar widgets render live data on Android, and the web export renders them too. Next up: M4 processes widget + parity sweep.
+**Current status:** M4 complete — every widget kind from the reference app now exists, per-field formatters and field ordering are configurable, and the §2 parity checklist is swept. Next up: M5 layout, drag reorder, immersive mode and tablet.
 
 ## Milestones
 
@@ -136,10 +136,48 @@ then `npx expo start` in one shell and `npm run android:emulator` in another.
   `[react-native-skia] SkPath.arcToOval() is deprecated …` once. Ours to ignore until Victory
   moves to `PathBuilder`.
 
-### M4 — Processes widget + parity sweep — `not started`
-- [ ] Processes table (columns, labels, 50-row cap, scrolling)
-- [ ] Per-field formatter UI
-- [ ] Parity checklist sweep (REWRITE_PLAN.md §2)
+### M4 — Processes widget + parity sweep — `done` (2026-08-03)
+- [x] Processes table: default columns, friendly headers, 50-row cap, horizontal + vertical scroll — `src/components/widgets/processes-table.tsx` over pure `src/utils/processTable.ts`
+- [x] Per-field formatter UI (`FormatterEditor`) covering every formatter `formatFieldValue` understands
+- [x] Selected-field ordering with move up/down, plus colours, merged into one `FieldOptionsSection`
+- [x] Formatters apply to every widget kind, not just charts — text bodies, chart labels and table cells
+- [x] Processes enabled in the type picker; the "arrives in M4" placeholder and its gating are gone
+- [x] Refresh-cadence indicator in the header (the reference app's "5s refresh" badge)
+- [x] Parity checklist sweep (REWRITE_PLAN.md §2) — everything still open there is M5/M6 layout work
+- [x] 255 tests across 19 suites; typecheck and lint clean
+- [x] Verified on the emulator against the live TCloud server: the type picker offers processes,
+      the config screen discovers process keys, reorder and the Round formatter drive the live
+      preview, and two saved process widgets poll real data — one with default columns
+      (Name / CPU % / Mem % / User), one with `name` + `cmdline`
+- [ ] **Open:** one Fabric mount crash observed during that run, not reproduced (see below)
+
+**Notes (2026-08-03)**
+- **Process payloads are not flat**, and the reference app's `String(proc[field])` showed it:
+  `cmdline` is an array (rendered `a,b,c`) and `memory_info` a nested object (rendered
+  `[object Object]`). `formatProcessCell` joins arrays with spaces and JSON-encodes objects,
+  then applies the field's formatter — so `truncate(40,middle)` on a command line now does
+  something useful instead of trimming `[object Object]`.
+- **Columns are fixed-width by field**, which is what makes the header line up with the rows
+  and the whole table scroll sideways as one piece. Widths live in `processColumnWidth` so
+  they stay testable.
+- Tamagui's `ScrollView` types reject `contentContainerStyle: { flexGrow: 1 }` — the v5 config
+  has no `flexGrow` and no `grow` shorthand. It was not needed: a horizontal ScrollView already
+  stretches its child vertically, which is what gives the inner vertical ScrollView its height.
+- The formatter editor round-trips through strings rather than storing structured options, so
+  `WidgetConfig.fieldFormatters` keeps the reference app's shape and `formatFieldValue` stays
+  the single interpreter. `parseFormatterSpec` deliberately matches that function's own
+  tolerance — `round ( 1 )` is not a valid spec anywhere in the app, because `formatFieldValue`
+  gates on `startsWith('round(')` before its regex runs.
+- `FieldColorsSection` became `FieldOptionsSection`: three separate lists of the same fields
+  (order, colour, formatter) would have been three places to look. Colours are hidden for
+  non-chart kinds, where they mean nothing.
+- **One unexplained Fabric mount crash, seen once and not reproduced** — see the open question
+  below. Not a reason to hold M4, but it is unresolved, not fixed.
+
+**Emulator note (2026-08-03):** the Pixel_10 AVD died repeatedly on app launch with the
+default (host GPU) renderer, taking the adb connection with it. Launching with
+`-gpu swiftshader_indirect` is stable. Worth reaching for the moment the emulator starts
+disappearing mid-session; `scripts/run-android.ps1` does not set it.
 
 ### M5 — Layout, reorder, immersive, tablet — `not started`
 - [ ] Responsive columns; S/M/L/XL size presets
@@ -184,11 +222,28 @@ then `npx expo start` in one shell and `npm run android:emulator` in another.
 | 2026-08-03 | Jest boots real CanvasKit via a custom `testEnvironment` | Skia's jest mock needs `global.CanvasKit`, which loads asynchronously; with it the chart tests run Victory's real path maths instead of a stub |
 | 2026-08-03 | Colour picker and chart options are offered for pie and bar, not just donut | The reference only exposed them for donuts even though its own `ChartView` honoured them for every chart kind — an oversight, not a design |
 | 2026-08-03 | Slice labels are dropped below an 18° sweep | On a phone-sized donut, labels for sub-5% slices overlap into an unreadable pile |
+| 2026-08-03 | Process cells join arrays and JSON-encode objects before formatting | The reference rendered `cmdline` as `a,b,c` and `memory_info` as `[object Object]`; both are readable this way and can then be truncated |
+| 2026-08-03 | Field order, colour and formatter live in one `FieldOptionsSection` | They all key off the same selected-field list; three parallel lists would be three places to look for one field's settings |
+| 2026-08-03 | Formatters are offered for every widget kind, colours only for charts | `getTextBody` and the process table already honoured `fieldFormatters`; only colour is chart-specific |
+| 2026-08-03 | Formatter state is stored as the spec string, not structured options | Keeps `WidgetConfig` identical to the reference and leaves `formatFieldValue` the single interpreter of a spec |
 
 ## Blockers / open questions
 
 - Expo Go does not work on the local emulator (details below). The dev build does, so this
   does not block development. Untested on a physical device.
+- **Fabric mount crash seen once during M4 verification, cause unknown (2026-08-03).**
+  Saving a process widget and returning to the dashboard threw
+  `addViewAt: failed to insert view [3716] into parent [4564] at index 0 — The specified
+  child already has a parent`, from `SurfaceMountingManager.addViewAt`, at the moment two
+  `ProcessesTable`s mounted into the grid. It did **not** reproduce: a cold start renders
+  both tables fine, and three further add-and-save cycles produced no new occurrence
+  (the log still holds exactly one incident).
+  The one unusual construct in that subtree is `ProcessesTable`'s vertical `ScrollView`
+  nested inside a horizontal one — which the §2 requirement for horizontal + vertical
+  scrolling makes hard to avoid, and which is the standard RN table pattern.
+  `nestedScrollEnabled` is now set on the inner one, but that addresses gesture ownership,
+  **not** this error, so it should not be read as a fix. If it resurfaces, suspect the
+  nesting first and consider a flat single-axis table with column widths that fit the card.
 
 ## Android emulator networking
 

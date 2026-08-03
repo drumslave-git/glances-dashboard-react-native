@@ -8,8 +8,6 @@ interface WidgetTypeOption {
   kind: WidgetKind;
   label: string;
   description: string;
-  /** Kinds whose renderer lands in a later milestone. */
-  availableFrom?: string;
 }
 
 const WIDGET_TYPES: WidgetTypeOption[] = [
@@ -37,7 +35,6 @@ const WIDGET_TYPES: WidgetTypeOption[] = [
     kind: 'processes',
     label: 'Processes table',
     description: 'The process list, as a scrollable table.',
-    availableFrom: 'M4',
   },
 ];
 
@@ -68,22 +65,11 @@ export function WidgetTypeScreen() {
                 py="$3"
                 px="$3"
                 justify="flex-start"
-                opacity={option.availableFrom ? 0.5 : 1}
-                disabled={Boolean(option.availableFrom)}
                 onPress={() => choose(option.kind)}
                 testID={`widget-type-${option.kind}`}
               >
                 <YStack gap="$1" flex={1}>
-                  <XStack items="center" gap="$2">
-                    <SizableText size="$5" flex={1}>
-                      {option.label}
-                    </SizableText>
-                    {option.availableFrom && (
-                      <SizableText size="$1" opacity={0.8}>
-                        {option.availableFrom}
-                      </SizableText>
-                    )}
-                  </XStack>
+                  <SizableText size="$5">{option.label}</SizableText>
                   <Paragraph size="$2" opacity={0.7}>
                     {option.description}
                   </Paragraph>
