@@ -1,4 +1,5 @@
 import { resetServerIdCounter, useServersStore } from '@/state/servers';
+import { useUiStore } from '@/state/ui';
 import { useWidgetsStore } from '@/state/widgets';
 import { renderWithProviders, waitFor } from '@/test-utils/render';
 import { resetWidgetIdCounter } from '@/utils/widgetFactory';
@@ -30,6 +31,9 @@ beforeEach(() => {
   resetWidgetIdCounter();
   useServersStore.setState({ servers: [], defaultServerId: null });
   useWidgetsStore.setState({ widgets: [] });
+  // Edit and immersive mode live in a module-level store now, so without this
+  // each test would inherit whatever the previous one toggled.
+  useUiStore.setState({ editMode: false, immersive: false });
 });
 
 afterEach(() => {
@@ -190,4 +194,45 @@ describe('DashboardScreen - widgets', () => {
       params: { id: widget.id },
     });
   });
+});
+
+describe('DashboardScreen - immersive mode', () => {
+  it('hides the header and edit chrome, and shows the widgets', async () => {
+    mockGlances({ '/api/4/system': {}, '/api/4/cpu': { total: 1 } });
+    const { widget } = addServerAndWidget();
+
+    const { getByTestId, queryByTestId, user } = await renderWithProviders(<DashboardScreen />);
+    await user.press(getByTestId('enter-immersive'));
+
+    expect(queryByTestId('dashboard-subtitle')).toBeNull();
+    expect(queryByTestId('toggle-edit-mode')).toBeNull();
+    expect(queryByTestId('enter-immersive')).toBeNull();
+    expect(getByTestId(`widget-${widget.id}`)).toBeTruthy();
+  });
+
+  it('leaves edit mode behind on the way in', async () => {
+    mockGlances({ '/api/4/system': {}, '/api/4/cpu': { total: 1 } });
+    addServerAndWidget();
+
+    const { getByTestId, user } = await renderWithProviders(<DashboardScreen />);
+    await user.press(getByTestId('toggle-edit-mode'));
+    await user.press(getByTestId('enter-immersive'));
+
+    expect(useUiStore.getState()).toMatchObject({ immersive: true, editMode: false });
+  });
+
+  it('exits on a tap', async () => {
+    mockGlances({ '/api/4/system': {}, '/api/4/cpu': { total: 1 } });
+    addServerAndWidget();
+
+    const { getByTestId, user } = await renderWithProviders(<DashboardScreen />);
+    await user.press(getByTestId('enter-immersive'));
+    await user.press(getByTestId('dashboard-immersive-exit'));
+
+    expect(useUiStore.getState().immersive).toBe(false);
+    expect(getByTestId('dashboard-subtitle')).toBeTruthy();
+  });
+
+  // The back and Esc routes out are covered against the hook itself, in
+  // src/hooks/useImmersiveMode.test.tsx.
 });

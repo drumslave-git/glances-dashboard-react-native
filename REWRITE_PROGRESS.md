@@ -4,7 +4,7 @@ Tracks execution of [REWRITE_PLAN.md](REWRITE_PLAN.md). Update this file in the 
 commit as the work it describes. One line per task; add dated notes under each milestone
 when something non-obvious happened.
 
-**Current status:** M4 complete — every widget kind from the reference app now exists, per-field formatters and field ordering are configurable, and the §2 parity checklist is swept. Next up: M5 layout, drag reorder, immersive mode and tablet.
+**Current status:** M5 complete — widgets drag to reorder, immersive mode hides the chrome and keeps the screen awake, and the grid tiles correctly on tablet-width screens. Next up: M6 web target.
 
 ## Milestones
 
@@ -179,11 +179,49 @@ default (host GPU) renderer, taking the adb connection with it. Launching with
 `-gpu swiftshader_indirect` is stable. Worth reaching for the moment the emulator starts
 disappearing mid-session; `scripts/run-android.ps1` does not set it.
 
-### M5 — Layout, reorder, immersive, tablet — `not started`
-- [ ] Responsive columns; S/M/L/XL size presets
-- [ ] Long-press drag reorder, persisted order
-- [ ] Immersive mode (keep-awake, tap/back exit)
-- [ ] Tablet pass
+### M5 — Layout, reorder, immersive, tablet — `done` (2026-08-03)
+- [x] Responsive columns; S/M/L/XL size presets (landed in M2, revised here — see below)
+- [x] Long-press drag reorder over measured card rects, persisted through `reorderWidgets`
+- [x] Immersive mode: hides the header and edit chrome, keeps the screen awake, exits on tap,
+      Android back, or Esc on web
+- [x] `src/state/ui.ts` holds `editMode` and `immersive`, per plan §3
+- [x] Tablet pass: the 3-column tier is gone, so the default size tiles instead of stranding
+      a third of every row
+- [x] 291 tests across 23 suites; typecheck and lint clean
+- [x] Verified on the emulator against the live TCloud server: a long-press drag moved a widget
+      and the order survived a restart; immersive mode entered, kept polling, and exited by both
+      tap and back; landscape now fits two M cards per row
+
+**Notes (2026-08-03)**
+- **No sortable library fits this grid.** `react-native-sortables` and
+  `react-native-draggable-flatlist` model uniform lists or uniform grids, but the dashboard is a
+  wrap flow of cards spanning 1–4 columns. The drag is therefore hand-rolled on
+  gesture-handler + Reanimated (both already present, so no new native surface): each cell
+  reports its measured rectangle and `src/utils/dragReorder.ts` turns a pointer position into a
+  drop index. That logic is pure and unit tested; the gesture itself is driven in tests by
+  gesture-handler's own `fireGestureHandler`.
+- **The dragged card's origin has to be frozen at drag start.** The grid reflows live underneath
+  the finger, so the card's own measured rectangle moves; tracking the pointer from the live
+  rectangle makes it oscillate. Freezing the origin and comparing against the other cards' fresh
+  rectangles is also self-stabilising — once a swap happens the pointer sits over the dragged
+  card's new slot, which resolves to a no-op move.
+- **Three columns was the wrong tablet layout.** The presets span 1–4 columns and the default is
+  M (span 2), so a 3-column grid fit one card per row and left a third empty with nothing able to
+  fill it. `columnsForWidth` now goes 1 → 2 → 4, and a test asserts the count is never odd above
+  one.
+- **`fireEvent(…, 'layout')` several times in a row wedges the renderer.** Each one opens its own
+  act scope and they overlap, which breaks *every later test in the file* with a mystifying
+  "unable to find element" on the next render. Await between them. This is the same family of
+  trap as the existing note about bare `act`, but it bites on repeated `fireEvent` too.
+- **The first ACTIVE event in `fireGestureHandler` triggers `onStart`, not `onUpdate`.** A pan
+  needs two ACTIVE entries — one to activate, one to move — or the gesture appears to do nothing.
+- Writing a ref during render (to keep gesture callbacks off a stale order) is a lint error under
+  `react-hooks/refs`. It was unnecessary: no drag is in flight before `beginDrag` runs, so the
+  order on screen is just the `widgets` prop, and closing over it is both correct and simpler.
+- `useKeepAwake` holds its lock for as long as it is mounted, so immersive mode gates a tiny
+  `KeepScreenAwake` component rather than calling the hook conditionally.
+- React Native defines a `window` global that has no DOM listener methods, so the Esc handler
+  checks for `window.addEventListener` itself rather than for `window`.
 
 ### M6 — Web target — `not started`
 - [ ] CanvasKit/Skia web setup; charts verified in browser
@@ -226,6 +264,11 @@ disappearing mid-session; `scripts/run-android.ps1` does not set it.
 | 2026-08-03 | Field order, colour and formatter live in one `FieldOptionsSection` | They all key off the same selected-field list; three parallel lists would be three places to look for one field's settings |
 | 2026-08-03 | Formatters are offered for every widget kind, colours only for charts | `getTextBody` and the process table already honoured `fieldFormatters`; only colour is chart-specific |
 | 2026-08-03 | Formatter state is stored as the spec string, not structured options | Keeps `WidgetConfig` identical to the reference and leaves `formatFieldValue` the single interpreter of a spec |
+| 2026-08-03 | Drag reorder is hand-rolled on gesture-handler + Reanimated, not a sortable library | The grid is a wrap flow of 1–4 column cards; the available libraries model uniform lists or grids, and adding one would cost a native dep for a worse fit |
+| 2026-08-03 | The drop target comes from measured card rectangles, not row/column arithmetic | Variable spans mean there is no regular grid to compute against, and rectangles keep the decision pure and testable |
+| 2026-08-03 | `columnsForWidth` skips 3 columns (1 → 2 → 4) | With the default M size spanning 2, a 3-column grid strands a third of every row and nothing can fill it |
+| 2026-08-03 | `editMode`/`immersive` live in a non-persisted `ui` store | Restoring into immersive mode with no visible way out, or into edit mode with remove buttons everywhere, are both bad surprises |
+| 2026-08-03 | Entering immersive mode also leaves edit mode | Editing chrome has no place in a display-only view, and hiding a still-active edit state would be worse than clearing it |
 
 ## Blockers / open questions
 

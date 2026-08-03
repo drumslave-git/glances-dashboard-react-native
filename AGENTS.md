@@ -112,7 +112,10 @@ Verify against installed types (`node_modules/**/*.d.ts`) rather than memory —
 - **Skia on web binds `global.CanvasKit` at module-eval time.** `LoadSkiaWeb()` has to finish *before* anything that imports `@shopify/react-native-skia` is imported, not before it renders. See `src/components/charts/canvases.web.ts`; run `npm run setup:skia-web` once so `public/canvaskit.wasm` exists.
 - **Tamagui's `bg` only takes theme tokens.** Arbitrary hex (chart colours) has to go through `style={{ backgroundColor }}`, and a `Button` will paint over it — put a plain `YStack` swatch inside the button instead.
 - **Jest renders charts for real, and that took setup**: `jest.resolver.js` (react-native-worklets must not resolve its `.native` entries), gesture-handler + Skia `jestSetup` files, and `jest.environment.js`, which boots CanvasKit asynchronously because `setupFiles` cannot await. Don't "simplify" these away.
-- **Firing `layout` in a test needs a flush.** `fireEvent(el, 'layout', …)` then `await waitFor(() => undefined)`; a bare `await act(async () => {})` collides with RNTL 14's own act scope and silently breaks every later test in the file.
+- **Firing `layout` in a test needs a flush.** `fireEvent(el, 'layout', …)` then `await waitFor(() => undefined)`; a bare `await act(async () => {})` collides with RNTL 14's own act scope and silently breaks every later test in the file. The same applies to **several `fireEvent`s in a row** — await between each, or the overlapping act scopes wedge the renderer and every later test in the file fails with "unable to find element" on its *own* render.
+- **`fireGestureHandler`'s first ACTIVE event fires `onStart`, not `onUpdate`.** A pan needs two ACTIVE entries — one to activate, one to move — or the gesture silently does nothing. Give the gesture a `.withTestId()` so `getByGestureTestId` can find it.
+- **Tamagui v5 drops `zIndex` as a prop** (no `z` shorthand either). It has to go through `style={{ zIndex }}`, like arbitrary colours.
+- **Don't write refs during render** — `react-hooks/refs` fails the lint. If it was to dodge a stale closure in a callback, check whether the prop it mirrors is already stable enough to close over.
 
 ## Hard rules
 

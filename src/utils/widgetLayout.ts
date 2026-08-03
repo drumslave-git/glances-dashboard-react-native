@@ -7,11 +7,16 @@ import type { WidgetSize } from '@/types/dashboard';
 
 export const WIDGET_SIZES: WidgetSize[] = ['S', 'M', 'L', 'XL'];
 
-/** Column count for a viewport width: 1–2 on phones, 3–4 on tablets and desktop. */
+/**
+ * Column count for a viewport width: 1–2 on phones, 4 on tablets and desktop.
+ *
+ * Three columns is deliberately skipped. The size presets span 1–4 columns, so
+ * on a 3-column grid the default M (span 2) leaves a third of every row empty
+ * and nothing can fill it. Even counts let S, M and XL tile exactly.
+ */
 export function columnsForWidth(width: number): number {
   if (width < 360) return 1;
   if (width < 700) return 2;
-  if (width < 1100) return 3;
   return 4;
 }
 

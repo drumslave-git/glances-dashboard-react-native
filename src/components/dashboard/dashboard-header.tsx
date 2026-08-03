@@ -10,6 +10,7 @@ interface DashboardHeaderProps {
   editMode: boolean;
   onToggleEditMode: () => void;
   onOpenSettings: () => void;
+  onEnterImmersive: () => void;
 }
 
 export function DashboardHeader({
@@ -20,6 +21,7 @@ export function DashboardHeader({
   editMode,
   onToggleEditMode,
   onOpenSettings,
+  onEnterImmersive,
 }: DashboardHeaderProps) {
   const subtitle = (() => {
     if (!server) return 'No server configured';
@@ -46,6 +48,14 @@ export function DashboardHeader({
           testID="toggle-edit-mode"
         >
           {editMode ? 'Done' : 'Edit'}
+        </Button>
+        <Button
+          size="$3"
+          onPress={onEnterImmersive}
+          accessibilityLabel="Enter immersive mode"
+          testID="enter-immersive"
+        >
+          ⛶
         </Button>
         <Button size="$3" onPress={onOpenSettings} testID="open-settings">
           Settings

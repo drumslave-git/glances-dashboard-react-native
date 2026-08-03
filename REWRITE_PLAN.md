@@ -22,8 +22,8 @@ cross-platform React Native app.
 ## 2. What the source app does (parity checklist)
 
 Everything below must exist in the rewrite for parity. Items marked *(adapted)* change shape
-for mobile but keep the capability. Checkboxes were swept at the end of M4 (2026-08-03);
-everything still open is layout work scheduled for M5–M6.
+for mobile but keep the capability. Swept at the end of M4 and completed in M5 (2026-08-03):
+every item below now exists. Remaining milestones are new targets (web, desktop), not parity.
 
 ### Settings & servers
 - [x] Glances server configuration: URL + refresh interval (ms). *(adapted: becomes a **server list** — `{ id, name, url, refreshMs }` — with add/edit/delete and a default server)*
@@ -60,10 +60,10 @@ everything still open is layout work scheduled for M5–M6.
 
 ### Dashboard & modes
 - [x] Edit mode toggle: shows Add widget, per-widget configure/remove, and enables reordering
-- [ ] Reorderable widget list/grid with size presets *(adapted from 12-col drag/resize grid)* — size presets done, drag reorder is **M5**
-- [ ] Responsive columns: 1–2 on phone, 3–4 on tablet/web by window width — **M5**
-- [ ] Immersive mode: hide header/chrome *(adapted: exit via tap or back gesture instead of Esc; on web, Esc still works)* — **M5**
-- [x] Header: hostname, distro, server info, refresh indicator, edit toggle, settings *(immersive button lands with immersive mode in M5)*
+- [x] Reorderable widget list/grid with size presets *(adapted from 12-col drag/resize grid)*
+- [x] Responsive columns: 1–2 on phone, 4 on tablet/web by window width *(3 columns is skipped — the default size spans 2 and would strand a third of every row)*
+- [x] Immersive mode: hide header/chrome *(adapted: exits via tap or back gesture; on web, Esc still works)*
+- [x] Header: hostname, distro, server info, refresh indicator, edit toggle, settings, immersive
 - [x] Per-widget loading / error / no-server states
 
 ## 3. Architecture
@@ -74,7 +74,7 @@ everything still open is layout work scheduled for M5–M6.
 - **Victory Native XL** + `@shopify/react-native-skia` + `react-native-reanimated` + `react-native-gesture-handler` — charts
 - **Zustand** with `persist` middleware over **AsyncStorage** — settings, servers, widgets (Expo Go-compatible; MMKV deliberately avoided)
 - **TanStack Query** — polling data layer; query key `[serverId, endpointPath]` gives automatic request de-duplication across widgets and per-query `refetchInterval`
-- **react-native-sortables** (or `react-native-draggable-flatlist` if grid support disappoints) — long-press reorder
+- ~~react-native-sortables~~ — **not used.** Both it and `react-native-draggable-flatlist` model uniform lists or grids, and this grid is a wrap flow of cards spanning 1–4 columns. Long-press reorder is hand-rolled on gesture-handler + Reanimated over measured card rectangles (`src/utils/dragReorder.ts`), which adds no dependency.
 - **Jest (`jest-expo`) + React Native Testing Library** — tests
 
 ### Data model (new types, evolved from `src/types/dashboard.ts`)

@@ -11,8 +11,24 @@ describe('columnsForWidth', () => {
   it('scales from phone to desktop', () => {
     expect(columnsForWidth(320)).toBe(1);
     expect(columnsForWidth(390)).toBe(2); // typical phone
-    expect(columnsForWidth(834)).toBe(3); // tablet portrait
+    expect(columnsForWidth(834)).toBe(4); // tablet portrait
     expect(columnsForWidth(1280)).toBe(4); // desktop / tablet landscape
+  });
+
+  it('never lands on an odd count above one, so M-sized cards tile', () => {
+    // A 3-column grid would leave a third of every row empty, since the default
+    // M size spans 2 and nothing narrower can follow it.
+    for (const width of [360, 500, 699, 700, 900, 1100, 1600, 2560]) {
+      const columns = columnsForWidth(width);
+      expect(columns % 2).toBe(0);
+    }
+  });
+
+  it('fills a row exactly with the default size', () => {
+    for (const width of [390, 834, 1280]) {
+      const columns = columnsForWidth(width);
+      expect(100 % widthPercentForSize('M', columns)).toBe(0);
+    }
   });
 });
 
