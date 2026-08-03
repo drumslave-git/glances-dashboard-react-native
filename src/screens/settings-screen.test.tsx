@@ -1,0 +1,110 @@
+import { resetServerIdCounter, useServersStore } from '@/state/servers';
+import { useWidgetsStore } from '@/state/widgets';
+import { renderWithProviders } from '@/test-utils/render';
+import { resetWidgetIdCounter } from '@/utils/widgetFactory';
+
+import { SettingsScreen } from './settings-screen';
+
+const mockPush = jest.fn();
+const mockBack = jest.fn();
+
+jest.mock('expo-router', () => ({
+  useRouter: () => ({ push: mockPush, back: mockBack }),
+}));
+
+beforeEach(() => {
+  mockPush.mockClear();
+  mockBack.mockClear();
+  resetServerIdCounter();
+  resetWidgetIdCounter();
+  useServersStore.setState({ servers: [], defaultServerId: null });
+  useWidgetsStore.setState({ widgets: [] });
+});
+
+function addServer(name: string, url = '10.0.0.1') {
+  return useServersStore.getState().addServer({ name, url });
+}
+
+describe('SettingsScreen', () => {
+  it('shows an empty state when no servers exist', async () => {
+    const { getByTestId } = await renderWithProviders(<SettingsScreen />);
+
+    expect(getByTestId('servers-empty')).toBeTruthy();
+  });
+
+  it('lists servers with their address and refresh interval', async () => {
+    addServer('NAS');
+    const { getByText } = await renderWithProviders(<SettingsScreen />);
+
+    expect(getByText('NAS')).toBeTruthy();
+    expect(getByText('http://10.0.0.1:61208')).toBeTruthy();
+    expect(getByText('every 5s')).toBeTruthy();
+  });
+
+  it('marks the default server', async () => {
+    const first = addServer('A');
+    addServer('B');
+
+    const { getByTestId, queryByTestId } = await renderWithProviders(<SettingsScreen />);
+
+    expect(getByTestId(`server-default-${first.id}`)).toBeTruthy();
+    expect(queryByTestId('server-default-s-2')).toBeNull();
+  });
+
+  it('switches the default server', async () => {
+    addServer('A');
+    const second = addServer('B');
+
+    const { getByTestId, user } = await renderWithProviders(<SettingsScreen />);
+    await user.press(getByTestId(`server-make-default-${second.id}`));
+
+    expect(useServersStore.getState().defaultServerId).toBe(second.id);
+  });
+
+  it('requires confirmation before deleting, and warns about widgets', async () => {
+    const server = addServer('A');
+    useWidgetsStore.getState().addWidget({ serverId: server.id, metric: 'cpu' });
+
+    const { getByTestId, getByText, user } = await renderWithProviders(<SettingsScreen />);
+    await user.press(getByTestId(`server-delete-${server.id}`));
+
+    expect(getByText('Delete this server and its 1 widget?')).toBeTruthy();
+    expect(useServersStore.getState().servers).toHaveLength(1);
+  });
+
+  it('deletes the server and its widgets once confirmed', async () => {
+    const server = addServer('A');
+    useWidgetsStore.getState().addWidget({ serverId: server.id, metric: 'cpu' });
+    useWidgetsStore.getState().addWidget({ serverId: 'other', metric: 'mem' });
+
+    const { getByTestId, user } = await renderWithProviders(<SettingsScreen />);
+    await user.press(getByTestId(`server-delete-${server.id}`));
+    await user.press(getByTestId(`server-confirm-delete-${server.id}`));
+
+    expect(useServersStore.getState().servers).toHaveLength(0);
+    expect(useWidgetsStore.getState().widgets.map((w) => w.serverId)).toEqual(['other']);
+  });
+
+  it('navigates to the add-server form', async () => {
+    const { getByTestId, user } = await renderWithProviders(<SettingsScreen />);
+    await user.press(getByTestId('add-server'));
+
+    expect(mockPush).toHaveBeenCalledWith({
+      pathname: '/settings/server/[id]',
+      params: { id: 'new' },
+    });
+  });
+
+  it('navigates to the edit form for a server', async () => {
+    const server = addServer('A');
+
+    const { getByTestId, user } = await renderWithProviders(<SettingsScreen />);
+    await user.press(getByTestId(`server-edit-${server.id}`));
+
+    expect(mockPush).toHaveBeenCalledWith({
+      pathname: '/settings/server/[id]',
+      params: { id: server.id },
+    });
+  });
+});
+

@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { render, type RenderOptions } from '@testing-library/react-native';
+import { render, userEvent, type RenderOptions } from '@testing-library/react-native';
 import type { ReactElement, ReactNode } from 'react';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { TamaguiProvider, Theme } from 'tamagui';
@@ -42,7 +42,7 @@ export async function renderWithProviders(ui: ReactElement, options?: RenderOpti
 
   const view = await render(ui, { wrapper: Wrapper, ...options });
 
-  return { queryClient, ...view };
+  return { queryClient, user: userEvent.setup(), ...view };
 }
 
 export * from '@testing-library/react-native';
