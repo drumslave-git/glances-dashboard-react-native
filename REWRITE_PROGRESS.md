@@ -94,7 +94,7 @@ then `npx expo start` in one shell and `npm run android:emulator` in another.
 - [x] Component tests per chart kind, driven from the real payload fixtures
 - [x] **Web smoke check passed** — `expo export --platform web` plus a browser run: CanvasKit
       loads, all three chart kinds draw, no fallback renderer needed
-- [x] 203 tests across 16 suites; typecheck and lint clean
+- [x] 208 tests across 16 suites; typecheck and lint clean
 - [x] Verified on the emulator against the live TCloud server: donut, pie, bar and a
       Used/Free split donut with a `{{percent:round(0)}}` centre label, all polling live
 
