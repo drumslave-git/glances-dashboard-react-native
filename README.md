@@ -10,7 +10,7 @@ Rewrite of the web app [drumslave-git/glances-dashboard](https://github.com/drum
 
 ## Targets
 
-Android (phone + tablet), Web, and Windows desktop (via a wrapper around the web build).
+Android (phone + tablet), Web, and Windows desktop (a Tauri window around the web build).
 iOS is kept building but is not a release target.
 
 ## Development
@@ -28,6 +28,8 @@ Then press `a` for Android (Expo Go or an emulator) or `w` for web.
 | `npm run android` | Dev server, opens Android |
 | `npm run web` | Dev server, opens web |
 | `npm run build:web` | Web export (SPA) to `dist/` |
+| `npm run desktop` | Windows desktop app against the dev server (hot reload) |
+| `npm run build:desktop` | Windows `.exe` + installer, from a fresh web export |
 | `npm run setup:skia-web` | Copy `canvaskit.wasm` into `public/` — the charts need it on web |
 | `npm run icons:web` | Regenerate the PWA icons in `public/icons/` from `assets/images/` |
 | `npm test` | Jest unit + component tests |
@@ -83,6 +85,74 @@ possibilities on web. Check the browser console for the actual CORS message.
 One more browser-only rule: a dashboard served over **https** cannot call a Glances over
 **http** (mixed content). Either serve the dashboard over http too, or put the Glances
 behind a TLS-terminating proxy.
+
+## Windows desktop
+
+The desktop app is the web build in a [Tauri](https://tauri.app) window — a native shell
+around the system's WebView2, so the `.exe` is ~7 MB rather than a bundled Chromium.
+
+```bash
+npm run build:desktop
+```
+
+writes two things, after re-running `npm run build:web` so the bundle is never stale:
+
+| Artifact | Path |
+| --- | --- |
+| Portable executable | `src-tauri/target/release/glances-dashboard.exe` |
+| Installer | `src-tauri/target/release/bundle/nsis/Glances Dashboard_<version>_x64-setup.exe` |
+
+The installer is per-user: it needs no administrator rights, installs to
+`%LOCALAPPDATA%\Glances Dashboard`, adds a Start Menu entry, and ships its own
+`uninstall.exe`. Both artifacts embed the whole frontend, so neither needs `dist/` at
+runtime.
+
+`npm run desktop` runs the same window against the Metro dev server instead, with hot
+reload — it starts Expo for you.
+
+### Building it
+
+Windows only, and it needs a Rust toolchain alongside the Node one. Two prerequisites, both
+once per machine — first Rust itself:
+
+```bash
+winget install Rustlang.Rustup
+```
+
+then the MSVC linker and Windows SDK, which come from Visual Studio's *Desktop development
+with C++* workload:
+
+```bash
+winget install Microsoft.VisualStudio.2022.BuildTools --override "--quiet --wait --norestart --add Microsoft.VisualStudio.Workload.VCTools --includeRecommended"
+```
+
+Everything else — NSIS, the Tauri CLI — is fetched automatically on first build. A cold
+release build takes a few minutes; an incremental one is well under that, though the release
+profile's link-time optimization means it is never instant.
+
+**WebView2** is what actually renders the app. Windows 11 and current Windows 10 ship it;
+where it is missing, the installer downloads it during setup.
+
+`src-tauri/` holds the shell: `tauri.conf.json` (window size, icons, bundle settings) and a
+`main.rs` that does nothing but open the window. There is no Rust-side application logic,
+and the frontend is unmodified — the desktop build is the same `dist/` a browser gets.
+
+### Glances, CORS and the desktop app
+
+A WebView2 is a browser, so **everything in "Glances and CORS" above applies here too**.
+The origin to allow is the one Tauri serves the app from:
+
+```ini
+[outputs]
+cors_origins=http://tauri.localhost
+```
+
+Again, a default `glances -w` already allows every origin and needs no change.
+
+The one way desktop is *better* than a hosted PWA: that origin is `http://`, so there is no
+mixed-content rule stopping it from reading a plain-http Glances on the LAN. (Tauri's
+`useHttpsScheme` would switch the origin to `https://tauri.localhost` and reintroduce
+exactly that problem, which is why it is left off.)
 
 ## Documentation
 

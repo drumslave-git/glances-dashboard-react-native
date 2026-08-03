@@ -28,6 +28,8 @@ npm run lint              # eslint
 npm run typecheck         # tsc --noEmit
 npm run setup:skia-web    # copy canvaskit.wasm into public/ (once per clone; charts need it on web)
 npm run build:web         # expo export --platform web
+npm run desktop           # Tauri window against the dev server (starts Expo itself)
+npm run build:desktop     # Windows .exe + NSIS installer, from a fresh web export
 ```
 
 (If a script is missing in package.json during early milestones, add it — these names are the contract.)
@@ -120,6 +122,8 @@ Verify against installed types (`node_modules/**/*.d.ts`) rather than memory —
 - **`app/+html.tsx` does nothing here** — it is only consulted by the rendered web output modes, and this app exports `web.output: "single"`. The HTML shell is `public/index.html` (`npx expo customize index.html` writes the stock one); everything else in `public/` is copied to the site root verbatim. `app.json` → `expo.web.themeColor`/`.description`/`.lang` are injected into that shell at export time, and `%WEB_TITLE%`/`%LANG_ISO_CODE%` are substituted **first-occurrence-only** — naming either in a comment eats the substitution and ships the literal placeholder.
 - **A hidden browser tab cannot draw.** With `document.visibilityState === 'hidden'`, `requestAnimationFrame` never fires: Skia's canvas never sizes itself or paints, real clicks stop hit-testing, and screenshots time out. The DOM is still fully inspectable and synthetic pointer events still drive the app, but a blank chart in a hidden tab proves nothing. To see the web build for real without a visible browser: serve `dist/`, `adb reverse` that port and `61208`, open it in the **emulator's Chrome**, and screenshot with `adb exec-out screencap -p`.
 - **Tamagui does not set `position` on web**, so a plain `YStack` is `static` and absolutely-positioned children escape it — on native every `View` is a containing block, so the same tree lays out correctly there. Any `position="absolute"` needs an explicit `position="relative"` on the box it is meant to be measured against.
+- **The desktop target runs the *web* bundle**, so `Platform.OS === 'web'` is true inside the Tauri window and there is no desktop-specific branch to write. It is a real WebView2: it enforces CORS exactly like a browser, from the origin `http://tauri.localhost`.
+- **A Tauri window can be driven over CDP.** Launch the exe with `WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS=--remote-debugging-port=9222` and attach to `http://127.0.0.1:9222/json/list`. Unlike the automation pane's hidden tab, this window is genuinely visible, so Skia paints and `Page.captureScreenshot` works. Mouse events are dispatched in viewport coordinates — an element scrolled below the fold gets a click at a `y` outside the window, which silently does nothing.
 
 ## Hard rules
 

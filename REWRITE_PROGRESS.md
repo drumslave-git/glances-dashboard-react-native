@@ -4,7 +4,7 @@ Tracks execution of [REWRITE_PLAN.md](REWRITE_PLAN.md). Update this file in the 
 commit as the work it describes. One line per task; add dated notes under each milestone
 when something non-obvious happened.
 
-**Current status:** M6 complete — the web build is an installable PWA with its own HTML shell, charts draw in a real browser, reorder works with a mouse, and the Glances CORS story is documented and surfaced in the UI. Next up: M7 Windows desktop.
+**Current status:** M7 complete — the web build now also ships as a Windows desktop app: a 6.8 MB Tauri `.exe` plus a per-user installer, verified end-to-end against a live server. Next up: M8 hardening and release.
 
 ## Milestones
 
@@ -286,9 +286,74 @@ disappearing mid-session; `scripts/run-android.ps1` does not set it.
   composites for real and screenshots through `adb exec-out screencap`. That is how the label
   bug above was both found and confirmed fixed.
 
-### M7 — Windows desktop — `not started`
-- [ ] Tauri wrapper of web build (or Electron fallback — record the decision here)
-- [ ] Icon, window config, reproducible .exe build
+### M7 — Windows desktop — `done` (2026-08-03)
+- [x] **Tauri**, not Electron — `src-tauri/`, wrapping the `dist/` web export
+- [x] App icon generated from `assets/images/icon.png`; dark 1280×800 window with a floor of
+      420×360, centred, `#101113` behind the webview so a cold start does not flash white
+- [x] `npm run desktop` (dev server + hot reload) and `npm run build:desktop` (release)
+- [x] Reproducible build: `build:desktop` re-runs `build:web` first, so the shipped bundle is
+      never a stale `dist/`
+- [x] 6.8 MB portable `.exe` + 5 MB per-user NSIS installer, both with the frontend embedded
+- [x] Metro no longer crawls Cargo's multi-gigabyte `target/` — `metro.config.js`
+- [x] Desktop CORS story documented, including the origin to allow (`http://tauri.localhost`)
+- [x] 305 tests across 23 suites; typecheck and lint clean
+- [x] Verified in the built app against the stub Glances server on a **LAN address**, driven
+      over CDP: add server, connection test ("Connected to TCloud"), add a donut widget with
+      live metric and field discovery, a `{{total:round(1)}}` title resolving live, Skia
+      drawing a real canvas, immersive mode in and out by Esc, and the whole dashboard
+      surviving a process restart. No console errors beyond Victory's known `SkPath`
+      deprecation warnings.
+- [x] Installer verified by installing it, running the installed copy, and uninstalling —
+      clean removal of files, Start Menu entry and registry key
+- [x] Android bundle re-exported (`expo export --platform android`, 6.6 MB hbc) to prove the
+      new `metro.config.js` did not disturb native resolution. **The emulator run was not
+      repeated for this milestone** — M7 changed no application code, and the only shared
+      change is that Metro exclusion, which both platform exports exercise.
+
+**Notes (2026-08-03)**
+
+- **Tauri needed a toolchain this machine did not have**: Rust (1.97.1, MSVC host) and Visual
+  Studio Build Tools with the C++ workload, for the linker and Windows SDK. Both are now
+  installed and the install commands are in the README. That cost is once-per-machine; the
+  payoff is a 6.8 MB exe against Electron's ~150 MB, on a WebView2 that Windows 11 already
+  ships. Electron stayed the sanctioned fallback (plan §4 M7) and was not needed.
+- **The desktop target is the web target.** Tauri serves `dist/` unmodified, so
+  `Platform.OS === 'web'` inside the window and there is no desktop branch anywhere in `src/`.
+  Every M6 fix — the `position: relative` chart square, `aria-label`, the CORS wording in
+  `describeNetworkError` — applies here for free. The corollary is that M7 shipped **zero**
+  changes to application code.
+- **A WebView2 enforces CORS like any browser.** Proved rather than assumed: a stub serving
+  `Access-Control-Allow-Origin: *` is readable from the window, and an otherwise identical
+  stub without the header fails with `TypeError: Failed to fetch`. So the desktop build has
+  the same Glances requirement as the web build, and the origin to allow is
+  `http://tauri.localhost`.
+- **But desktop escapes the mixed-content rule**, which is the one place it beats a hosted
+  PWA: the origin's scheme is `http`, so reading a plain-http Glances on the LAN is allowed.
+  Tauri's `useHttpsScheme` would make it `https://tauri.localhost` and break exactly that, so
+  it is deliberately left at its default of off.
+- **`src-tauri/target/` sits inside the Metro project root.** It is several gigabytes across
+  tens of thousands of files and is rewritten on every desktop build, so the project gained
+  its first `metro.config.js` purely to add it to `resolver.blockList`.
+- **Verification drove the real window over CDP.** Launching with
+  `WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS=--remote-debugging-port=9222` exposes the standard
+  DevTools protocol, so the app could be clicked, typed into, screenshotted and inspected for
+  real. This is the tool M6 wanted and did not have: the automation pane's hidden tab never
+  fired `requestAnimationFrame`, whereas a Tauri window is genuinely on screen and Skia paints.
+- **`tauri init` is close but not right out of the box.** Its `Cargo.toml` names the crate
+  `app`, the config identifier is the placeholder `com.tauri.dev`, `beforeDevCommand` and
+  `beforeBuildCommand` assume Vite script names, and `bundle.targets: "all"` would build an
+  MSI as well. `tauri icon` additionally writes whole Android and iOS icon trees, which are
+  Expo's business here, and a 1.25 MB macOS `.icns`; all three were deleted, and the `.icns`
+  dropped from `bundle.icon` with it.
+- **`npm run desktop` and the built app do not share a dashboard.** Dev mode's origin is
+  `http://localhost:8081` and the release window's is `http://tauri.localhost`, and
+  `localStorage` is per-origin — so servers and widgets configured in one are invisible to the
+  other. Expected, but surprising the first time a dev window opens to an empty dashboard.
+- **The service worker registers on `http://tauri.localhost`** and, since `public/sw.js`
+  caches nothing, does nothing. Left alone rather than special-cased: suppressing it would
+  need a desktop-only branch in the HTML shell for no behavioural gain.
+- The release profile is tuned for size (`lto`, `opt-level = "s"`, `strip`, `panic = "abort"`).
+  There is no Rust in the hot path — `main.rs` opens a window — so nothing trades away.
 
 ### M8 — Hardening & release — `not started`
 - [ ] Component tests: settings + config screens, error paths
@@ -332,6 +397,12 @@ disappearing mid-session; `scripts/run-android.ps1` does not set it.
 | 2026-08-03 | Accessibility labels are written `aria-label` | Tamagui forwards unknown props to the DOM on web, so `accessibilityLabel` is an invalid attribute there; `aria-label` works on both platforms |
 | 2026-08-03 | `setup:skia-web` runs from `web` and `build:web` | A fresh clone that forgot the manual step got a web build whose charts silently did not draw |
 | 2026-08-03 | The chart square carries an explicit `position="relative"` | Tamagui emits no `position` on web, so the absolutely-positioned slice labels escaped the chart box; native was unaffected because every RN `View` is already a containing block |
+| 2026-08-03 | Desktop is **Tauri**, not Electron | A 6.8 MB exe on the WebView2 Windows already ships, against ~150 MB of bundled Chromium. The cost — Rust plus MSVC build tools — is once per build machine, and nothing about the app fought it |
+| 2026-08-03 | The desktop build ships `dist/` unmodified; no Rust-side application code | Keeping the wrapper empty means desktop inherits every web fix automatically and there is no second implementation to keep in step |
+| 2026-08-03 | Fetches stay plain `fetch`; the Rust HTTP client (plan §5) is not used | A default `glances -w` already allows every origin, so routing requests through Rust would buy nothing for the normal case and cost a desktop-only branch in the data layer |
+| 2026-08-03 | `useHttpsScheme` stays off, so the origin is `http://tauri.localhost` | An https origin would make every plain-http Glances on the LAN a mixed-content error — the exact problem a hosted PWA has and desktop otherwise avoids |
+| 2026-08-03 | NSIS only (no MSI), installing per user | One installer is enough, NSIS needs no WiX, and a personal dashboard should not demand administrator rights to install |
+| 2026-08-03 | The project gained a `metro.config.js` to block `src-tauri/target/` | Cargo's build directory is gigabytes inside the Metro root; without this Metro crawls and watches all of it on every start |
 
 ## Blockers / open questions
 

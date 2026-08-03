@@ -10,6 +10,9 @@
     "ios": "expo run:ios",
     "web": "npm run setup:skia-web && expo start --web",
     "build:web": "npm run setup:skia-web && expo export --platform web",
+    "desktop": "tauri dev",
+    "build:desktop": "tauri build",
+    "tauri": "tauri",
     "setup:skia-web": "node node_modules/@shopify/react-native-skia/scripts/setup-canvaskit.js public",
     "icons:web": "node scripts/make-pwa-icons.js",
     "lint": "expo lint",
@@ -44,6 +47,7 @@
     "zustand": "^5.0.14"
   },
   "devDependencies": {
+    "@tauri-apps/cli": "^2.11.4",
     "@testing-library/react-native": "^14.0.1",
     "@types/jest": "^29.5.14",
     "@types/react": "~19.2.2",
