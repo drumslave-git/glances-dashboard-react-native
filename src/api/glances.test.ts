@@ -1,8 +1,11 @@
+import { Platform } from 'react-native';
+
 import { cpuFixture, pluginsListFixture, systemFixture } from '@/__fixtures__/glances';
 
 import {
   buildEndpointUrl,
   coerceServerUrl,
+  describeNetworkError,
   fetchGlances,
   GlancesRequestError,
   normalizeBaseUrl,
@@ -136,6 +139,50 @@ describe('fetchGlances', () => {
     await expect(fetchGlances('http://host:61208', '/api/4/nope')).rejects.toThrow(
       GlancesRequestError,
     );
+  });
+
+  it('turns a rejected fetch into a GlancesRequestError', async () => {
+    global.fetch = jest
+      .fn()
+      .mockRejectedValue(new TypeError('Failed to fetch')) as unknown as typeof fetch;
+
+    await expect(fetchGlances('http://host:61208', '/api/4/cpu')).rejects.toThrow(
+      GlancesRequestError,
+    );
+  });
+
+  it('lets an abort through as itself, so a cancelled query is not an error state', async () => {
+    const abort = new Error('Aborted');
+    abort.name = 'AbortError';
+    global.fetch = jest.fn().mockRejectedValue(abort) as unknown as typeof fetch;
+
+    await expect(fetchGlances('http://host:61208', '/api/4/cpu')).rejects.toBe(abort);
+  });
+});
+
+describe('describeNetworkError', () => {
+  // Platform.OS is 'ios' under jest-expo's default project, so this covers the
+  // native branch; the web branch is asserted by overriding it.
+  it('passes a native failure through unchanged', () => {
+    expect(describeNetworkError(new TypeError('Network request failed'))).toBe(
+      'Network request failed',
+    );
+  });
+
+  it('names CORS as the other explanation on web', () => {
+    const originalOS = Platform.OS;
+    Object.defineProperty(Platform, 'OS', { value: 'web', configurable: true });
+    try {
+      const message = describeNetworkError(new TypeError('Failed to fetch'));
+      expect(message).toMatch(/^Failed to fetch/);
+      expect(message).toMatch(/CORS/);
+    } finally {
+      Object.defineProperty(Platform, 'OS', { value: originalOS, configurable: true });
+    }
+  });
+
+  it('falls back to a message when the thrown value has none', () => {
+    expect(describeNetworkError('boom')).toBe('Network request failed');
   });
 });
 

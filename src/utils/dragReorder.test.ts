@@ -1,4 +1,10 @@
-import { findDropIndex, moveItem, reorderForPointer, type CardRect } from './dragReorder';
+import {
+  findDropIndex,
+  moveItem,
+  reorderForPointer,
+  stepOrder,
+  type CardRect,
+} from './dragReorder';
 
 /** Two rows of two 100x100 cards, laid out like the wrap grid would. */
 const GRID: CardRect[] = [
@@ -86,5 +92,26 @@ describe('reorderForPointer', () => {
 
   it('ignores an empty grid', () => {
     expect(reorderForPointer(ids, [], 'a', { x: 0, y: 0 })).toBe(ids);
+  });
+});
+
+describe('stepOrder', () => {
+  const ids = ['a', 'b', 'c'];
+
+  it('moves an item one place later', () => {
+    expect(stepOrder(ids, 'a', 1)).toEqual(['b', 'a', 'c']);
+  });
+
+  it('moves an item one place earlier', () => {
+    expect(stepOrder(ids, 'c', -1)).toEqual(['a', 'c', 'b']);
+  });
+
+  it('returns the same array at either end, so a caller can spot the no-op', () => {
+    expect(stepOrder(ids, 'a', -1)).toBe(ids);
+    expect(stepOrder(ids, 'c', 1)).toBe(ids);
+  });
+
+  it('ignores an unknown id', () => {
+    expect(stepOrder(ids, 'nope', 1)).toBe(ids);
   });
 });

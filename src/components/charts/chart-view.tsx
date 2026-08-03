@@ -76,7 +76,11 @@ function RoundChartView({ kind, segments, metric, chartLabel, options, testID }:
   return (
     <YStack flex={1} items="center" justify="center" onLayout={onLayout} testID={testID}>
       {size != null && (
-        <YStack width={size} height={size}>
+        // `position="relative"` is a no-op on native, where every View is already
+        // a containing block — but Tamagui emits no `position` on web, so without
+        // it the labels below resolve against some ancestor further out and land
+        // beside the chart instead of on their slices.
+        <YStack width={size} height={size} position="relative">
           <Suspense fallback={null}>
             <PieCanvas segments={segments} size={size} innerRadius={innerRadius} gap={gap} />
           </Suspense>

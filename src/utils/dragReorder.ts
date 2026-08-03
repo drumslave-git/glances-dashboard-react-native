@@ -72,6 +72,19 @@ export function moveItem<T>(items: T[], from: number, to: number): T[] {
 }
 
 /**
+ * Move one card one position along the order — what the web build's move
+ * buttons do, since a mouse has no long press and a keyboard has no drag.
+ *
+ * Returns `ids` itself at either end, so a caller can compare by reference to
+ * tell a no-op from a real move.
+ */
+export function stepOrder(ids: string[], id: string, offset: number): string[] {
+  const from = ids.indexOf(id);
+  if (from === -1) return ids;
+  return moveItem(ids, from, from + offset);
+}
+
+/**
  * The order the grid should show mid-drag: the dragged card moved to whichever
  * position the pointer is over. `rects` must be in the same order as `ids`.
  */

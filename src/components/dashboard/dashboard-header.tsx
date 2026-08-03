@@ -52,7 +52,10 @@ export function DashboardHeader({
         <Button
           size="$3"
           onPress={onEnterImmersive}
-          accessibilityLabel="Enter immersive mode"
+          // `aria-label`, not `accessibilityLabel`: Tamagui forwards unknown props
+          // straight to the DOM element on web, where React rejects the RN spelling.
+          // React Native has understood `aria-label` since 0.71.
+          aria-label="Enter immersive mode"
           testID="enter-immersive"
         >
           ⛶

@@ -24,7 +24,10 @@
     },
     "web": {
       "output": "single",
-      "favicon": "./assets/images/favicon.png"
+      "favicon": "./assets/images/favicon.png",
+      "lang": "en",
+      "description": "A configurable dashboard for Glances system monitors.",
+      "themeColor": "#101113"
     },
     "plugins": [
       "expo-router",

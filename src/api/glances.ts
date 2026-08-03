@@ -2,6 +2,7 @@
  * Thin client for the Glances REST API (v4). Everything is a plain GET returning
  * JSON; there is no auth in scope.
  */
+import { Platform } from 'react-native';
 
 export const GLANCES_DEFAULT_PORT = 61208;
 
@@ -60,12 +61,32 @@ export function coerceServerUrl(input: string): string {
   return `${scheme}${host}${port ?? `:${GLANCES_DEFAULT_PORT}`}${rest}`;
 }
 
+/**
+ * A browser refuses to tell a page *why* a cross-origin request failed — a
+ * blocked origin and an unplugged server both arrive as a bare
+ * `TypeError: Failed to fetch`. So on web the message gets the missing half
+ * spelled out, because CORS is the failure a working Android build never sees
+ * and a first-time web user always hits.
+ */
+export function describeNetworkError(error: unknown): string {
+  const message = error instanceof Error && error.message ? error.message : 'Network request failed';
+  if (Platform.OS !== 'web') return message;
+  return `${message} — the server is unreachable, or it is not allowing requests from this page (CORS).`;
+}
+
 export async function fetchGlances<T>(
   baseUrl: string,
   endpointPath: string,
   signal?: AbortSignal,
 ): Promise<T> {
-  const response = await fetch(buildEndpointUrl(baseUrl, endpointPath), { signal });
+  let response: Response;
+  try {
+    response = await fetch(buildEndpointUrl(baseUrl, endpointPath), { signal });
+  } catch (error) {
+    // A cancelled request is not a failure to report; let it through untouched.
+    if (error instanceof Error && error.name === 'AbortError') throw error;
+    throw new GlancesRequestError(describeNetworkError(error));
+  }
 
   if (!response.ok) {
     throw new GlancesRequestError(

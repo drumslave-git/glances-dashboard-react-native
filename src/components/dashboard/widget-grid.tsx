@@ -1,11 +1,11 @@
 import { useCallback, useMemo, useRef, useState } from 'react';
-import { useWindowDimensions, type LayoutChangeEvent } from 'react-native';
+import { Platform, useWindowDimensions, type LayoutChangeEvent } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { runOnJS } from 'react-native-reanimated';
 import { ScrollView, XStack, YStack } from 'tamagui';
 
 import type { WidgetConfig } from '@/types/dashboard';
-import { reorderForPointer, type CardRect } from '@/utils/dragReorder';
+import { reorderForPointer, stepOrder, type CardRect } from '@/utils/dragReorder';
 import { columnsForWidth, widthPercentForSize } from '@/utils/widgetLayout';
 
 import { WidgetCard } from './widget-card';
@@ -108,6 +108,15 @@ export function WidgetGrid({
     [widgets],
   );
 
+  const moveOne = useCallback(
+    (widgetId: string, offset: number) => {
+      const ids = widgets.map((w) => w.id);
+      const next = stepOrder(ids, widgetId, offset);
+      if (next !== ids) onReorder(next);
+    },
+    [onReorder, widgets],
+  );
+
   const endDrag = useCallback(() => {
     dragOrigin.current = null;
     setDraggingId(null);
@@ -126,7 +135,7 @@ export function WidgetGrid({
       testID="widget-grid"
     >
       <XStack flexWrap="wrap" m="$-1">
-        {ordered.map((widget) => (
+        {ordered.map((widget, index) => (
           <WidgetGridCell
             key={widget.id}
             widget={widget}
@@ -140,6 +149,9 @@ export function WidgetGrid({
             onEdit={onEdit}
             onRemove={onRemove}
             onResize={onResize}
+            {...(Platform.OS === 'web' && { onMove: moveOne })}
+            index={index}
+            count={ordered.length}
           />
         ))}
       </XStack>
@@ -159,6 +171,9 @@ interface WidgetGridCellProps {
   onEdit: (widgetId: string) => void;
   onRemove: (widgetId: string) => void;
   onResize: (widgetId: string) => void;
+  onMove?: (widgetId: string, offset: number) => void;
+  index: number;
+  count: number;
 }
 
 function WidgetGridCell({
@@ -173,6 +188,9 @@ function WidgetGridCell({
   onEdit,
   onRemove,
   onResize,
+  onMove,
+  index,
+  count,
 }: WidgetGridCellProps) {
   const pan = useMemo(
     () =>
@@ -213,6 +231,9 @@ function WidgetGridCell({
           onEdit={onEdit}
           onRemove={onRemove}
           onResize={onResize}
+          {...(onMove && { onMove })}
+          index={index}
+          count={count}
         />
       </YStack>
     </GestureDetector>

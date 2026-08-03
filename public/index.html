@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<!--
+  The HTML shell for the web build. Expo prefers this file over its own template
+  whenever it exists in `public/` (`expo customize index.html` is what normally
+  creates it). It fills in the lang and title placeholders below, then appends
+  the bundle's script tags plus the theme-color and description meta tags from
+  `app.json` -> `expo.web`.
+
+  Do not name those placeholders anywhere else in this file: the substitution
+  replaces the first occurrence only, so a mention in a comment consumes it and
+  the real tag is left unfilled.
+
+  An `app/+html.tsx` would be the nicer place for this, but it is only consulted
+  when `web.output` is a rendered mode; this app exports `single` (see the
+  decisions log), so the shell has to be real HTML.
+-->
+<html lang="%LANG_ISO_CODE%">
+  <head>
+    <meta charset="utf-8" />
+    <meta httpEquiv="X-UA-Compatible" content="IE=edge" />
+    <!-- viewport-fit=cover lets the dark background run under a notch, which is
+         what immersive mode is for. -->
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, shrink-to-fit=no, viewport-fit=cover"
+    />
+    <title>%WEB_TITLE%</title>
+
+    <!-- Installable-PWA metadata. theme-color and description are injected from
+         app.json (`expo.web`), so they are deliberately absent here; the rest of
+         the app's identity lives in manifest.json, which Expo does not generate. -->
+    <link rel="manifest" href="/manifest.json" />
+    <meta name="color-scheme" content="dark" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="Glances" />
+    <!-- iOS ignores the manifest's icons and reads this instead. -->
+    <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
+
+    <!-- The `react-native-web` recommended style reset: https://necolas.github.io/react-native-web/docs/setup/#root-element -->
+    <style id="expo-reset">
+      /* These styles make the body full-height */
+      html,
+      body {
+        height: 100%;
+      }
+      /* These styles disable body scrolling if you are using <ScrollView> */
+      body {
+        overflow: hidden;
+      }
+      /* These styles make the root element full-height */
+      #root {
+        display: flex;
+        height: 100%;
+        flex: 1;
+      }
+      /* Without this the browser paints white behind the app while the bundle
+         loads, which flashes on every cold start of a dark dashboard. */
+      html,
+      body,
+      #root {
+        background-color: #101113;
+      }
+    </style>
+  </head>
+
+  <body>
+    <noscript>You need to enable JavaScript to run this app.</noscript>
+    <!-- The root element for your Expo app. -->
+    <div id="root"></div>
+    <script>
+      // Registering a worker is what unlocks "Install app" in Chrome; see
+      // public/sw.js for why it caches nothing. Browsers only allow this over
+      // https or on localhost, so a plain-http deployment simply skips it.
+      if ('serviceWorker' in navigator) {
+        window.addEventListener('load', function () {
+          navigator.serviceWorker.register('/sw.js').catch(function (error) {
+            console.warn('Service worker registration failed:', error);
+          });
+        });
+      }
+    </script>
+  </body>
+</html>

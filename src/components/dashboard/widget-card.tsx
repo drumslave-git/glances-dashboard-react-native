@@ -14,9 +14,26 @@ interface WidgetCardProps {
   onEdit: (widgetId: string) => void;
   onRemove: (widgetId: string) => void;
   onResize: (widgetId: string) => void;
+  /**
+   * Step this card one position along the order. Present only where dragging is
+   * not a reasonable interaction (the web build); absent hides the controls.
+   */
+  onMove?: (widgetId: string, offset: number) => void;
+  /** Position in the grid, so the controls can disable themselves at the ends. */
+  index: number;
+  count: number;
 }
 
-function WidgetCardInner({ widget, editMode, onEdit, onRemove, onResize }: WidgetCardProps) {
+function WidgetCardInner({
+  widget,
+  editMode,
+  onEdit,
+  onRemove,
+  onResize,
+  onMove,
+  index,
+  count,
+}: WidgetCardProps) {
   const server = useServersStore((state) => selectServerById(state, widget.serverId));
   const { data, isLoading, error } = useGlancesQuery(server, widget.endpointPath);
 
@@ -44,6 +61,33 @@ function WidgetCardInner({ widget, editMode, onEdit, onRemove, onResize }: Widge
           </Paragraph>
           {editMode && (
             <XStack gap="$1">
+              {onMove && (
+                <>
+                  {/* Arrows, not up/down: the grid is a left-to-right wrap flow,
+                      so "earlier" is the position to the left far more often
+                      than it is the row above. */}
+                  <Button
+                    size="$2"
+                    disabled={index === 0}
+                    opacity={index === 0 ? 0.4 : 1}
+                    onPress={() => onMove(widget.id, -1)}
+                    aria-label="Move widget earlier"
+                    testID={`widget-move-earlier-${widget.id}`}
+                  >
+                    ←
+                  </Button>
+                  <Button
+                    size="$2"
+                    disabled={index >= count - 1}
+                    opacity={index >= count - 1 ? 0.4 : 1}
+                    onPress={() => onMove(widget.id, 1)}
+                    aria-label="Move widget later"
+                    testID={`widget-move-later-${widget.id}`}
+                  >
+                    →
+                  </Button>
+                </>
+              )}
               <Button size="$2" onPress={() => onResize(widget.id)} testID={`widget-resize-${widget.id}`}>
                 {widget.size}
               </Button>

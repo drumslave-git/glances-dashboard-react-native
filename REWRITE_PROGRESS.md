@@ -4,7 +4,7 @@ Tracks execution of [REWRITE_PLAN.md](REWRITE_PLAN.md). Update this file in the 
 commit as the work it describes. One line per task; add dated notes under each milestone
 when something non-obvious happened.
 
-**Current status:** M5 complete — widgets drag to reorder, immersive mode hides the chrome and keeps the screen awake, and the grid tiles correctly on tablet-width screens. Next up: M6 web target.
+**Current status:** M6 complete — the web build is an installable PWA with its own HTML shell, charts draw in a real browser, reorder works with a mouse, and the Glances CORS story is documented and surfaced in the UI. Next up: M7 Windows desktop.
 
 ## Milestones
 
@@ -223,11 +223,68 @@ disappearing mid-session; `scripts/run-android.ps1` does not set it.
 - React Native defines a `window` global that has no DOM listener methods, so the Esc handler
   checks for `window.addEventListener` itself rather than for `window`.
 
-### M6 — Web target — `not started`
-- [ ] CanvasKit/Skia web setup; charts verified in browser
-- [ ] Reorder fallback decision for web
-- [ ] PWA manifest + icons; Esc exits immersive
-- [ ] Glances CORS requirement documented
+### M6 — Web target — `done` (2026-08-03)
+- [x] CanvasKit/Skia web setup is no longer a manual step — `npm run web` and `npm run build:web`
+      both copy `canvaskit.wasm` into `public/` first
+- [x] Reorder on web: the drag stays, plus explicit ←/→ move buttons in edit mode (`stepOrder`)
+- [x] PWA manifest + icons + a deliberately cache-free service worker; Esc exits immersive
+      (landed in M5, verified in the browser here)
+- [x] Glances CORS requirement documented, and named in the error message a browser cannot explain
+- [x] `accessibilityLabel` on a Tamagui `Button` leaked to the DOM — now `aria-label`
+- [x] Chart slice labels landed beside the chart on web instead of on their slices — fixed
+- [x] 305 tests across 23 suites; typecheck and lint clean
+- [x] Verified in the browser against the stub Glances server, on both the dev server and the
+      exported `dist/`: add server + connection test, add a donut and a text widget, live polling,
+      move buttons reordering and persisting to localStorage, immersive mode entering and leaving
+      by Esc, SPA fallback on a deep link, manifest parsed and service worker active
+- [x] Verified visually in a real browser: the exported build in the emulator's Chrome draws
+      donut, pie, bar and the processes table against a live server, with a tokenised title
+- [x] Android re-checked after the changes: charts, labels and live polling unaffected
+
+**Notes (2026-08-03)**
+- **`app/+html.tsx` does nothing when `web.output` is `single`.** It is only consulted by the
+  rendered output modes. The shell for a single-output export comes from
+  `public/index.html` if that file exists (what `npx expo customize index.html` creates) and
+  from `@expo/cli`'s template otherwise — see `webTemplate.js`'s `getTemplateIndexHtmlAsync`.
+  So the PWA `<head>` lives in real HTML, and `app.json` → `expo.web.themeColor` /
+  `.description` / `.lang` are injected into it during export.
+- **Never name `%WEB_TITLE%` or `%LANG_ISO_CODE%` twice in that file.** The substitution is
+  `String.replace` with a string needle, which replaces the *first* occurrence only. Mentioning
+  them in an explanatory comment consumed both, and the real `<title>` shipped as the literal
+  placeholder.
+- **Tamagui forwards unknown props straight to the DOM element on web**, so
+  `accessibilityLabel` reached React as an invalid attribute and logged an error on every
+  render. `aria-label` is the spelling both platforms understand (React Native has taken it
+  since 0.71).
+- **Move buttons, not just a drag, on web** — the plan's sanctioned fallback (§5 Risks), taken
+  as an addition rather than a replacement. A mouse has no long press to discover and a keyboard
+  has no drag at all; the gesture still works for touch-screen browsers. They are ←/→ rather
+  than ↑/↓ because the grid is a left-to-right wrap flow, so "earlier" is the slot to the left
+  far more often than the row above.
+- **A minimal service worker buys installability and nothing else.** Chrome still gates
+  "Install app" on a registered worker with a fetch handler. `public/sw.js` passes every request
+  through and caches nothing on purpose: every number on this dashboard comes from a live
+  server, so an app-shell cache would only reach "cannot reach the server" faster, at the cost
+  of a permanent stale-bundle hazard.
+- **A browser will not say why a cross-origin fetch failed** — a blocked origin and an
+  unplugged server are both `TypeError: Failed to fetch`. `describeNetworkError` appends the
+  CORS possibility on web only, so the Android build's error text is unchanged. The good news
+  is that a default `glances -w` sets `cors_origins=*`, so the web build usually needs no
+  server-side change at all.
+- **Chart slice labels were positioned against the wrong box on web.** React Native makes every
+  `View` a containing block, so an absolutely-positioned child resolves against its parent;
+  Tamagui emits **no** `position` for a plain `YStack` on web, which leaves it `static` and
+  sends the labels off to some ancestor further out — they rendered in a column beside the
+  chart instead of on their slices. `position="relative"` on the chart square fixes it, and is
+  a no-op on native. Worth suspecting for **any** `position="absolute"` in this codebase.
+- **Verifying web needed a visible browser, and the automation pane was not one.** A tab at
+  `document.visibilityState === 'hidden'` never fires `requestAnimationFrame`, so Skia's canvas
+  stayed at its default 300×150 backing store and painted nothing, real clicks stopped
+  hit-testing, and screenshots timed out — while the DOM stayed perfectly inspectable, which
+  makes the failure look like an app bug. The way through: serve `dist/` on the host, `adb
+  reverse` that port plus the Glances port, and open it in the **emulator's Chrome**, which
+  composites for real and screenshots through `adb exec-out screencap`. That is how the label
+  bug above was both found and confirmed fixed.
 
 ### M7 — Windows desktop — `not started`
 - [ ] Tauri wrapper of web build (or Electron fallback — record the decision here)
@@ -269,6 +326,12 @@ disappearing mid-session; `scripts/run-android.ps1` does not set it.
 | 2026-08-03 | `columnsForWidth` skips 3 columns (1 → 2 → 4) | With the default M size spanning 2, a 3-column grid strands a third of every row and nothing can fill it |
 | 2026-08-03 | `editMode`/`immersive` live in a non-persisted `ui` store | Restoring into immersive mode with no visible way out, or into edit mode with remove buttons everywhere, are both bad surprises |
 | 2026-08-03 | Entering immersive mode also leaves edit mode | Editing chrome has no place in a display-only view, and hiding a still-active edit state would be worse than clearing it |
+| 2026-08-03 | Web keeps the drag **and** gains ←/→ move buttons | A mouse has no long press to discover and a keyboard has no drag; the gesture still serves touch-screen browsers, so this is an addition rather than the plan's either/or fallback |
+| 2026-08-03 | The web `<head>` lives in `public/index.html`, not `app/+html.tsx` | `+html.tsx` is only consulted by the rendered output modes; a `single` export takes its shell from `public/index.html` when present |
+| 2026-08-03 | `public/sw.js` registers a service worker that caches nothing | Chrome gates "Install app" on a worker with a fetch handler, but a dashboard of live values gains nothing from an offline cache and would inherit stale-bundle bugs |
+| 2026-08-03 | Accessibility labels are written `aria-label` | Tamagui forwards unknown props to the DOM on web, so `accessibilityLabel` is an invalid attribute there; `aria-label` works on both platforms |
+| 2026-08-03 | `setup:skia-web` runs from `web` and `build:web` | A fresh clone that forgot the manual step got a web build whose charts silently did not draw |
+| 2026-08-03 | The chart square carries an explicit `position="relative"` | Tamagui emits no `position` on web, so the absolutely-positioned slice labels escaped the chart box; native was unaffected because every RN `View` is already a containing block |
 
 ## Blockers / open questions
 
