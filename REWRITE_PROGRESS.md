@@ -305,10 +305,11 @@ disappearing mid-session; `scripts/run-android.ps1` does not set it.
       deprecation warnings.
 - [x] Installer verified by installing it, running the installed copy, and uninstalling —
       clean removal of files, Start Menu entry and registry key
-- [x] Android bundle re-exported (`expo export --platform android`, 6.6 MB hbc) to prove the
-      new `metro.config.js` did not disturb native resolution. **The emulator run was not
-      repeated for this milestone** — M7 changed no application code, and the only shared
-      change is that Metro exclusion, which both platform exports exercise.
+- [x] Android re-verified on the emulator after the `metro.config.js` change: Metro bundled
+      3212 modules, the dev build launched with Fabric, and the saved dashboard came back
+      against the live TCloud server — donut, text, pie, bar, a Used/Free split donut and four
+      process tables, all polling. No JS errors; the only warnings are Victory's `SkPath`
+      deprecations. The M4 `SurfaceMountingManager.addViewAt` crash did not recur.
 
 **Notes (2026-08-03)**
 
@@ -354,6 +355,10 @@ disappearing mid-session; `scripts/run-android.ps1` does not set it.
   need a desktop-only branch in the HTML shell for no behavioural gain.
 - The release profile is tuned for size (`lto`, `opt-level = "s"`, `strip`, `panic = "abort"`).
   There is no Rust in the hot path — `main.rs` opens a window — so nothing trades away.
+- **A black screen a minute into an Android launch is normal, not a failure.** The first
+  bundle after a cold Metro is 3212 modules and took 67 s here, during which logcat shows
+  `loadJSBundleFromMetro()` and nothing else. Wait for Metro's `Android Bundled …` line
+  before concluding anything from a screenshot.
 
 ### M8 — Hardening & release — `not started`
 - [ ] Component tests: settings + config screens, error paths
