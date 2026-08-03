@@ -9,6 +9,12 @@ export const GLANCES_DEFAULT_PORT = 61208;
 export const GLANCES_ENDPOINTS = {
   pluginsList: '/api/4/pluginslist',
   system: '/api/4/system',
+  // The summary strip's five live cells. Kept here so the strip does not invent
+  // paths of its own — every read in this app goes through one of these.
+  uptime: '/api/4/uptime',
+  load: '/api/4/load',
+  processCount: '/api/4/processcount',
+  fs: '/api/4/fs',
 } as const;
 
 /** Metrics assumed available when a server has not answered /pluginslist yet. */

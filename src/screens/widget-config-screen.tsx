@@ -1,19 +1,28 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useMemo, useState } from 'react';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Button, Card, H2, Input, Label, Paragraph, ScrollView, XStack, YStack } from 'tamagui';
+import { Card, Input, Label, Paragraph, ScrollView, XStack, YStack } from 'tamagui';
+
+import { ToolbarButton } from '@/components/telemetry/surfaces';
+import { Label as SectionLabel } from '@/components/telemetry/text';
+import { GEOMETRY } from '@/theme/telemetry';
 
 import { FALLBACK_METRICS } from '@/api/glances';
 import { ChartOptionsSection } from '@/components/config/chart-options-section';
 import { FieldOptionsSection } from '@/components/config/field-options-section';
 import { OptionList } from '@/components/config/option-list';
 import { isChartKind, WidgetContent } from '@/components/widgets/widget-content';
+import { TIME_WINDOW_ORDER, type TimeWindow } from '@/utils/sampleBuffer';
 import { useGlancesQuery, usePluginsList } from '@/hooks/useGlancesQuery';
 import { selectServerById, useServersStore } from '@/state/servers';
 import { useWidgetsStore, type WidgetPatch } from '@/state/widgets';
 import type { DonutChartOptions, WidgetKind } from '@/types/dashboard';
 import { pickFormatters } from '@/utils/formatterSpec';
-import { DEFAULT_PROCESS_FIELDS } from '@/utils/processTable';
+import {
+  DEFAULT_PROCESS_FIELDS,
+  DEFAULT_PROCESS_SORT,
+  getProcessHeaderLabel,
+} from '@/utils/processTable';
 import { getRecordFromPayload, resolveTitleTokens } from '@/utils/widgetData';
 import { defaultWidgetTitle, metricToEndpoint, resolveMetricForKind } from '@/utils/widgetFactory';
 
@@ -37,6 +46,14 @@ export function WidgetConfigScreen() {
   const kind: WidgetKind = existing?.kind ?? ((params.kind as WidgetKind | undefined) ?? 'text');
   const isProcesses = kind === 'processes';
   const isChart = isChartKind(kind);
+  const isLine = kind === 'line';
+  /**
+   * Slice geometry, the centre label and the Used/Free split belong to the
+   * round and bar charts. A ring gauge has no slices to inset and a time series
+   * has no segments to label, so offering those controls there would be lying
+   * about what they do.
+   */
+  const isSegmentChart = kind === 'donut' || kind === 'pie' || kind === 'bar';
 
   const [serverId, setServerId] = useState(
     existing?.serverId ?? defaultServerId ?? servers[0]?.id ?? '',
@@ -59,6 +76,8 @@ export function WidgetConfigScreen() {
   const [splitUsedFree, setSplitUsedFree] = useState(
     existing?.splitPercentageIntoUsedFree ?? false,
   );
+  const [timeWindow, setTimeWindow] = useState<TimeWindow>(existing?.timeWindow ?? '15m');
+  const [processSort, setProcessSort] = useState(existing?.processSort ?? DEFAULT_PROCESS_SORT);
 
   const server = useServersStore((state) => selectServerById(state, serverId));
 
@@ -107,6 +126,8 @@ export function WidgetConfigScreen() {
       donutChartOptions: chartOptions,
       chartLabel: chartLabel.trim() || undefined,
       splitPercentageIntoUsedFree: splitUsedFree,
+      ...(isLine ? { timeWindow } : {}),
+      ...(isProcesses ? { processSort } : {}),
     }),
   };
 
@@ -125,6 +146,8 @@ export function WidgetConfigScreen() {
         donutChartOptions: chartOptions,
         chartLabel: chartLabel.trim() || undefined,
         splitPercentageIntoUsedFree: splitUsedFree,
+        ...(isLine ? { timeWindow } : {}),
+        ...(isProcesses ? { processSort } : {}),
       }),
     };
 
@@ -144,8 +167,8 @@ export function WidgetConfigScreen() {
 
   return (
     <SafeAreaView style={{ flex: 1 }} edges={['top', 'left', 'right']}>
-      <YStack flex={1} p="$4" gap="$3">
-        <H2>{existing ? 'Edit widget' : 'New widget'}</H2>
+      <YStack flex={1} bg="$appBg" p={GEOMETRY.gridPadding} gap="$3">
+        <SectionLabel variant="readout">{existing ? 'Edit widget' : 'New widget'}</SectionLabel>
 
         <ScrollView flex={1} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
           <YStack gap="$4">
@@ -227,7 +250,48 @@ export function WidgetConfigScreen() {
               />
             </YStack>
 
-            {isChart && (
+            {isLine && (
+              <YStack gap="$2">
+                <Label>Time window</Label>
+                <XStack gap="$2" flexWrap="wrap">
+                  {TIME_WINDOW_ORDER.map((option) => (
+                    <ToolbarButton
+                      key={option}
+                      label={option}
+                      active={timeWindow === option}
+                      onPress={() => setTimeWindow(option)}
+                      testID={`widget-time-window-${option}`}
+                    />
+                  ))}
+                </XStack>
+                <Paragraph size="$1" opacity={0.6}>
+                  How much history the chart covers. Samples are kept in memory only
+                  and start over when the app restarts.
+                </Paragraph>
+              </YStack>
+            )}
+
+            {isProcesses && fields.length > 0 && (
+              <YStack gap="$2">
+                <Label>Sort by</Label>
+                <XStack gap="$2" flexWrap="wrap">
+                  {fields.map((field) => (
+                    <ToolbarButton
+                      key={field}
+                      label={getProcessHeaderLabel(field)}
+                      active={processSort === field}
+                      onPress={() => setProcessSort(field)}
+                      testID={`widget-process-sort-${field}`}
+                    />
+                  ))}
+                </XStack>
+                <Paragraph size="$1" opacity={0.6}>
+                  Descending — the biggest consumer leads.
+                </Paragraph>
+              </YStack>
+            )}
+
+            {isSegmentChart && (
               <>
                 <XStack items="center" gap="$2">
                   <YStack flex={1}>
@@ -236,14 +300,12 @@ export function WidgetConfigScreen() {
                       For a single 0–100 field, such as memory percent.
                     </Paragraph>
                   </YStack>
-                  <Button
-                    size="$2"
-                    theme={splitUsedFree ? 'blue' : undefined}
+                  <ToolbarButton
+                    label={splitUsedFree ? 'On' : 'Off'}
+                    active={splitUsedFree}
                     onPress={() => setSplitUsedFree((current) => !current)}
                     testID="widget-split-used-free"
-                  >
-                    {splitUsedFree ? 'On' : 'Off'}
-                  </Button>
+                  />
                 </XStack>
 
                 <YStack gap="$2">
@@ -297,19 +359,18 @@ export function WidgetConfigScreen() {
         </ScrollView>
 
         <XStack gap="$2">
-          <Button flex={1} size="$4" onPress={() => router.back()} testID="widget-cancel">
-            Cancel
-          </Button>
-          <Button
-            flex={1}
-            size="$4"
-            theme="blue"
-            onPress={handleSave}
-            disabled={!canSave}
-            testID="widget-save"
-          >
-            Save
-          </Button>
+          <YStack flex={1}>
+            <ToolbarButton label="Cancel" onPress={() => router.back()} testID="widget-cancel" />
+          </YStack>
+          <YStack flex={1}>
+            <ToolbarButton
+              label="Save"
+              variant="primary"
+              onPress={handleSave}
+              disabled={!canSave}
+              testID="widget-save"
+            />
+          </YStack>
         </XStack>
       </YStack>
     </SafeAreaView>

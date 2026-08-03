@@ -1,4 +1,3 @@
-import { Platform } from 'react-native';
 import { State } from 'react-native-gesture-handler';
 import {
   fireGestureHandler,
@@ -69,6 +68,7 @@ async function renderGrid(widgets: WidgetConfig[], editMode = true) {
       onEdit={jest.fn()}
       onRemove={jest.fn()}
       onResize={jest.fn()}
+      onCycleTimeWindow={jest.fn()}
       onReorder={onReorder}
     />,
   );
@@ -144,58 +144,36 @@ describe('WidgetGrid', () => {
     expect(onReorder).not.toHaveBeenCalled();
   });
 
-  it('offers no move buttons on native, where the drag is the interaction', async () => {
-    const { queryByTestId } = await renderGrid(makeWidgets(3));
+  it('offers moving through the ⋮ menu on every platform', async () => {
+    const { getByTestId, onReorder, user } = await renderGrid(makeWidgets(3));
 
-    expect(queryByTestId('widget-move-earlier-w-2')).toBeNull();
-    expect(queryByTestId('widget-move-later-w-2')).toBeNull();
-  });
-});
-
-/**
- * A mouse has no long press and a keyboard has no drag, so the web build gets
- * explicit controls alongside the gesture (plan §4 M6).
- */
-describe('WidgetGrid on web', () => {
-  const originalOS = Platform.OS;
-
-  beforeEach(() => {
-    Object.defineProperty(Platform, 'OS', { value: 'web', configurable: true });
-  });
-
-  afterEach(() => {
-    Object.defineProperty(Platform, 'OS', { value: originalOS, configurable: true });
-  });
-
-  it('moves a widget one place later', async () => {
-    const { getByTestId, onReorder } = await renderGrid(makeWidgets(3));
-
-    fireEvent.press(getByTestId('widget-move-later-w-1'));
+    await user.press(getByTestId('widget-menu-w-1'));
+    await user.press(getByTestId('widget-menu-sheet-w-1-move-later'));
 
     expect(onReorder).toHaveBeenCalledWith(['w-2', 'w-1', 'w-3']);
   });
 
-  it('moves a widget one place earlier', async () => {
-    const { getByTestId, onReorder } = await renderGrid(makeWidgets(3));
+  it('moves a widget earlier from the menu', async () => {
+    const { getByTestId, onReorder, user } = await renderGrid(makeWidgets(3));
 
-    fireEvent.press(getByTestId('widget-move-earlier-w-3'));
+    await user.press(getByTestId('widget-menu-w-3'));
+    await user.press(getByTestId('widget-menu-sheet-w-3-move-earlier'));
 
     expect(onReorder).toHaveBeenCalledWith(['w-1', 'w-3', 'w-2']);
   });
 
-  it('does nothing at the ends of the order', async () => {
-    const { getByTestId, onReorder } = await renderGrid(makeWidgets(3));
+  it('disables the move that would run off the end of the order', async () => {
+    const { getByTestId, onReorder, user } = await renderGrid(makeWidgets(3));
 
-    fireEvent.press(getByTestId('widget-move-earlier-w-1'));
-    await waitFor(() => undefined);
-    fireEvent.press(getByTestId('widget-move-later-w-3'));
+    await user.press(getByTestId('widget-menu-w-1'));
+    await user.press(getByTestId('widget-menu-sheet-w-1-move-earlier'));
 
     expect(onReorder).not.toHaveBeenCalled();
   });
 
-  it('hides the controls outside edit mode', async () => {
-    const { queryByTestId } = await renderGrid(makeWidgets(3), false);
+  it('keeps the menu available outside edit mode — only dragging is gated', async () => {
+    const { getByTestId } = await renderGrid(makeWidgets(3), false);
 
-    expect(queryByTestId('widget-move-later-w-1')).toBeNull();
+    expect(getByTestId('widget-menu-w-1')).toBeTruthy();
   });
 });

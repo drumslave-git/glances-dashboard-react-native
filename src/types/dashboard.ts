@@ -1,3 +1,5 @@
+import type { TimeWindow } from '@/utils/sampleBuffer';
+
 /**
  * Glances exposes its plugin list at runtime, so a metric is any plugin name
  * rather than a closed union.
@@ -12,6 +14,13 @@ export interface GlancesServer {
   url: string;
   /** Polling interval in milliseconds. 0 disables polling (fetch once). */
   refreshMs: number;
+  /**
+   * Index into the accent palette (lime → cyan → amber, cycling). Persisted with
+   * the server so a machine keeps its colour across restarts and reorders — the
+   * endpoint chip and the widget's accent tick are the only things on screen
+   * saying which machine a number came from.
+   */
+  accentIndex: number;
 }
 
 export interface DonutChartOptions {
@@ -21,7 +30,12 @@ export interface DonutChartOptions {
   withLabels?: boolean;
 }
 
-export type WidgetKind = 'text' | 'donut' | 'bar' | 'pie' | 'processes';
+/**
+ * `gauge` and `line` arrived with the Telemetry redesign. They are the two
+ * archetypes the design has that the generic kinds could not express: a ring
+ * gauge reading one percentage, and a time series over sampled history.
+ */
+export type WidgetKind = 'text' | 'donut' | 'bar' | 'pie' | 'processes' | 'gauge' | 'line';
 
 /**
  * Replaces the web app's free-form {x,y,w,h} grid position. Touch dragging a
@@ -54,4 +68,14 @@ export interface WidgetConfig {
   size: WidgetSize;
   /** Position in the dashboard grid, ascending. */
   order: number;
+  /**
+   * How much history a `line` widget's chart covers, and what its time-window
+   * state chip reads. Drives the sample count and the axis labels.
+   */
+  timeWindow?: TimeWindow;
+  /** Which column a `processes` widget sorts by, descending. */
+  processSort?: string;
 }
+
+/** Re-exported so `WidgetConfig` is readable without chasing the import. */
+export type { TimeWindow } from '@/utils/sampleBuffer';

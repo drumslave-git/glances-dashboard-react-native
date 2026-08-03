@@ -123,7 +123,38 @@ Verify against installed types (`node_modules/**/*.d.ts`) rather than memory —
 - **A hidden browser tab cannot draw.** With `document.visibilityState === 'hidden'`, `requestAnimationFrame` never fires: Skia's canvas never sizes itself or paints, real clicks stop hit-testing, and screenshots time out. The DOM is still fully inspectable and synthetic pointer events still drive the app, but a blank chart in a hidden tab proves nothing. To see the web build for real without a visible browser: serve `dist/`, `adb reverse` that port and `61208`, open it in the **emulator's Chrome**, and screenshot with `adb exec-out screencap -p`.
 - **Tamagui does not set `position` on web**, so a plain `YStack` is `static` and absolutely-positioned children escape it — on native every `View` is a containing block, so the same tree lays out correctly there. Any `position="absolute"` needs an explicit `position="relative"` on the box it is meant to be measured against.
 - **The desktop target runs the *web* bundle**, so `Platform.OS === 'web'` is true inside the Tauri window and there is no desktop-specific branch to write. It is a real WebView2: it enforces CORS exactly like a browser, from the origin `http://tauri.localhost`.
+- **Tamagui v5 *does* have `shrink` and `grow` shorthands** (for `flexShrink`/`flexGrow`), even
+  though the long names are not props. The earlier note about "no `grow` shorthand" applied to a
+  plain style object passed to `contentContainerStyle`, which is a different type.
+- **`role` is taken.** Tamagui's `Text` already accepts `role` (the ARIA one), so a component
+  prop of that name collides. The type-scale role on the text primitives is called `variant`.
+- **`react-hooks/purity` forbids `Date.now()` during render**, which rules it out of a `useMemo`
+  as well. For anything time-windowed, measure back from the newest sample instead — purer, and
+  usually more correct.
+- **`react-hooks/immutability` forbids two effects writing the same shared value** when one is
+  also a dependency of the other. Animations that share a `useSharedValue` go in one effect.
 - **A Tauri window can be driven over CDP.** Launch the exe with `WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS=--remote-debugging-port=9222` and attach to `http://127.0.0.1:9222/json/list`. Unlike the automation pane's hidden tab, this window is genuinely visible, so Skia paints and `Page.captureScreenshot` works. Mouse events are dispatched in viewport coordinates — an element scrolled below the fold gets a click at a `y` outside the window, which silently does nothing.
+
+## The "Telemetry" design system (M8)
+
+The visual language is an external design handoff, implemented in `src/theme/telemetry.ts`
+(tokens, both modes), `src/utils/typeScale.ts` (type channels + degrade ladders) and
+`src/components/telemetry/` (primitives). Three rules matter more than the rest:
+
+- **No grey text.** Every text colour clears 4.5:1 against its surface, and
+  `src/theme/telemetry.test.ts` asserts it for every token × surface pair. Hierarchy comes from
+  size, weight, letter-spacing and accent — never from fading text toward the background. If you
+  add a token, the test will tell you whether it is legal.
+- **Font size has two channels.** The *reading* channel (labels, chips, rows, footers, axis
+  ticks) scales with the user's setting; the *display* channel (hero numerals, gauge centres)
+  sizes off the widget box and must never see that multiplier. `components/telemetry/text.tsx`
+  is the first, `hero.tsx` the second — there is deliberately no `scale` parameter in `hero.tsx`.
+- **Breakpoints are per widget, not per window.** The web original used container queries; here
+  every ladder takes a *measured* box, so two differently-sized cards on one screen degrade
+  independently. Never reach for `useWindowDimensions` to decide what a widget shows.
+
+Numbers are always JetBrains Mono with tabular figures, and every unformatted number goes
+through `formatLooseNumber` — Glances serves full float precision and raw values do not read.
 
 ## Hard rules
 

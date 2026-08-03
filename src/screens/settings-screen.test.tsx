@@ -1,6 +1,8 @@
+import { usePreferencesStore } from '@/state/preferences';
 import { resetServerIdCounter, useServersStore } from '@/state/servers';
 import { useWidgetsStore } from '@/state/widgets';
 import { renderWithProviders } from '@/test-utils/render';
+import { heroFontSize } from '@/utils/typeScale';
 import { resetWidgetIdCounter } from '@/utils/widgetFactory';
 
 import { SettingsScreen } from './settings-screen';
@@ -108,3 +110,45 @@ describe('SettingsScreen', () => {
   });
 });
 
+
+describe('SettingsScreen — appearance', () => {
+  beforeEach(() => {
+    usePreferencesStore.setState({ theme: 'dark', readingScale: 1, summaryStripVisible: true });
+  });
+
+  it('switches the theme', async () => {
+    const { getByTestId, user } = await renderWithProviders(<SettingsScreen />);
+
+    await user.press(getByTestId('theme-light'));
+
+    expect(usePreferencesStore.getState().theme).toBe('light');
+  });
+
+  it('sets the reading-channel scale, and only that channel', async () => {
+    const { getByTestId, user } = await renderWithProviders(<SettingsScreen />);
+
+    await user.press(getByTestId('reading-scale-large'));
+
+    expect(usePreferencesStore.getState().readingScale).toBe(1.2);
+    // Hero numerals size off the widget box, so nothing here can reach them —
+    // see utils/typeScale.ts. This is a contract, not an implementation detail.
+    expect(heroFontSize(400)).toBe(40);
+  });
+
+  it('toggles the summary strip', async () => {
+    const { getByTestId, user } = await renderWithProviders(<SettingsScreen />);
+
+    await user.press(getByTestId('toggle-summary-strip'));
+
+    expect(usePreferencesStore.getState().summaryStripVisible).toBe(false);
+  });
+
+  it('recolours an endpoint, and the change sticks to the server', async () => {
+    const server = useServersStore.getState().addServer({ name: 'NAS', url: '10.0.0.1' });
+
+    const { getByTestId, user } = await renderWithProviders(<SettingsScreen />);
+    await user.press(getByTestId(`server-accent-${server.id}-2`));
+
+    expect(useServersStore.getState().servers[0].accentIndex).toBe(2);
+  });
+});

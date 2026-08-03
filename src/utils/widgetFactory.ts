@@ -37,6 +37,10 @@ export function defaultWidgetTitle(kind: WidgetKind, metric: GlancesMetricType):
       return `${metric} (bar)`;
     case 'pie':
       return `${metric} (pie)`;
+    case 'gauge':
+      return `${metric} (gauge)`;
+    case 'line':
+      return `${metric} (line)`;
     default:
       return `${metric} (text)`;
   }

@@ -138,6 +138,23 @@ export function getTextBody(
   return JSON.stringify(data, null, 2);
 }
 
+/**
+ * How an unformatted number is printed in the Telemetry UI.
+ *
+ * **A deliberate deviation from the reference app**, which used `String(value)`
+ * throughout. Glances serves full float precision, so that rendered
+ * `85.40915631665675` in a table cell and beside a 5pt meter — unreadable at any
+ * size, and impossible to line up in a tabular column. Integers are left exactly
+ * as they are, and an explicit field formatter always wins over this.
+ */
+export function formatLooseNumber(value: number): string {
+  if (!Number.isFinite(value)) return String(value);
+  if (Number.isInteger(value)) return String(value);
+  // A *cap* on decimals, not a pad: `12.5` stays `12.5` rather than becoming
+  // `12.50`. Tabular figures already line the columns up without the padding.
+  return String(Number(value.toFixed(Math.abs(value) >= 100 ? 1 : 2)));
+}
+
 export interface ChartSegment {
   name: string;
   value: number;

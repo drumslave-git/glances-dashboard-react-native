@@ -56,11 +56,14 @@
         flex: 1;
       }
       /* Without this the browser paints white behind the app while the bundle
-         loads, which flashes on every cold start of a dark dashboard. */
+         loads, which flashes on every cold start of a dark dashboard. The app
+         repaints these from the resolved theme once it mounts (see
+         src/app/_layout.tsx), so a light-mode user sees the dark shell for one
+         frame rather than a dark band around the board forever. */
       html,
       body,
       #root {
-        background-color: #101113;
+        background-color: #07080a;
       }
     </style>
   </head>

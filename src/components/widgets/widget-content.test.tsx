@@ -28,8 +28,8 @@ describe('getStatusMessage', () => {
   });
 });
 
-describe('WidgetContent', () => {
-  it('renders selected fields as text', async () => {
+describe('WidgetContent — summary', () => {
+  it('renders selected fields as labelled rows', async () => {
     const { getByTestId } = await renderWithProviders(
       <WidgetContent
         kind="text"
@@ -39,8 +39,53 @@ describe('WidgetContent', () => {
       />,
     );
 
-    expect(getByTestId('w-body')).toHaveTextContent(/total = 12\.5/);
-    expect(getByTestId('w-body')).toHaveTextContent(/user = 8/);
+    expect(getByTestId('w-body')).toHaveTextContent(/Total/);
+    expect(getByTestId('w-body')).toHaveTextContent(/12\.5/);
+    expect(getByTestId('w-body')).toHaveTextContent(/User/);
+  });
+
+  it('draws a meter for a field that reads as a percentage', async () => {
+    // `cpu.user` is a percentage that is not named like one, which is exactly
+    // the case the inference exists for.
+    const { getByTestId } = await renderWithProviders(
+      <WidgetContent
+        kind="text"
+        data={{ total: 12.5, user: 8 }}
+        config={{ metric: 'cpu', fields: ['total', 'user'] }}
+        testID="w"
+      />,
+    );
+
+    expect(getByTestId('meter-user-track')).toBeTruthy();
+    expect(getByTestId('meter-user-value')).toHaveTextContent('8.0%');
+  });
+
+  it('leaves a byte count as a plain row rather than a full meter', async () => {
+    const { getByTestId, queryByTestId } = await renderWithProviders(
+      <WidgetContent
+        kind="text"
+        data={memFixture}
+        config={{ metric: 'mem', fields: ['total', 'free'] }}
+        testID="w"
+      />,
+    );
+
+    expect(getByTestId('row-total')).toBeTruthy();
+    expect(queryByTestId('meter-total-track')).toBeNull();
+  });
+
+  it('promotes a lone numeric field to a hero numeral', async () => {
+    const { getByTestId } = await renderWithProviders(
+      <WidgetContent
+        kind="text"
+        data={{ total: 12.5 }}
+        config={{ metric: 'cpu', fields: ['total'] }}
+        testID="w"
+      />,
+    );
+
+    // The unit rides along in the same box, so this is a substring match.
+    expect(getByTestId('w-hero')).toHaveTextContent(/12.5%/);
   });
 
   it('applies field formatters', async () => {
@@ -53,7 +98,7 @@ describe('WidgetContent', () => {
       />,
     );
 
-    expect(getByTestId('w-body')).toHaveTextContent('total = 12.3');
+    expect(getByTestId('w-hero')).toHaveTextContent(/12.3/);
   });
 
   it('shows the raw payload when no fields are selected', async () => {
@@ -85,6 +130,64 @@ describe('WidgetContent', () => {
 
     expect(getByTestId('w-processes-header-cpu_percent')).toHaveTextContent('CPU %');
     expect(getByTestId('w-processes-row-1')).toHaveTextContent(/systemd/);
+  });
+});
+
+describe('WidgetContent — gauge and line', () => {
+  it('gauges the field that reads as a percentage', async () => {
+    const { getByTestId } = await renderWithProviders(
+      <WidgetContent
+        kind="gauge"
+        data={memFixture}
+        config={{ metric: 'mem', fields: ['percent', 'total'] }}
+        width={220}
+        height={220}
+        testID="w"
+      />,
+    );
+
+    expect(getByTestId('w-chart-value')).toHaveTextContent(/16.1%/);
+    // The other selected field becomes a key/value row under the ring.
+    expect(getByTestId('row-total')).toBeTruthy();
+  });
+
+  it('says so when a gauge has nothing numeric to show', async () => {
+    const { getByTestId } = await renderWithProviders(
+      <WidgetContent
+        kind="gauge"
+        data={{ hostname: 'TCloud' }}
+        config={{ metric: 'system', fields: ['hostname'] }}
+        testID="w"
+      />,
+    );
+
+    expect(getByTestId('w-status')).toHaveTextContent('No numeric field to gauge.');
+  });
+
+  it('renders a line widget as hero plus chart, from its sample history', async () => {
+    const now = Date.now();
+    const { getByTestId } = await renderWithProviders(
+      <WidgetContent
+        kind="line"
+        data={cpuFixture}
+        config={{ metric: 'cpu', fields: ['total'], timeWindow: '15m' }}
+        width={600}
+        height={220}
+        sizeClass="wide"
+        series={{
+          total: [
+            { t: now - 20_000, v: 10 },
+            { t: now - 10_000, v: 80 },
+            { t: now, v: cpuFixture.total },
+          ],
+        }}
+        testID="w"
+      />,
+    );
+
+    expect(getByTestId('w-hero')).toHaveTextContent(/46.8%/);
+    // Wide widgets put the stat cluster inline and draw the full chart.
+    expect(getByTestId('w-chart-axis-0')).toBeTruthy();
   });
 });
 

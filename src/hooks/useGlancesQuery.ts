@@ -50,3 +50,26 @@ export function useSystemInfo(server: GlancesServer | undefined) {
     refreshMs: 10_000,
   });
 }
+
+/**
+ * The summary strip's five live sources.
+ *
+ * Deliberately slower than the widgets: uptime, kernel and disk totals do not
+ * change between polls, and the strip is chrome rather than telemetry. `enabled`
+ * turns the requests off entirely when the strip is hidden, so a user who does
+ * not want it does not pay for it.
+ */
+export function useSummarySources(server: GlancesServer | undefined, enabled = true) {
+  const options = { refreshMs: enabled ? 15_000 : 0, enabled };
+  return {
+    system: useGlancesQuery<Record<string, unknown>>(server, GLANCES_ENDPOINTS.system, options).data,
+    uptime: useGlancesQuery<unknown>(server, GLANCES_ENDPOINTS.uptime, options).data,
+    load: useGlancesQuery<Record<string, unknown>>(server, GLANCES_ENDPOINTS.load, options).data,
+    processCount: useGlancesQuery<Record<string, unknown>>(
+      server,
+      GLANCES_ENDPOINTS.processCount,
+      options,
+    ).data,
+    fs: useGlancesQuery<unknown>(server, GLANCES_ENDPOINTS.fs, options).data,
+  };
+}

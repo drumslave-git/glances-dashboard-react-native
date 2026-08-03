@@ -27,3 +27,13 @@ export const BarCanvas = lazy(async () => {
   await canvasKitReady;
   return { default: (await import('./bar-canvas')).BarCanvas };
 });
+
+export const SeriesCanvas = lazy(async () => {
+  await canvasKitReady;
+  return { default: (await import('./series-canvas')).SeriesCanvas };
+});
+
+export const GaugeCanvas = lazy(async () => {
+  await canvasKitReady;
+  return { default: (await import('./gauge-canvas')).GaugeCanvas };
+});

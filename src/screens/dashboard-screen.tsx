@@ -3,15 +3,20 @@ import { useKeepAwake } from 'expo-keep-awake';
 import { useCallback, useMemo } from 'react';
 import { Pressable } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Button, Paragraph, YStack } from 'tamagui';
+import { YStack } from 'tamagui';
 
-import { DashboardHeader } from '@/components/dashboard/dashboard-header';
+import { SummaryStrip } from '@/components/dashboard/summary-strip';
+import { Toolbar } from '@/components/dashboard/toolbar';
 import { WidgetGrid } from '@/components/dashboard/widget-grid';
+import { ToolbarButton } from '@/components/telemetry/surfaces';
+import { UiText } from '@/components/telemetry/text';
 import { useImmersiveExit } from '@/hooks/useImmersiveMode';
-import { useSystemInfo } from '@/hooks/useGlancesQuery';
+import { useSummarySources } from '@/hooks/useGlancesQuery';
+import { usePreferencesStore } from '@/state/preferences';
 import { selectServerById, useServersStore } from '@/state/servers';
 import { useUiStore } from '@/state/ui';
 import { selectOrderedWidgets, useWidgetsStore } from '@/state/widgets';
+import { nextTimeWindow } from '@/utils/sampleBuffer';
 import { nextSize } from '@/utils/widgetLayout';
 
 /**
@@ -32,19 +37,23 @@ export function DashboardScreen() {
   const enterImmersive = useUiStore((state) => state.enterImmersive);
   const exitImmersive = useUiStore((state) => state.exitImmersive);
 
+  const summaryStripVisible = usePreferencesStore((state) => state.summaryStripVisible);
+
+  const servers = useServersStore((state) => state.servers);
   const defaultServer = useServersStore((state) => selectServerById(state, state.defaultServerId));
-  const serverCount = useServersStore((state) => state.servers.length);
   // Selecting the sorted array directly would hand useSyncExternalStore a new
   // reference on every render and loop, so sort outside the selector.
   const storedWidgets = useWidgetsStore((state) => state.widgets);
   const widgets = useMemo(() => selectOrderedWidgets({ widgets: storedWidgets }), [storedWidgets]);
   const removeWidget = useWidgetsStore((state) => state.removeWidget);
   const setWidgetSize = useWidgetsStore((state) => state.setWidgetSize);
+  const updateWidget = useWidgetsStore((state) => state.updateWidget);
   const reorderWidgets = useWidgetsStore((state) => state.reorderWidgets);
 
-  const { data: system, isError } = useSystemInfo(defaultServer);
-  const hostname = typeof system?.hostname === 'string' ? system.hostname : undefined;
-  const distro = typeof system?.linux_distro === 'string' ? system.linux_distro : undefined;
+  // Immersive mode hides the strip along with the toolbar: it is chrome, and the
+  // requests behind it stop with it.
+  const showStrip = summaryStripVisible && !immersive && servers.length > 0;
+  const summary = useSummarySources(defaultServer, showStrip);
 
   const handleExitImmersive = useCallback(() => exitImmersive(), [exitImmersive]);
   useImmersiveExit(immersive, handleExitImmersive);
@@ -54,6 +63,16 @@ export function DashboardScreen() {
     if (widget) setWidgetSize(widgetId, nextSize(widget.size));
   };
 
+  const handleCycleTimeWindow = (widgetId: string) => {
+    const widget = widgets.find((w) => w.id === widgetId);
+    if (widget) updateWidget(widgetId, { timeWindow: nextTimeWindow(widget.timeWindow ?? '15m') });
+  };
+
+  const refreshLabel =
+    defaultServer && defaultServer.refreshMs > 0
+      ? `${Math.round(defaultServer.refreshMs / 100) / 10}s refresh`
+      : null;
+
   const grid = (
     <WidgetGrid
       widgets={widgets}
@@ -61,52 +80,54 @@ export function DashboardScreen() {
       onEdit={(id) => router.push({ pathname: '/widget/[id]', params: { id } })}
       onRemove={removeWidget}
       onResize={handleResize}
+      onCycleTimeWindow={handleCycleTimeWindow}
       onReorder={reorderWidgets}
     />
   );
 
   return (
+    // `bg.app` sits behind the grid; the toolbar and strip paint their own
+    // surfaces over it, edge to edge, as they do in the design.
     <SafeAreaView style={{ flex: 1 }} edges={['top', 'left', 'right']}>
       {immersive && <KeepScreenAwake />}
-      <YStack flex={1} p="$3" gap="$3">
+      <YStack flex={1} bg="$appBg">
         {!immersive && (
-          <DashboardHeader
-            server={defaultServer}
-            hostname={hostname}
-            linuxDistro={distro}
-            unreachable={Boolean(defaultServer) && isError}
+          <Toolbar
+            servers={servers}
             editMode={editMode}
+            refreshLabel={refreshLabel}
+            onAddWidget={() => router.push('/widget/pick')}
             onToggleEditMode={toggleEditMode}
             onOpenSettings={() => router.push('/settings')}
             onEnterImmersive={enterImmersive}
           />
         )}
 
-        {serverCount === 0 ? (
-          <YStack flex={1} justify="center" items="center" gap="$3">
-            <Paragraph text="center" opacity={0.7} testID="dashboard-no-servers">
-              No servers configured. Add one to start reading metrics.
-            </Paragraph>
-            <Button theme="blue" onPress={() => router.push('/settings')} testID="dashboard-add-server">
-              Open settings
-            </Button>
-          </YStack>
+        {showStrip && <SummaryStrip {...summary} testID="dashboard-summary" />}
+
+        {servers.length === 0 ? (
+          <EmptyState
+            message="No endpoints configured. Add one to start reading metrics."
+            action="Add an endpoint"
+            onPress={() => router.push('/settings')}
+            testID="dashboard-no-servers"
+            actionTestID="dashboard-add-server"
+          />
         ) : widgets.length === 0 ? (
-          <YStack flex={1} justify="center" items="center" gap="$3">
-            <Paragraph text="center" opacity={0.7} testID="dashboard-no-widgets">
-              No widgets yet.
-            </Paragraph>
-            <Button theme="blue" onPress={() => router.push('/widget/pick')} testID="dashboard-add-first-widget">
-              Add a widget
-            </Button>
-          </YStack>
+          <EmptyState
+            message="No widgets yet."
+            action="Add a widget"
+            onPress={() => router.push('/widget/pick')}
+            testID="dashboard-no-widgets"
+            actionTestID="dashboard-add-first-widget"
+          />
         ) : immersive ? (
           // A tap anywhere leaves immersive mode. Scrolling still works: a press
           // that turns into a drag is cancelled before onPress fires.
           <Pressable
             style={{ flex: 1 }}
             onPress={handleExitImmersive}
-            accessibilityLabel="Exit immersive mode"
+            aria-label="Exit immersive mode"
             testID="dashboard-immersive-exit"
           >
             {grid}
@@ -114,13 +135,30 @@ export function DashboardScreen() {
         ) : (
           grid
         )}
-
-        {editMode && !immersive && widgets.length > 0 && (
-          <Button theme="blue" onPress={() => router.push('/widget/pick')} testID="dashboard-add-widget">
-            Add widget
-          </Button>
-        )}
       </YStack>
     </SafeAreaView>
+  );
+}
+
+function EmptyState({
+  message,
+  action,
+  onPress,
+  testID,
+  actionTestID,
+}: {
+  message: string;
+  action: string;
+  onPress: () => void;
+  testID: string;
+  actionTestID: string;
+}) {
+  return (
+    <YStack flex={1} justify="center" items="center" gap={16} p={24}>
+      <UiText variant="readout" color="$textDim" text="center" testID={testID}>
+        {message}
+      </UiText>
+      <ToolbarButton label={action} variant="primary" onPress={onPress} testID={actionTestID} />
+    </YStack>
   );
 }

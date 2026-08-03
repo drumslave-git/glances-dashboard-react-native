@@ -1,5 +1,6 @@
 import {
   formatFieldValue,
+  formatLooseNumber,
   getChartData,
   getRecordFromPayload,
   getTextBody,
@@ -202,5 +203,26 @@ describe('getChartData', () => {
       const segments = getChartData({ a: 120 }, ['a'], null, true);
       expect(segments.map((s) => s.name)).toEqual(['a']);
     });
+  });
+});
+
+describe('formatLooseNumber', () => {
+  it('leaves integers alone', () => {
+    expect(formatLooseNumber(16)).toBe('16');
+    expect(formatLooseNumber(-3)).toBe('-3');
+  });
+
+  it('caps decimals rather than padding them', () => {
+    expect(formatLooseNumber(12.5)).toBe('12.5');
+    expect(formatLooseNumber(85.40915631665675)).toBe('85.41');
+  });
+
+  it('drops to one decimal once the number is large enough not to need two', () => {
+    expect(formatLooseNumber(304391.4690646782)).toBe('304391.5');
+  });
+
+  it('passes non-finite values through rather than inventing a number', () => {
+    expect(formatLooseNumber(Number.NaN)).toBe('NaN');
+    expect(formatLooseNumber(Number.POSITIVE_INFINITY)).toBe('Infinity');
   });
 });

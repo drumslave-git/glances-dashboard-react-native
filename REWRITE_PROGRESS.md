@@ -4,7 +4,7 @@ Tracks execution of [REWRITE_PLAN.md](REWRITE_PLAN.md). Update this file in the 
 commit as the work it describes. One line per task; add dated notes under each milestone
 when something non-obvious happened.
 
-**Current status:** M7 complete — the web build now also ships as a Windows desktop app: a 6.8 MB Tauri `.exe` plus a per-user installer, verified end-to-end against a live server. Next up: M8 hardening and release.
+**Current status:** M8 complete — the "Telemetry" redesign is implemented across every target: token layer for dark and light with the contrast floor under test, bundled Space Grotesk / JetBrains Mono, two-channel type scaling, the widget shell anatomy with its degrade ladders, per-endpoint accent colours, the toolbar and summary strip, and two new widget archetypes (ring gauge, time series). Next up: M9 hardening and release.
 
 ## Milestones
 
@@ -360,7 +360,107 @@ disappearing mid-session; `scripts/run-android.ps1` does not set it.
   `loadJSBundleFromMetro()` and nothing else. Wait for Metro's `Android Bundled …` line
   before concluding anything from a screenshot.
 
-### M8 — Hardening & release — `not started`
+### M8 — "Telemetry" redesign — `done` (2026-08-03)
+
+Implements the external design handoff (`Glances Telemetry — final delivery`, direction `2a`
+dark with `2b` as its light mode). The design was drawn for a desktop window; the adaptations
+for phone, tablet, web and the Tauri window are listed under *Adapted from desktop* below.
+
+- [x] Token layer for both modes — `src/theme/telemetry.ts`, pure and unit tested
+- [x] **Contrast floor enforced by test**: every text token clears 4.5:1 against every surface
+      it lands on, including the gradient ones. It found a real bug on the first run.
+- [x] Space Grotesk + JetBrains Mono bundled (`@expo-google-fonts/*` + `expo-font`); `$mono`
+      is a first-class Tamagui family and every numeral uses it with tabular figures
+- [x] Two font-size channels — `src/utils/typeScale.ts`, with the design's floors
+- [x] Degrade ladders (header, chart, stat cluster, meters, ring, table columns, row count),
+      all pure functions driven by each widget's measured box
+- [x] Telemetry primitives — `src/components/telemetry/`: endpoint chip (+ dot rung), accent
+      tick, state chip, meters, hero/stat/gauge display numerals, logo mark, toolbar buttons
+- [x] Toolbar with the endpoint roster, and the six-cell summary strip fed from live payloads
+- [x] Widget shell rebuilt to the handoff's anatomy; the edit-mode button row is replaced by
+      the ⋮ menu on every platform
+- [x] Per-endpoint accent colours, persisted on `GlancesServer` with a v1 → v2 migration
+- [x] Two new widget kinds — `gauge` (ring) and `line` (time series over an in-memory sample
+      buffer) — plus the process table's TREND sparkline
+- [x] Processes table rebuilt: columns drop by priority instead of scrolling horizontally,
+      rows are sorted descending and never half-cut, CPU gets an inline bar
+- [x] Persisted preferences: theme (dark/light/system), reading scale, summary-strip visibility
+- [x] 454 tests across 30 suites; typecheck and lint clean
+- [x] Settings, widget picker, widget config and the server form restyled to the tokens —
+      near-black surfaces, hairline-bordered cards, uppercase tracked labels, lime filled
+      primary action, outlined secondary
+- [x] Verified in the browser against the stub server: the whole board renders with live data —
+      toolbar roster, summary strip, hero numerals, meters, ring gauge, time series, process
+      table with priority columns — in both dark and light, with no console errors
+- [x] **Verified on the Android emulator** after rebuilding the dev APK for the two new native
+      modules: the toolbar, summary strip and widget shells render against the live TCloud
+      server; Skia draws the ring gauge for real (bezel, track, lime arc from twelve o'clock,
+      centre value); the widget picker offers all seven kinds; the settings screen's appearance
+      controls work; and **light mode `2b` renders correctly end to end**, down to the darkened
+      lime fill and the bone-white diamond in the logo tile.
+
+**Adapted from desktop**
+- **Toolbar splits into two rows below ~760pt**, so a phone with several endpoints does not
+  crush the action buttons. The roster scrolls horizontally rather than wrapping.
+- **No window controls.** `⤢ — ▢ ✕` belong to a frameless desktop window; Android has none and
+  the Tauri build keeps its native title bar.
+- **The separate ENDPOINTS button is folded into the gear**, because this app has one settings
+  screen that already contains the endpoint list.
+- **The summary strip wraps into a grid** (three columns on a phone, six when there is room)
+  instead of six equal columns, which are unreadable at phone widths.
+- **Hover becomes press and edit mode.** Touch has no hover, so the design's one-step border
+  lift is used for the edit-mode state and `pressStyle` opacity elsewhere.
+- **The ⋮ menu is a bottom sheet**, not a popover — that is where a thumb already is.
+- Controls keep a 34pt minimum height even where the design's padding implies less.
+
+**Notes (2026-08-03)**
+- **The design assumes fixed widget types; this app does not have any.** The handoff is written
+  against CPU / MEMORY / GPU / NETWORK / PROCESSES widgets, whereas here a widget is built over
+  *any* Glances plugin and *any* fields. Rather than lose that, the archetypes are reached by
+  **inference** (`src/utils/widgetPresentation.ts`): a field that reads like a percentage gets a
+  meter, a lone numeric field becomes the hero, everything else is a key/value row. Two
+  archetypes had no generic equivalent at all and became new kinds: `gauge` and `line`.
+- **`looksLikePercent` needs the name *and* the range to agree.** `cpu.total` is a percentage;
+  `mem.total` is 132 GB and would have been drawn as a full meter the moment it dipped under
+  100. The name list also carries the cpu plugin's unlabelled percentages (`user`, `system`,
+  `idle`, …) and the gpu plugin's `proc`/`fan`.
+- **Unformatted numbers are now capped to 2 decimals** (`formatLooseNumber`), a deliberate
+  deviation from the reference app's `String(value)`. Glances serves full float precision, and
+  `85.40915631665675` beside a 5pt meter or in a tabular column is not a readout. It is a *cap*
+  and not a pad — `12.5` stays `12.5` — and an explicit field formatter always wins.
+- **The processes table no longer scrolls horizontally.** The handoff forbids it, so columns
+  leave by priority (PID, command and CPU always survive) and the row count follows the
+  available height. That also retires the nested-`ScrollView` construct the one unexplained M4
+  Fabric mount crash pointed at.
+- **Sample history is memory-only**, per the handoff and the reference app. `pushSample` ignores
+  anything not newer than the last sample, which is what lets several widgets bound to the same
+  server and endpoint all report the same poll (they pass the query's `dataUpdatedAt`) without
+  duplicating it. Per-process trend buffers are pruned to the visible rows, or the store would
+  grow a series for every PID the machine has ever run.
+- **Time windows are measured back from the newest sample, not `Date.now()`.** That started as a
+  lint fix — `react-hooks/purity` rightly refuses `Date.now()` during render — and turned out to
+  be more correct: if polling stalled two minutes ago, a 5-minute window should still show the
+  last five minutes of *data* rather than three minutes of data and a gap.
+- **`react-hooks/immutability` forbids splitting two animations across two effects** when both
+  write the same shared values: one effect then modifies a value the other depends on. The
+  chart's draw-in and the marker's breathe live in one effect for that reason.
+- **Tamagui v5 has `shrink`/`grow` shorthands** even though it has no `flexShrink`/`flexGrow`
+  prop — the M4 note about "no `grow` shorthand" was about a plain style object passed to
+  `contentContainerStyle`, which is a different type.
+- **`role` is not available as a component prop name.** Tamagui's `Text` already takes `role`
+  (the ARIA one), so the type-scale role prop on the text primitives is called `variant`.
+- **The web shell's hard-coded background has to follow the theme.** `public/index.html` paints
+  near-black so a cold start does not flash white; without repainting it from the resolved
+  theme, a light-mode board sits inside a dark frame wherever the page overscrolls.
+- **Surfaces the design specifies as gradients are drawn with `expo-linear-gradient`** rather
+  than flattened to a mid-tone. It runs in Expo Go, so it costs nothing in native surface, and
+  it is also what draws the CPU meter's `#5e8a2e → #b6f24a` fill.
+- Charts still go only through `ChartView`; the two new canvases sit beside the existing ones
+  and the web build lazy-loads them behind the same CanvasKit gate. `ChartView` gained an
+  `explicitSize` prop so the widget shell's own measurement is reused — one fewer layout pass,
+  and deterministic geometry in tests, where no layout event ever fires.
+
+### M9 — Hardening & release — `not started`
 - [ ] Component tests: settings + config screens, error paths
 - [ ] Perf pass (memoization, background polling pause, processlist cost)
 - [ ] EAS Android build profile
@@ -408,6 +508,19 @@ disappearing mid-session; `scripts/run-android.ps1` does not set it.
 | 2026-08-03 | `useHttpsScheme` stays off, so the origin is `http://tauri.localhost` | An https origin would make every plain-http Glances on the LAN a mixed-content error — the exact problem a hosted PWA has and desktop otherwise avoids |
 | 2026-08-03 | NSIS only (no MSI), installing per user | One installer is enough, NSIS needs no WiX, and a personal dashboard should not demand administrator rights to install |
 | 2026-08-03 | The project gained a `metro.config.js` to block `src-tauri/target/` | Cargo's build directory is gigabytes inside the Metro root; without this Metro crawls and watches all of it on every start |
+| 2026-08-03 | The Telemetry design's fixed widget types are reached by **inference** over the generic widget model, not by replacing it | The app builds widgets over any plugin and any fields; hard-coding CPU/MEMORY/GPU widgets would have been a capability regression, and the archetypes are recoverable from the data |
+| 2026-08-03 | Two new widget kinds — `gauge` and `line` | The ring gauge and the time series are the only archetypes in the handoff with no generic equivalent at all |
+| 2026-08-03 | The 4.5:1 contrast floor is a **unit test**, not a review step | The handoff makes it a hard requirement; asserting it caught a failing light-mode button fill on the first run |
+| 2026-08-03 | `accentIndex` lives on the server, not the widget | The endpoint chip and accent tick answer "which machine", so the colour has to be stable per machine across restarts and reorders |
+| 2026-08-03 | Degrade ladders key off each widget's **measured** box, never the window | The web original used container queries; measuring is the RN equivalent and keeps two differently-sized cards on one screen independent |
+| 2026-08-03 | The user's font-size setting reaches the reading channel only | A 46pt hero multiplied to ~90pt inside a 450pt card is what the handoff says broke the first implementation |
+| 2026-08-03 | Preferences (theme, reading scale, summary strip) are persisted; `editMode`/`immersive` stay transient | A theme the user chose should survive a restart; a mode they were in should not |
+| 2026-08-03 | The edit-mode button row is replaced by the ⋮ menu on **every** platform | The header now carries identity only, which is what makes a dense board readable — and it retires the web-only move buttons in favour of one interaction everywhere |
+| 2026-08-03 | The processes table drops columns by priority instead of scrolling horizontally | The handoff forbids horizontal scroll, and it removes the nested-ScrollView the M4 mount crash pointed at |
+| 2026-08-03 | Unformatted numbers are capped to 2 decimals (`formatLooseNumber`) | Glances serves full float precision; `85.40915631665675` in a tabular column or beside a 5pt meter is not a readout. A cap, not a pad — and a field formatter still wins |
+| 2026-08-03 | Sample history is in-memory and time windows measure back from the newest sample | Matches the handoff and the reference app; measuring from the data rather than the clock is also pure, and shows the last window of data when polling stalls |
+| 2026-08-03 | `expo-linear-gradient` added for the surfaces and meter fills the design specifies as gradients | It runs in Expo Go, so it costs nothing in native surface, and flattening the CPU meter's `#5e8a2e → #b6f24a` would lose a visibly meaningful gradient |
+| 2026-08-03 | Space Grotesk and JetBrains Mono are bundled, not fetched | The app ships as a desktop and offline-capable web build; a dashboard that must reach Google Fonts before it can render a number is not one |
 
 ## Blockers / open questions
 

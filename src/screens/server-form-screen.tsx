@@ -1,7 +1,11 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useState } from 'react';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Button, H2, Input, Label, Paragraph, ScrollView, Spinner, XStack, YStack } from 'tamagui';
+import { Input, Label, Paragraph, ScrollView, Spinner, XStack, YStack } from 'tamagui';
+
+import { ToolbarButton } from '@/components/telemetry/surfaces';
+import { Label as SectionLabel } from '@/components/telemetry/text';
+import { GEOMETRY } from '@/theme/telemetry';
 
 import { coerceServerUrl, testGlancesConnection } from '@/api/glances';
 import { DEFAULT_REFRESH_MS, useServersStore } from '@/state/servers';
@@ -62,8 +66,8 @@ export function ServerFormScreen() {
 
   return (
     <SafeAreaView style={{ flex: 1 }} edges={['top', 'left', 'right']}>
-      <YStack flex={1} p="$4" gap="$3">
-        <H2>{existing ? 'Edit server' : 'Add server'}</H2>
+      <YStack flex={1} bg="$appBg" p={GEOMETRY.gridPadding} gap="$3">
+        <SectionLabel variant="readout">{existing ? 'Edit server' : 'Add server'}</SectionLabel>
 
         <ScrollView flex={1} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
           <YStack gap="$4">
@@ -114,14 +118,14 @@ export function ServerFormScreen() {
             </YStack>
 
             <YStack gap="$2">
-              <Button
-                size="$3"
-                onPress={handleTest}
-                disabled={!canSave || test.status === 'testing'}
-                testID="server-test"
-              >
-                {test.status === 'testing' ? 'Testing…' : 'Test connection'}
-              </Button>
+              <XStack>
+                <ToolbarButton
+                  label={test.status === 'testing' ? 'Testing…' : 'Test connection'}
+                  onPress={handleTest}
+                  disabled={!canSave || test.status === 'testing'}
+                  testID="server-test"
+                />
+              </XStack>
 
               {test.status === 'testing' && <Spinner testID="server-test-spinner" />}
               {test.status === 'ok' && (
@@ -139,19 +143,18 @@ export function ServerFormScreen() {
         </ScrollView>
 
         <XStack gap="$2">
-          <Button flex={1} size="$4" onPress={() => router.back()} testID="server-cancel">
-            Cancel
-          </Button>
-          <Button
-            flex={1}
-            size="$4"
-            theme="blue"
-            onPress={handleSave}
-            disabled={!canSave}
-            testID="server-save"
-          >
-            Save
-          </Button>
+          <YStack flex={1}>
+            <ToolbarButton label="Cancel" onPress={() => router.back()} testID="server-cancel" />
+          </YStack>
+          <YStack flex={1}>
+            <ToolbarButton
+              label="Save"
+              variant="primary"
+              onPress={handleSave}
+              disabled={!canSave}
+              testID="server-save"
+            />
+          </YStack>
         </XStack>
       </YStack>
     </SafeAreaView>

@@ -198,7 +198,25 @@ Each milestone ends with: tests green, `npm run typecheck` + `lint` clean, verif
 - Wrap the static web build in **Tauri** (fallback: Electron if Tauri fights the router/wasm)
 - App icon, window sizing, `.exe`/installer build documented and reproducible
 
-### M8 — Hardening & release
+### M8 — "Telemetry" redesign
+Implements the external design handoff (`Glances Telemetry — final delivery`), which was
+drawn for a desktop window and is adapted here for phone, tablet, web and the Tauri window.
+
+- Token layer for both modes (`2a` dark, `2b` light), with the **4.5:1 contrast floor enforced
+  by a unit test** rather than by eye — the handoff makes it a hard requirement
+- Space Grotesk + JetBrains Mono, bundled; every numeral is mono with tabular figures
+- **Two font-size channels**: a user-scaled *reading* channel, and a *display* channel that
+  sizes off the widget box and is deliberately out of the user's reach
+- Widget shell anatomy — accent tick, label, endpoint chip, state chips, ⋮ menu, footer — with
+  the handoff's degrade ladders driven by each widget's **measured** box, the RN equivalent of
+  the original's container queries
+- Per-endpoint accent colours, persisted on the server so a machine keeps its colour
+- Toolbar (logo, wordmark, endpoint roster, actions) and the six-cell summary strip
+- Two new widget archetypes the generic kinds could not express: a **ring gauge** and a
+  **time series** over an in-memory sample buffer
+- Theme, reading scale and summary-strip visibility as persisted preferences
+
+### M9 — Hardening & release
 - Component-test coverage for settings + config screens; error-path tests (server down, bad URL, empty payload)
 - Perf pass: memoized widget cards, throttled re-renders at fast refresh intervals, processlist payload cost
 - EAS build profile for Android APK; README with setup/build instructions for all targets

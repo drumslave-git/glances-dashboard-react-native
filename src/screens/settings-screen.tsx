@@ -1,8 +1,14 @@
 import { useRouter } from 'expo-router';
 import { useState } from 'react';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Button, H2, Paragraph, ScrollView, Separator, SizableText, XStack, YStack } from 'tamagui';
+import { Paragraph, ScrollView, Separator, SizableText, XStack, YStack } from 'tamagui';
 
+import { ToolbarButton } from '@/components/telemetry/surfaces';
+import { Label } from '@/components/telemetry/text';
+import { GEOMETRY } from '@/theme/telemetry';
+
+import { AccentPicker, AppearanceSection } from '@/components/settings/appearance-section';
+import { AccentTick } from '@/components/telemetry/chips';
 import { useServersStore } from '@/state/servers';
 import { useWidgetsStore } from '@/state/widgets';
 import type { GlancesServer } from '@/types/dashboard';
@@ -20,6 +26,7 @@ interface ServerRowProps {
   onEdit: () => void;
   onMakeDefault: () => void;
   onDelete: () => void;
+  onAccentChange: (accentIndex: number) => void;
 }
 
 function ServerRow({
@@ -29,12 +36,17 @@ function ServerRow({
   onEdit,
   onMakeDefault,
   onDelete,
+  onAccentChange,
 }: ServerRowProps) {
   const [confirming, setConfirming] = useState(false);
 
   return (
     <YStack gap="$2" py="$3" testID={`server-row-${server.id}`}>
       <XStack items="center" gap="$2">
+        {/* The accent tick, as it appears at the head of every widget bound to
+            this endpoint. The name stays plain text — a chip here would repeat
+            it in 9pt uppercase and truncate the long ones. */}
+        <AccentTick accentIndex={server.accentIndex} testID={`server-accent-tick-${server.id}`} />
         <SizableText size="$6" flex={1} numberOfLines={1}>
           {server.name}
         </SizableText>
@@ -53,6 +65,12 @@ function ServerRow({
         {widgetCount > 0 ? ` · ${widgetCount} widget${widgetCount === 1 ? '' : 's'}` : ''}
       </Paragraph>
 
+      <AccentPicker
+        accentIndex={server.accentIndex}
+        onChange={onAccentChange}
+        testID={`server-accent-${server.id}`}
+      />
+
       {confirming ? (
         <YStack gap="$2">
           <Paragraph size="$2">
@@ -61,37 +79,30 @@ function ServerRow({
               : 'Delete this server?'}
           </Paragraph>
           <XStack gap="$2">
-            <Button
-              size="$3"
-              theme="red"
+            <ToolbarButton
+              label="Delete"
+              variant="primary"
               onPress={onDelete}
               testID={`server-confirm-delete-${server.id}`}
-            >
-              Delete
-            </Button>
-            <Button size="$3" onPress={() => setConfirming(false)}>
-              Cancel
-            </Button>
+            />
+            <ToolbarButton label="Cancel" onPress={() => setConfirming(false)} />
           </XStack>
         </YStack>
       ) : (
         <XStack gap="$2" flexWrap="wrap">
-          <Button size="$3" onPress={onEdit} testID={`server-edit-${server.id}`}>
-            Edit
-          </Button>
+          <ToolbarButton label="Edit" onPress={onEdit} testID={`server-edit-${server.id}`} />
           {!isDefault && (
-            <Button size="$3" onPress={onMakeDefault} testID={`server-make-default-${server.id}`}>
-              Make default
-            </Button>
+            <ToolbarButton
+              label="Make default"
+              onPress={onMakeDefault}
+              testID={`server-make-default-${server.id}`}
+            />
           )}
-          <Button
-            size="$3"
-            theme="red"
+          <ToolbarButton
+            label="Remove"
             onPress={() => setConfirming(true)}
             testID={`server-delete-${server.id}`}
-          >
-            Remove
-          </Button>
+          />
         </XStack>
       )}
     </YStack>
@@ -104,6 +115,7 @@ export function SettingsScreen() {
   const defaultServerId = useServersStore((state) => state.defaultServerId);
   const setDefaultServer = useServersStore((state) => state.setDefaultServer);
   const removeServer = useServersStore((state) => state.removeServer);
+  const updateServer = useServersStore((state) => state.updateServer);
   const widgets = useWidgetsStore((state) => state.widgets);
   const removeWidgetsForServer = useWidgetsStore((state) => state.removeWidgetsForServer);
 
@@ -115,53 +127,58 @@ export function SettingsScreen() {
 
   return (
     <SafeAreaView style={{ flex: 1 }} edges={['top', 'left', 'right']}>
-      <YStack flex={1} p="$4" gap="$3">
+      <YStack flex={1} bg="$appBg" p={GEOMETRY.gridPadding} gap="$3">
         <XStack items="center" gap="$3">
-          <H2 flex={1}>Servers</H2>
-          <Button size="$3" onPress={() => router.back()} testID="settings-close">
-            Done
-          </Button>
+          <Label flex={1} variant="readout">
+            Endpoints
+          </Label>
+          <ToolbarButton label="Done" onPress={() => router.back()} testID="settings-close" />
         </XStack>
 
-        {servers.length === 0 ? (
-          <YStack flex={1} justify="center" items="center" gap="$3">
-            <Paragraph text="center" opacity={0.7} testID="servers-empty">
-              No servers yet. Add the address of a machine running `glances -w`.
-            </Paragraph>
-          </YStack>
-        ) : (
-          <ScrollView flex={1} showsVerticalScrollIndicator={false}>
-            <YStack>
-              {servers.map((server, index) => (
-                <YStack key={server.id}>
-                  {index > 0 && <Separator />}
-                  <ServerRow
-                    server={server}
-                    isDefault={server.id === defaultServerId}
-                    widgetCount={widgets.filter((w) => w.serverId === server.id).length}
-                    onEdit={() =>
-                      router.push({
-                        pathname: '/settings/server/[id]',
-                        params: { id: server.id },
-                      })
-                    }
-                    onMakeDefault={() => setDefaultServer(server.id)}
-                    onDelete={() => handleDelete(server.id)}
-                  />
-                </YStack>
-              ))}
-            </YStack>
-          </ScrollView>
-        )}
+        <ScrollView flex={1} showsVerticalScrollIndicator={false}>
+          <YStack gap="$3">
+            <AppearanceSection />
+            <Separator />
 
-        <Button
-          size="$4"
-          theme="blue"
+            {servers.length === 0 ? (
+              <YStack py="$6" justify="center" items="center" gap="$3">
+                <Paragraph text="center" opacity={0.7} testID="servers-empty">
+                  No servers yet. Add the address of a machine running `glances -w`.
+                </Paragraph>
+              </YStack>
+            ) : (
+              <YStack>
+                {servers.map((server, index) => (
+                  <YStack key={server.id}>
+                    {index > 0 && <Separator />}
+                    <ServerRow
+                      server={server}
+                      isDefault={server.id === defaultServerId}
+                      widgetCount={widgets.filter((w) => w.serverId === server.id).length}
+                      onEdit={() =>
+                        router.push({
+                          pathname: '/settings/server/[id]',
+                          params: { id: server.id },
+                        })
+                      }
+                      onMakeDefault={() => setDefaultServer(server.id)}
+                      onDelete={() => handleDelete(server.id)}
+                      onAccentChange={(accentIndex) => updateServer(server.id, { accentIndex })}
+                    />
+                  </YStack>
+                ))}
+              </YStack>
+            )}
+          </YStack>
+        </ScrollView>
+
+        <ToolbarButton
+          label="Add server"
+          glyph="+"
+          variant="primary"
           onPress={() => router.push({ pathname: '/settings/server/[id]', params: { id: 'new' } })}
           testID="add-server"
-        >
-          Add server
-        </Button>
+        />
       </YStack>
     </SafeAreaView>
   );

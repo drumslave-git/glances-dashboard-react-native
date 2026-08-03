@@ -1,4 +1,10 @@
-import { DEFAULT_REFRESH_MS, resetServerIdCounter, selectServerById, useServersStore } from './servers';
+import {
+  DEFAULT_REFRESH_MS,
+  migrateServers,
+  resetServerIdCounter,
+  selectServerById,
+  useServersStore,
+} from './servers';
 
 beforeEach(() => {
   resetServerIdCounter();
@@ -110,5 +116,61 @@ describe('selectServerById', () => {
     expect(selectServerById(state, server.id)?.name).toBe('A');
     expect(selectServerById(state, 'nope')).toBeUndefined();
     expect(selectServerById(state, null)).toBeUndefined();
+  });
+});
+
+describe('endpoint accents', () => {
+  it('gives each new server the next colour along', () => {
+    const store = useServersStore.getState();
+    expect(store.addServer({ name: 'A', url: 'a' }).accentIndex).toBe(0);
+    expect(useServersStore.getState().addServer({ name: 'B', url: 'b' }).accentIndex).toBe(1);
+    expect(useServersStore.getState().addServer({ name: 'C', url: 'c' }).accentIndex).toBe(2);
+  });
+
+  it('honours an explicitly chosen colour', () => {
+    const server = useServersStore.getState().addServer({ name: 'A', url: 'a', accentIndex: 2 });
+    expect(server.accentIndex).toBe(2);
+  });
+
+  it('lets the colour be changed and ignores junk', () => {
+    const server = useServersStore.getState().addServer({ name: 'A', url: 'a' });
+
+    useServersStore.getState().updateServer(server.id, { accentIndex: 1 });
+    expect(selectServerById(useServersStore.getState(), server.id)?.accentIndex).toBe(1);
+
+    useServersStore.getState().updateServer(server.id, { accentIndex: Number.NaN });
+    expect(selectServerById(useServersStore.getState(), server.id)?.accentIndex).toBe(1);
+  });
+});
+
+describe('migrateServers', () => {
+  it('colours pre-accent servers by their position', () => {
+    const migrated = migrateServers(
+      {
+        servers: [
+          { id: 's-1', name: 'A', url: 'http://a', refreshMs: 5000 },
+          { id: 's-2', name: 'B', url: 'http://b', refreshMs: 5000 },
+        ],
+        defaultServerId: 's-1',
+      },
+      1,
+    );
+
+    expect(migrated.servers.map((s) => s.accentIndex)).toEqual([0, 1]);
+    expect(migrated.defaultServerId).toBe('s-1');
+  });
+
+  it('leaves an already-migrated store alone', () => {
+    const migrated = migrateServers(
+      { servers: [{ id: 's-1', name: 'A', url: 'http://a', refreshMs: 5000, accentIndex: 2 }] },
+      2,
+    );
+    expect(migrated.servers[0].accentIndex).toBe(2);
+    expect(migrated.defaultServerId).toBeNull();
+  });
+
+  it('survives an empty or absent persisted payload', () => {
+    expect(migrateServers(undefined, 1)).toEqual({ servers: [], defaultServerId: null });
+    expect(migrateServers({}, 0)).toEqual({ servers: [], defaultServerId: null });
   });
 });

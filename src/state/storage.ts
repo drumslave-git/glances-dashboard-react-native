@@ -8,6 +8,7 @@ import { createJSONStorage } from 'zustand/middleware';
 export const STORAGE_KEYS = {
   servers: 'glances-dashboard:servers',
   widgets: 'glances-dashboard:widgets',
+  preferences: 'glances-dashboard:preferences',
 } as const;
 
 export const asyncStorageJSON = () => createJSONStorage(() => AsyncStorage);

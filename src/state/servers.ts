@@ -12,6 +12,7 @@ export interface ServerInput {
   name: string;
   url: string;
   refreshMs?: number;
+  accentIndex?: number;
 }
 
 interface ServersState {
@@ -54,6 +55,42 @@ function normalizeRefresh(refreshMs: number | undefined): number {
   return refreshMs;
 }
 
+/** `accentNameForIndex` cycles, so any whole number is valid — junk is not. */
+function normalizeAccentIndex(accentIndex: number | undefined, fallback: number): number {
+  if (typeof accentIndex !== 'number' || !Number.isFinite(accentIndex)) return fallback;
+  return Math.max(0, Math.trunc(accentIndex));
+}
+
+type PersistedServers = Pick<ServersState, 'servers' | 'defaultServerId'>;
+
+/**
+ * v1 → v2: servers gained `accentIndex`. Existing servers are coloured by their
+ * position in the list, which is the same assignment a fresh install would make,
+ * so an upgraded dashboard looks like one that was always on this version.
+ *
+ * Exported for the test — persisted shapes are user data, and a migration that
+ * silently drops a server is a data-loss bug, not a styling one.
+ */
+export function migrateServers(persisted: unknown, version: number): PersistedServers {
+  const state = (persisted ?? {}) as Partial<PersistedServers>;
+  const servers = Array.isArray(state.servers) ? state.servers : [];
+
+  if (version >= 2) {
+    return { servers: servers as GlancesServer[], defaultServerId: state.defaultServerId ?? null };
+  }
+
+  return {
+    servers: servers.map((server, index) => ({
+      ...(server as GlancesServer),
+      accentIndex:
+        typeof (server as Partial<GlancesServer>).accentIndex === 'number'
+          ? (server as GlancesServer).accentIndex
+          : index,
+    })),
+    defaultServerId: state.defaultServerId ?? null,
+  };
+}
+
 export const useServersStore = create<ServersState>()(
   persist(
     (set, get) => ({
@@ -67,6 +104,9 @@ export const useServersStore = create<ServersState>()(
           name: input.name.trim() || 'Glances',
           url: coerceServerUrl(input.url),
           refreshMs: normalizeRefresh(input.refreshMs),
+          // Next colour along, so the first three servers are visibly distinct
+          // without the user choosing anything.
+          accentIndex: input.accentIndex ?? get().servers.length,
         };
         set((state) => ({
           servers: [...state.servers, server],
@@ -86,6 +126,9 @@ export const useServersStore = create<ServersState>()(
                   ...(patch.url !== undefined && { url: coerceServerUrl(patch.url) }),
                   ...(patch.refreshMs !== undefined && {
                     refreshMs: normalizeRefresh(patch.refreshMs),
+                  }),
+                  ...(patch.accentIndex !== undefined && {
+                    accentIndex: normalizeAccentIndex(patch.accentIndex, server.accentIndex),
                   }),
                 }
               : server,
@@ -110,7 +153,8 @@ export const useServersStore = create<ServersState>()(
     {
       name: STORAGE_KEYS.servers,
       storage: asyncStorageJSON(),
-      version: 1,
+      version: 2,
+      migrate: migrateServers,
       partialize: (state) => ({
         servers: state.servers,
         defaultServerId: state.defaultServerId,

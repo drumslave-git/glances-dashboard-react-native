@@ -89,7 +89,9 @@ describe('WidgetConfigScreen — creating', () => {
 
     await user.press(await findByTestId('widget-fields-option-total'));
 
-    expect(getByTestId('widget-preview-content-body')).toHaveTextContent('total = 12');
+    // The summary body labels the field and prints its value, rather than dumping
+    // 'key = value' lines as the pre-redesign text widget did.
+    expect(getByTestId('widget-preview-content-hero')).toHaveTextContent(/12/);
   });
 
   it('falls back to a generated title', async () => {
@@ -166,7 +168,7 @@ describe('WidgetConfigScreen — per-field options', () => {
     await user.press(getByTestId('widget-field-total'));
     await user.press(getByTestId('widget-field-total-formatter-kind-round'));
 
-    expect(getByTestId('widget-preview-content-body')).toHaveTextContent('total = 12.35');
+    expect(getByTestId('widget-preview-content-hero')).toHaveTextContent(/12.35/);
   });
 
   it('offers truncate length and position, and summarises the choice', async () => {

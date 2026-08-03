@@ -1,6 +1,10 @@
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Button, H2, Paragraph, ScrollView, SizableText, XStack, YStack } from 'tamagui';
+import { ScrollView, XStack, YStack } from 'tamagui';
+
+import { ToolbarButton } from '@/components/telemetry/surfaces';
+import { Label, UiText } from '@/components/telemetry/text';
+import { GEOMETRY } from '@/theme/telemetry';
 
 import type { WidgetKind } from '@/types/dashboard';
 
@@ -13,8 +17,20 @@ interface WidgetTypeOption {
 const WIDGET_TYPES: WidgetTypeOption[] = [
   {
     kind: 'text',
-    label: 'Text metric',
-    description: 'Shows one or more fields from a Glances endpoint as plain text.',
+    label: 'Summary',
+    description:
+      'Fields as labelled rows, with a meter for anything that reads as a percentage and a hero numeral when there is only one number.',
+  },
+  {
+    kind: 'line',
+    label: 'Time series',
+    description:
+      'A live line chart over sampled history, with peak and average. History is kept in memory and resets when the app restarts.',
+  },
+  {
+    kind: 'gauge',
+    label: 'Ring gauge',
+    description: 'One percentage as a ring, with the remaining fields listed underneath.',
   },
   {
     kind: 'donut',
@@ -48,33 +64,36 @@ export function WidgetTypeScreen() {
 
   return (
     <SafeAreaView style={{ flex: 1 }} edges={['top', 'left', 'right']}>
-      <YStack flex={1} p="$4" gap="$3">
+      <YStack flex={1} bg="$appBg" p={GEOMETRY.gridPadding} gap="$3">
         <XStack items="center" gap="$3">
-          <H2 flex={1}>Add widget</H2>
-          <Button size="$3" onPress={() => router.back()} testID="widget-type-cancel">
-            Cancel
-          </Button>
+          <Label flex={1} variant="readout">
+            Add widget
+          </Label>
+          <ToolbarButton label="Cancel" onPress={() => router.back()} testID="widget-type-cancel" />
         </XStack>
 
         <ScrollView flex={1} showsVerticalScrollIndicator={false}>
           <YStack gap="$3">
             {WIDGET_TYPES.map((option) => (
-              <Button
+              <YStack
                 key={option.kind}
-                height="auto"
-                py="$3"
-                px="$3"
-                justify="flex-start"
+                gap={5}
+                p={14}
+                rounded={GEOMETRY.radius.widget}
+                borderWidth={1}
+                borderColor="$borderColor"
+                bg="$widgetBg"
+                pressStyle={{ borderColor: '$borderRaised' }}
                 onPress={() => choose(option.kind)}
+                role="button"
+                aria-label={option.label}
                 testID={`widget-type-${option.kind}`}
               >
-                <YStack gap="$1" flex={1}>
-                  <SizableText size="$5">{option.label}</SizableText>
-                  <Paragraph size="$2" opacity={0.7}>
-                    {option.description}
-                  </Paragraph>
-                </YStack>
-              </Button>
+                <Label variant="metric">{option.label}</Label>
+                <UiText variant="footer" color="$textDim">
+                  {option.description}
+                </UiText>
+              </YStack>
             ))}
           </YStack>
         </ScrollView>

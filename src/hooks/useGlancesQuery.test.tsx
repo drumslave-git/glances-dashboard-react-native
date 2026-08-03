@@ -11,6 +11,7 @@ const server: GlancesServer = {
   name: 'NAS',
   url: 'http://host:61208',
   refreshMs: 0,
+  accentIndex: 0,
 };
 
 function createWrapper() {

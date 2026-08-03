@@ -29,6 +29,8 @@ export type WidgetPatch = Partial<
     | 'chartLabel'
     | 'splitPercentageIntoUsedFree'
     | 'size'
+    | 'timeWindow'
+    | 'processSort'
   >
 >;
 

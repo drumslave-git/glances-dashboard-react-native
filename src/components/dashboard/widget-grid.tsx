@@ -1,9 +1,10 @@
 import { useCallback, useMemo, useRef, useState } from 'react';
-import { Platform, useWindowDimensions, type LayoutChangeEvent } from 'react-native';
+import { useWindowDimensions, type LayoutChangeEvent } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { runOnJS } from 'react-native-reanimated';
 import { ScrollView, XStack, YStack } from 'tamagui';
 
+import { GEOMETRY } from '@/theme/telemetry';
 import type { WidgetConfig } from '@/types/dashboard';
 import { reorderForPointer, stepOrder, type CardRect } from '@/utils/dragReorder';
 import { columnsForWidth, widthPercentForSize } from '@/utils/widgetLayout';
@@ -19,6 +20,7 @@ interface WidgetGridProps {
   onEdit: (widgetId: string) => void;
   onRemove: (widgetId: string) => void;
   onResize: (widgetId: string) => void;
+  onCycleTimeWindow: (widgetId: string) => void;
   /** Commit a new order after a drag. */
   onReorder: (orderedIds: string[]) => void;
 }
@@ -38,6 +40,7 @@ export function WidgetGrid({
   onEdit,
   onRemove,
   onResize,
+  onCycleTimeWindow,
   onReorder,
 }: WidgetGridProps) {
   const { width } = useWindowDimensions();
@@ -134,7 +137,9 @@ export function WidgetGrid({
       showsVerticalScrollIndicator={false}
       testID="widget-grid"
     >
-      <XStack flexWrap="wrap" m="$-1">
+      {/* The design's 11pt gutter and 15pt surround, expressed as a negative
+          margin on the flow plus half-gutter padding on each cell. */}
+      <XStack flexWrap="wrap" m={-GEOMETRY.gridGap / 2} p={GEOMETRY.gridPadding}>
         {ordered.map((widget, index) => (
           <WidgetGridCell
             key={widget.id}
@@ -149,7 +154,8 @@ export function WidgetGrid({
             onEdit={onEdit}
             onRemove={onRemove}
             onResize={onResize}
-            {...(Platform.OS === 'web' && { onMove: moveOne })}
+            onCycleTimeWindow={onCycleTimeWindow}
+            onMove={moveOne}
             index={index}
             count={ordered.length}
           />
@@ -171,7 +177,8 @@ interface WidgetGridCellProps {
   onEdit: (widgetId: string) => void;
   onRemove: (widgetId: string) => void;
   onResize: (widgetId: string) => void;
-  onMove?: (widgetId: string, offset: number) => void;
+  onCycleTimeWindow: (widgetId: string) => void;
+  onMove: (widgetId: string, offset: number) => void;
   index: number;
   count: number;
 }
@@ -188,6 +195,7 @@ function WidgetGridCell({
   onEdit,
   onRemove,
   onResize,
+  onCycleTimeWindow,
   onMove,
   index,
   count,
@@ -216,7 +224,7 @@ function WidgetGridCell({
     <GestureDetector gesture={pan}>
       <YStack
         width={`${widthPercentForSize(widget.size, columns)}%`}
-        p="$1"
+        p={GEOMETRY.gridGap / 2}
         onLayout={(event) => onMeasure(widget.id, event)}
         // The lifted card reads as picked up without leaving a hole in the flow.
         opacity={dragging ? 0.85 : 1}
@@ -231,7 +239,8 @@ function WidgetGridCell({
           onEdit={onEdit}
           onRemove={onRemove}
           onResize={onResize}
-          {...(onMove && { onMove })}
+          onCycleTimeWindow={onCycleTimeWindow}
+          onMove={onMove}
           index={index}
           count={count}
         />
