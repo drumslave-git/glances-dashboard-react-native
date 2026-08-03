@@ -71,6 +71,7 @@ function WidgetCardInner({ widget, editMode, onEdit, onRemove, onResize }: Widge
               fields: widget.fields,
               fieldColors: widget.fieldColors,
               fieldFormatters: widget.fieldFormatters,
+              donutChartOptions: widget.donutChartOptions,
               chartLabel: widget.chartLabel,
               splitPercentageIntoUsedFree: widget.splitPercentageIntoUsedFree,
             }}

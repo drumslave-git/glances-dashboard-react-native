@@ -1,3 +1,4 @@
+import { cpuFixture, memFixture } from '@/__fixtures__/glances';
 import { renderWithProviders } from '@/test-utils/render';
 
 import { getStatusMessage, WidgetContent } from './widget-content';
@@ -74,9 +75,93 @@ describe('WidgetContent', () => {
 
   it('is explicit about kinds that are not built yet', async () => {
     const { getByTestId } = await renderWithProviders(
-      <WidgetContent kind="donut" data={{ a: 1 }} config={{ metric: 'cpu' }} testID="w" />,
+      <WidgetContent kind="processes" data={[{ a: 1 }]} config={{ metric: 'processlist' }} testID="w" />,
     );
 
-    expect(getByTestId('w-pending')).toHaveTextContent(/M3/);
+    expect(getByTestId('w-pending')).toHaveTextContent(/M4/);
+  });
+});
+
+describe('WidgetContent — charts', () => {
+  it('renders a donut with a slice per selected field', async () => {
+    const { getByTestId } = await renderWithProviders(
+      <WidgetContent
+        kind="donut"
+        data={cpuFixture}
+        config={{
+          metric: 'cpu',
+          fields: ['user', 'system', 'idle'],
+          donutChartOptions: { size: 160 },
+        }}
+        testID="w"
+      />,
+    );
+
+    expect(getByTestId('w-chart-label-user')).toBeTruthy();
+    expect(getByTestId('w-chart-centre-label')).toHaveTextContent('cpu');
+  });
+
+  it('resolves tokens in the chart label against live data', async () => {
+    const { getByTestId } = await renderWithProviders(
+      <WidgetContent
+        kind="donut"
+        data={memFixture}
+        config={{
+          metric: 'mem',
+          fields: ['percent'],
+          chartLabel: 'RAM {{percent:round(0)}}%',
+          donutChartOptions: { size: 160 },
+        }}
+        testID="w"
+      />,
+    );
+
+    expect(getByTestId('w-chart-centre-label')).toHaveTextContent('RAM 16%');
+  });
+
+  it('splits a single percentage into Used and Free when asked', async () => {
+    const { getByTestId } = await renderWithProviders(
+      <WidgetContent
+        kind="pie"
+        data={memFixture}
+        config={{
+          metric: 'mem',
+          fields: ['percent'],
+          splitPercentageIntoUsedFree: true,
+          donutChartOptions: { size: 160 },
+        }}
+        testID="w"
+      />,
+    );
+
+    expect(getByTestId('w-chart-label-Used')).toBeTruthy();
+    expect(getByTestId('w-chart-label-Free')).toBeTruthy();
+  });
+
+  it('lists bars in a legend', async () => {
+    const { getByTestId } = await renderWithProviders(
+      <WidgetContent
+        kind="bar"
+        data={cpuFixture}
+        config={{ metric: 'cpu', fields: ['user', 'system'] }}
+        testID="w"
+      />,
+    );
+
+    expect(getByTestId('w-chart-legend')).toBeTruthy();
+    expect(getByTestId('w-chart-label-system')).toHaveTextContent('system');
+  });
+
+  it('says so when nothing in the payload is numeric', async () => {
+    const { getByTestId } = await renderWithProviders(
+      <WidgetContent
+        kind="donut"
+        data={{ hostname: 'TCloud' }}
+        config={{ metric: 'system' }}
+        testID="w"
+      />,
+    );
+
+    expect(getByTestId('w-status')).toHaveTextContent('No numeric fields to display.');
   });
 });

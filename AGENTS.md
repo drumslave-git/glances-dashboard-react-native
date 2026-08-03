@@ -26,6 +26,8 @@ npx expo start --web      # web only
 npm test                  # jest
 npm run lint              # eslint
 npm run typecheck         # tsc --noEmit
+npm run setup:skia-web    # copy canvaskit.wasm into public/ (once per clone; charts need it on web)
+npm run build:web         # expo export --platform web
 ```
 
 (If a script is missing in package.json during early milestones, add it — these names are the contract.)
@@ -106,13 +108,18 @@ Verify against installed types (`node_modules/**/*.d.ts`) rather than memory —
 - **Tamagui `Card` does not reliably receive touches** even with `onPress`; component tests pass because they call the handler directly. Use `Button` (with `height="auto"`) for anything tappable.
 - **Zustand selectors must return stable references.** `useStore(selectOrderedWidgets)` sorts into a new array each call and loops via `useSyncExternalStore`. Select raw state and derive with `useMemo`.
 - **Edit source files with the editor tools, not PowerShell `Set-Content`** — it writes a BOM and can double-encode UTF-8, which trips the `unicode-bom` lint rule and mangles em-dashes.
+- **Metro resolves `foo.web.ts` but missed `foo.web.tsx`** (SDK 57, `expo export --platform web`). A platform-specific file that "has nothing to do with anything" is probably being shadowed by its base file — check the export output for your module's strings before debugging anything else.
+- **Skia on web binds `global.CanvasKit` at module-eval time.** `LoadSkiaWeb()` has to finish *before* anything that imports `@shopify/react-native-skia` is imported, not before it renders. See `src/components/charts/canvases.web.ts`; run `npm run setup:skia-web` once so `public/canvaskit.wasm` exists.
+- **Tamagui's `bg` only takes theme tokens.** Arbitrary hex (chart colours) has to go through `style={{ backgroundColor }}`, and a `Button` will paint over it — put a plain `YStack` swatch inside the button instead.
+- **Jest renders charts for real, and that took setup**: `jest.resolver.js` (react-native-worklets must not resolve its `.native` entries), gesture-handler + Skia `jestSetup` files, and `jest.environment.js`, which boots CanvasKit asynchronously because `setupFiles` cannot await. Don't "simplify" these away.
+- **Firing `layout` in a test needs a flush.** `fireEvent(el, 'layout', …)` then `await waitFor(() => undefined)`; a bare `await act(async () => {})` collides with RNTL 14's own act scope and silently breaks every later test in the file.
 
 ## Hard rules
 
 - **TypeScript strict**, no `any` (use `unknown` + narrowing, as the source app does).
 - **Keep the native surface small**: local runs use a dev build, so a library needing native code will *work* — but it still costs a rebuild, an EAS build for anyone else, and it forecloses Expo Go as a fallback. Prefer libraries that would run in Expo Go, and flag anything that would not to the owner first. Chosen deps (Skia, Reanimated, gesture-handler, Tamagui, AsyncStorage) all qualify.
 - **Ported logic stays pure and tested**: `src/utils/` (formatters, token resolution, chart segments, colors) must remain platform-free pure TS with unit tests. Port behavior verbatim from the reference before "improving" it.
-- **Charts only through `ChartView`**: no Victory Native XL imports outside `src/components/charts/`. This boundary is the planned escape hatch if web rendering fails (see plan §5 Risks).
+- **Charts only through `ChartView`**: no Victory Native XL imports outside `src/components/charts/`. This boundary is the planned escape hatch if web rendering fails (see plan §5 Risks). Chart geometry (sizing, slice angles, label positions) is pure TS in `src/utils/chartGeometry.ts` so it stays testable without a canvas.
 - **UI only through Tamagui** components/tokens — no ad-hoc `StyleSheet` styling except where a library demands raw views.
 - **Data fetching only through `useGlancesQuery`** (TanStack Query). Never `fetch` directly from components; query keys are `[serverId, endpointPath]`.
 - All persisted state goes through the Zustand stores in `src/state/` — no direct AsyncStorage calls elsewhere. Persisted shapes are user data: when changing `WidgetConfig`/`GlancesServer`, add a versioned migration in the store.

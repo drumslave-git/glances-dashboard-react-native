@@ -7,10 +7,16 @@
  */
 module.exports = {
   preset: 'jest-expo',
-  setupFiles: ['<rootDir>/jest.setup.js'],
+  resolver: '<rootDir>/jest.resolver.js',
+  testEnvironment: '<rootDir>/jest.environment.js',
+  setupFiles: [
+    '<rootDir>/jest.setup.js',
+    '<rootDir>/node_modules/react-native-gesture-handler/jestSetup.js',
+    '<rootDir>/node_modules/@shopify/react-native-skia/jestSetup.js',
+  ],
   setupFilesAfterEnv: ['<rootDir>/jest.setup-after-env.js'],
   transformIgnorePatterns: [
-    'node_modules/(?!(?:.pnpm/)?((jest-)?react-native|@react-native(-community)?|expo(nent)?|@expo(nent)?/.*|@expo-google-fonts/.*|react-navigation|@react-navigation/.*|react-native-svg|react-native-worklets|@shopify/react-native-skia|victory-native|tamagui|@tamagui/.*))',
+    'node_modules/(?!(?:.pnpm/)?((jest-)?react-native|@react-native(-community)?|expo(nent)?|@expo(nent)?/.*|@expo-google-fonts/.*|react-navigation|@react-navigation/.*|react-native-svg|react-native-worklets|@shopify/react-native-skia|victory-native|d3-[a-z-]+|internmap|its-fine|tamagui|@tamagui/.*))',
   ],
   collectCoverageFrom: ['src/**/*.{ts,tsx}', '!src/**/*.test.{ts,tsx}'],
 };

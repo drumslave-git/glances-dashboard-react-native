@@ -1,14 +1,16 @@
 import { Platform } from 'react-native';
 import { Paragraph, ScrollView, Text } from 'tamagui';
 
-import type { WidgetKind } from '@/types/dashboard';
-import { getTextBody } from '@/utils/widgetData';
+import { ChartView, type ChartKind } from '@/components/charts/chart-view';
+import type { DonutChartOptions, WidgetKind } from '@/types/dashboard';
+import { getChartData, getTextBody, resolveTitleTokens } from '@/utils/widgetData';
 
 export interface WidgetContentConfig {
   metric: string;
   fields?: string[];
   fieldColors?: Record<string, string>;
   fieldFormatters?: Record<string, string>;
+  donutChartOptions?: DonutChartOptions;
   chartLabel?: string;
   splitPercentageIntoUsedFree?: boolean;
 }
@@ -46,11 +48,12 @@ export function getStatusMessage({
   return null;
 }
 
-/** Chart and process widgets land in M3/M4; until then they say so plainly. */
+export function isChartKind(kind: WidgetKind): kind is ChartKind {
+  return kind === 'donut' || kind === 'pie' || kind === 'bar';
+}
+
+/** The process table lands in M4; until then it says so plainly. */
 const NOT_YET_IMPLEMENTED: Partial<Record<WidgetKind, string>> = {
-  donut: 'Donut charts arrive in milestone M3.',
-  pie: 'Pie charts arrive in milestone M3.',
-  bar: 'Bar charts arrive in milestone M3.',
   processes: 'The process table arrives in milestone M4.',
 };
 
@@ -80,6 +83,37 @@ export function WidgetContent({
       <Paragraph size="$2" opacity={0.6} testID={testID ? `${testID}-pending` : undefined}>
         {pending}
       </Paragraph>
+    );
+  }
+
+  if (isChartKind(kind)) {
+    const segments = getChartData(
+      data,
+      fields,
+      config.fieldColors,
+      config.splitPercentageIntoUsedFree,
+      config.fieldFormatters,
+    );
+
+    if (segments.length === 0) {
+      return (
+        <Paragraph size="$2" opacity={0.6} testID={testID ? `${testID}-status` : undefined}>
+          No numeric fields to display.
+        </Paragraph>
+      );
+    }
+
+    return (
+      <ChartView
+        kind={kind}
+        segments={segments}
+        metric={config.metric}
+        {...(config.chartLabel
+          ? { chartLabel: resolveTitleTokens(config.chartLabel, data) }
+          : {})}
+        {...(config.donutChartOptions ? { options: config.donutChartOptions } : {})}
+        {...(testID ? { testID: `${testID}-chart` } : {})}
+      />
     );
   }
 

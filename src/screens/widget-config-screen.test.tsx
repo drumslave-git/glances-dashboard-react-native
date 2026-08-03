@@ -1,6 +1,7 @@
 import { resetServerIdCounter, useServersStore } from '@/state/servers';
 import { useWidgetsStore } from '@/state/widgets';
 import { fireEvent, renderWithProviders, waitFor } from '@/test-utils/render';
+import { CHART_PALETTE } from '@/utils/chartColors';
 import { resetWidgetIdCounter } from '@/utils/widgetFactory';
 
 import { WidgetConfigScreen } from './widget-config-screen';
@@ -134,6 +135,80 @@ describe('WidgetConfigScreen — creating', () => {
     const empty = await findByTestId('widget-fields-empty');
 
     await waitFor(() => expect(empty).toHaveTextContent(/Could not read fields/));
+  });
+});
+
+describe('WidgetConfigScreen — chart widgets', () => {
+  beforeEach(() => {
+    mockParams = { id: 'new', kind: 'donut' };
+    mockGlances({
+      '/api/4/pluginslist': ['cpu', 'mem'],
+      '/api/4/cpu': { total: 12, user: 4, system: 2 },
+      '/api/4/mem': { percent: 40, used: 100, free: 200 },
+    });
+  });
+
+  it('hides the chart sections for a text widget', async () => {
+    mockParams = { id: 'new', kind: 'text' };
+
+    const { findByTestId, queryByTestId } = await renderWithProviders(<WidgetConfigScreen />);
+    await findByTestId('widget-metric-option-cpu');
+
+    expect(queryByTestId('widget-split-used-free')).toBeNull();
+    expect(queryByTestId('widget-chart-options-size-0')).toBeNull();
+  });
+
+  it('saves a picked segment colour', async () => {
+    const { findByTestId, getByTestId, user } = await renderWithProviders(<WidgetConfigScreen />);
+
+    await user.press(await findByTestId('widget-fields-option-user'));
+    await user.press(getByTestId('widget-field-color-user'));
+    // The third palette entry, so the assertion does not depend on the default.
+    await user.press(getByTestId('widget-field-color-user-option-2'));
+    await user.press(getByTestId('widget-save'));
+
+    expect(useWidgetsStore.getState().widgets[0].fieldColors).toEqual({ user: CHART_PALETTE[2] });
+  });
+
+  it('forgets colours for fields that were deselected', async () => {
+    const { findByTestId, getByTestId, user } = await renderWithProviders(<WidgetConfigScreen />);
+
+    await user.press(await findByTestId('widget-fields-option-user'));
+    await user.press(getByTestId('widget-field-color-user'));
+    await user.press(getByTestId('widget-field-color-user-option-2'));
+    await user.press(getByTestId('widget-fields-option-user'));
+    await user.press(getByTestId('widget-save'));
+
+    expect(useWidgetsStore.getState().widgets[0].fieldColors).toEqual({});
+  });
+
+  it('saves the used/free split, the chart label and the chart options', async () => {
+    const { findByTestId, getByTestId, user } = await renderWithProviders(<WidgetConfigScreen />);
+
+    await user.press(await findByTestId('widget-split-used-free'));
+    fireEvent.changeText(getByTestId('widget-chart-label-input'), 'CPU {{total:round(0)}}%');
+    await user.press(getByTestId('widget-chart-options-size-160'));
+    await user.press(getByTestId('widget-chart-options-thickness-increase'));
+    await user.press(getByTestId('widget-chart-options-labels'));
+    await user.press(getByTestId('widget-save'));
+
+    expect(useWidgetsStore.getState().widgets[0]).toMatchObject({
+      kind: 'donut',
+      splitPercentageIntoUsedFree: true,
+      chartLabel: 'CPU {{total:round(0)}}%',
+      donutChartOptions: { size: 160, thickness: 24, withLabels: false },
+    });
+  });
+
+  it('previews the donut with the selected fields', async () => {
+    const { findByTestId, getByTestId, user } = await renderWithProviders(<WidgetConfigScreen />);
+
+    await user.press(await findByTestId('widget-fields-option-user'));
+    await user.press(getByTestId('widget-fields-option-system'));
+    await user.press(getByTestId('widget-chart-options-size-160'));
+
+    expect(getByTestId('widget-preview-content-chart-label-user')).toBeTruthy();
+    expect(getByTestId('widget-preview-content-chart-centre-label')).toHaveTextContent('cpu');
   });
 });
 

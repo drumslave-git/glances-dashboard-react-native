@@ -4,7 +4,7 @@ Tracks execution of [REWRITE_PLAN.md](REWRITE_PLAN.md). Update this file in the 
 commit as the work it describes. One line per task; add dated notes under each milestone
 when something non-obvious happened.
 
-**Current status:** M2 complete — dashboard, add-widget flow and the text widget all run on device against a live server. Next up: M3 chart widgets.
+**Current status:** M3 complete — donut, pie and bar widgets render live data on Android, and the web export renders them too. Next up: M4 processes widget + parity sweep.
 
 ## Milestones
 
@@ -85,13 +85,56 @@ then `npx expo start` in one shell and `npm run android:emulator` in another.
 - Verification used a stub Glances server (`node scripts/../fake-glances.js` in the scratchpad)
   tunnelled to the emulator with `adb reverse tcp:61208 tcp:61208`. Handy for M3/M4 too.
 
-### M3 — Chart widgets — `not started`
-- [ ] ChartView abstraction over Victory Native XL
-- [ ] Donut (options + center label), pie, bar
-- [ ] Per-field colors + picker; formatter display labels
-- [ ] Used/Free split; chart label tokens
-- [ ] Component tests per chart kind
-- [ ] Early web smoke check of charts (risk item)
+### M3 — Chart widgets — `done` (2026-08-03)
+- [x] ChartView abstraction over Victory Native XL — `src/components/charts/`
+- [x] Donut (size / thickness / gap / labels + centre label), pie, bar
+- [x] Per-field colours + palette picker in the config screen
+- [x] Formatter display labels on segments (formatter *UI* stays M4)
+- [x] Used/Free split toggle; chart label tokens
+- [x] Component tests per chart kind, driven from the real payload fixtures
+- [x] **Web smoke check passed** — `expo export --platform web` plus a browser run: CanvasKit
+      loads, all three chart kinds draw, no fallback renderer needed
+- [x] 203 tests across 16 suites; typecheck and lint clean
+- [x] Verified on the emulator against the live TCloud server: donut, pie, bar and a
+      Used/Free split donut with a `{{percent:round(0)}}` centre label, all polling live
+
+**Notes (2026-08-03)**
+- **The web risk in plan §5 turned out to be real, and fixable.** Skia on web is CanvasKit
+  compiled to wasm, and `@shopify/react-native-skia` builds its API object from
+  `global.CanvasKit` *as its module body runs*. Importing a chart before `canvaskit.wasm` has
+  landed therefore yields an API bound to `undefined`, and the first draw throws
+  `Cannot read properties of undefined (reading 'XYWHRect')` — which killed the **whole app**
+  on web, not just the chart. Gating at render time is not enough; the wait has to happen
+  before the import. `src/components/charts/canvases.web.ts` starts `LoadSkiaWeb()` at module
+  scope and `React.lazy`-imports the canvases behind it, with `ChartView` rendering them in a
+  `<Suspense>`. `npm run setup:skia-web` copies the 8 MB wasm into `public/` (gitignored).
+- **Metro platform resolution picked `.web.ts` but not `.web.tsx`.** The first version of that
+  file was `canvases.web.tsx`; Metro silently resolved `./canvases` to the native `.ts` instead
+  and nothing changed. Renaming to `.web.ts` fixed it. Suspect anything platform-specific that
+  "has no effect" of being the wrong extension — check the export output for the module.
+- **Charts do not live in the Skia canvas alone.** React Native text cannot be placed inside a
+  Skia canvas, and Victory's own `Pie.Label` needs an `SkFont` asset. Slice labels and the donut
+  centre label are therefore React Native text overlaid on the canvas, positioned by
+  `src/utils/chartGeometry.ts`, which reproduces Victory's angle maths (degrees, 3 o'clock,
+  clockwise). Bar charts get a legend row underneath instead of axis labels — axes would need a
+  font too, and Victory only draws them when an axis prop is passed.
+- `paddingAngle` is degrees in the reference and points in Victory (`Pie.SliceAngularInset`
+  takes a stroke width), so it is converted through the chord the angle subtends at the rim.
+  The gap itself is drawn with `blendMode="clear"`, which punches a real hole through to the
+  card background rather than guessing a matching stroke colour.
+- Jest needed three changes before Victory would render at all: a composed resolver
+  (`jest.resolver.js`) so react-native-worklets stops resolving its JSI-backed `.native` entry
+  points, gesture-handler's and Skia's own `jestSetup` files, and a **custom test environment**
+  (`jest.environment.js`) that boots real CanvasKit — Skia's jest mock reads `global.CanvasKit`,
+  and CanvasKit initialises asynchronously, which `setupFiles` cannot await. Chart tests
+  therefore exercise the real Skia path maths, not a stub.
+- Two cosmetic things that are working as designed, not bugs: slices thinner than 18° drop
+  their label rather than pile up unreadably, and `defaultColorForField` can hand two fields the
+  same colour (15-entry palette, hashed) — `used` and `free` collide on `mem`. The colour picker
+  is the fix.
+- Victory Native calls deprecated `SkPath` methods internally, so every chart logs
+  `[react-native-skia] SkPath.arcToOval() is deprecated …` once. Ours to ignore until Victory
+  moves to `PathBuilder`.
 
 ### M4 — Processes widget + parity sweep — `not started`
 - [ ] Processes table (columns, labels, 50-row cap, scrolling)
@@ -136,6 +179,11 @@ then `npx expo start` in one shell and `npm run android:emulator` in another.
 | 2026-08-03 | Query key is `[serverId, url, endpointPath]` | Without the url, editing a server's address kept serving the previous address's cached result until the next poll |
 | 2026-08-03 | Widget type picker lives at `/widget/pick`, not `/widget/new` | A static `/widget/new` route takes precedence over `/widget/[id]` with `id: 'new'`, so the picker navigated to itself |
 | 2026-08-03 | `coerceServerUrl` only defaults the port when the scheme was inferred | A typed-out `https://glances.example.com` is served on 443 behind a reverse proxy; appending `:61208` broke it. A bare host still gets `http://…:61208`. |
+| 2026-08-03 | Chart labels are React Native text overlaid on the Skia canvas, not Skia text | RN text cannot live inside a Skia canvas and Victory's `Pie.Label` needs a bundled `SkFont`; overlaying keeps labels themeable, testable and font-asset-free on every platform |
+| 2026-08-03 | Web loads CanvasKit *before* importing the canvases (`canvases.web.ts` + `Suspense`) | Skia binds `global.CanvasKit` at module-eval time, so any render-time gate is too late and the first draw takes the whole web app down |
+| 2026-08-03 | Jest boots real CanvasKit via a custom `testEnvironment` | Skia's jest mock needs `global.CanvasKit`, which loads asynchronously; with it the chart tests run Victory's real path maths instead of a stub |
+| 2026-08-03 | Colour picker and chart options are offered for pie and bar, not just donut | The reference only exposed them for donuts even though its own `ChartView` honoured them for every chart kind — an oversight, not a design |
+| 2026-08-03 | Slice labels are dropped below an 18° sweep | On a phone-sized donut, labels for sub-5% slices overlap into an unreadable pile |
 
 ## Blockers / open questions
 

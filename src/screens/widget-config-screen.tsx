@@ -4,14 +4,21 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Button, Card, H2, Input, Label, Paragraph, ScrollView, XStack, YStack } from 'tamagui';
 
 import { FALLBACK_METRICS } from '@/api/glances';
+import { ChartOptionsSection } from '@/components/config/chart-options-section';
+import { FieldColorsSection } from '@/components/config/field-colors-section';
 import { OptionList } from '@/components/config/option-list';
-import { WidgetContent } from '@/components/widgets/widget-content';
+import { isChartKind, WidgetContent } from '@/components/widgets/widget-content';
 import { useGlancesQuery, usePluginsList } from '@/hooks/useGlancesQuery';
 import { selectServerById, useServersStore } from '@/state/servers';
-import { useWidgetsStore } from '@/state/widgets';
-import type { WidgetKind } from '@/types/dashboard';
+import { useWidgetsStore, type WidgetPatch } from '@/state/widgets';
+import type { DonutChartOptions, WidgetKind } from '@/types/dashboard';
 import { getRecordFromPayload, resolveTitleTokens } from '@/utils/widgetData';
 import { defaultWidgetTitle, metricToEndpoint, resolveMetricForKind } from '@/utils/widgetFactory';
+
+/** Keep only the colours of fields that are still selected. */
+function pickColors(fieldColors: Record<string, string>, fields: string[]): Record<string, string> {
+  return Object.fromEntries(fields.filter((field) => field in fieldColors).map((field) => [field, fieldColors[field]]));
+}
 
 export function WidgetConfigScreen() {
   const router = useRouter();
@@ -27,6 +34,7 @@ export function WidgetConfigScreen() {
   const existing = isNew ? undefined : widgets.find((widget) => widget.id === params.id);
   const kind: WidgetKind = existing?.kind ?? ((params.kind as WidgetKind | undefined) ?? 'text');
   const isProcesses = kind === 'processes';
+  const isChart = isChartKind(kind);
 
   const [serverId, setServerId] = useState(
     existing?.serverId ?? defaultServerId ?? servers[0]?.id ?? '',
@@ -36,6 +44,16 @@ export function WidgetConfigScreen() {
   );
   const [title, setTitle] = useState(existing?.title ?? '');
   const [fields, setFields] = useState<string[]>(existing?.fields ?? []);
+  const [fieldColors, setFieldColors] = useState<Record<string, string>>(
+    existing?.fieldColors ?? {},
+  );
+  const [chartOptions, setChartOptions] = useState<DonutChartOptions>(
+    existing?.donutChartOptions ?? {},
+  );
+  const [chartLabel, setChartLabel] = useState(existing?.chartLabel ?? '');
+  const [splitUsedFree, setSplitUsedFree] = useState(
+    existing?.splitPercentageIntoUsedFree ?? false,
+  );
 
   const server = useServersStore((state) => selectServerById(state, serverId));
 
@@ -69,24 +87,44 @@ export function WidgetConfigScreen() {
     setMetric(next);
     // Fields belong to the previous payload shape.
     setFields([]);
+    setFieldColors({});
   };
 
   const canSave = Boolean(serverId);
+
+  const previewConfig = {
+    metric,
+    fields,
+    ...(isChart && {
+      fieldColors,
+      donutChartOptions: chartOptions,
+      chartLabel: chartLabel.trim() || undefined,
+      splitPercentageIntoUsedFree: splitUsedFree,
+    }),
+  };
 
   const handleSave = () => {
     if (!canSave) return;
     const resolvedTitle = title.trim() || defaultWidgetTitle(kind, resolveMetricForKind(kind, metric));
 
+    const patch: WidgetPatch = {
+      serverId,
+      metric,
+      title: resolvedTitle,
+      fields: fields.length > 0 ? fields : undefined,
+      ...(isChart && {
+        fieldColors: pickColors(fieldColors, fields),
+        donutChartOptions: chartOptions,
+        chartLabel: chartLabel.trim() || undefined,
+        splitPercentageIntoUsedFree: splitUsedFree,
+      }),
+    };
+
     if (existing) {
-      updateWidget(existing.id, {
-        serverId,
-        metric,
-        title: resolvedTitle,
-        fields: fields.length > 0 ? fields : undefined,
-      });
+      updateWidget(existing.id, patch);
     } else {
       const widget = addWidget({ serverId, metric, kind, title: resolvedTitle });
-      if (fields.length > 0) updateWidget(widget.id, { fields });
+      updateWidget(widget.id, patch);
     }
     router.dismissTo('/');
   };
@@ -159,9 +197,66 @@ export function WidgetConfigScreen() {
                 testID="widget-fields"
               />
               <Paragraph size="$1" opacity={0.6}>
-                Leave empty to show the whole payload.
+                {isChart
+                  ? 'Leave empty to chart every numeric field in the payload.'
+                  : 'Leave empty to show the whole payload.'}
               </Paragraph>
             </YStack>
+
+            {isChart && (
+              <>
+                <YStack gap="$2">
+                  <Label>Segment colours</Label>
+                  <FieldColorsSection
+                    fields={fields}
+                    fieldColors={fieldColors}
+                    onChange={setFieldColors}
+                    testID="widget-field-color"
+                  />
+                </YStack>
+
+                <XStack items="center" gap="$2">
+                  <YStack flex={1}>
+                    <Paragraph size="$2">Split percentage into Used / Free</Paragraph>
+                    <Paragraph size="$1" opacity={0.6}>
+                      For a single 0–100 field, such as memory percent.
+                    </Paragraph>
+                  </YStack>
+                  <Button
+                    size="$2"
+                    theme={splitUsedFree ? 'blue' : undefined}
+                    onPress={() => setSplitUsedFree((current) => !current)}
+                    testID="widget-split-used-free"
+                  >
+                    {splitUsedFree ? 'On' : 'Off'}
+                  </Button>
+                </XStack>
+
+                <YStack gap="$2">
+                  <Label htmlFor="widget-chart-label">Chart label</Label>
+                  <Input
+                    id="widget-chart-label"
+                    value={chartLabel}
+                    onChangeText={setChartLabel}
+                    placeholder={metric}
+                    testID="widget-chart-label-input"
+                  />
+                  <Paragraph size="$1" opacity={0.6}>
+                    Shown in the middle of a donut. Tokens work here too.
+                  </Paragraph>
+                </YStack>
+
+                <YStack gap="$2">
+                  <Label>Chart options</Label>
+                  <ChartOptionsSection
+                    kind={kind}
+                    options={chartOptions}
+                    onChange={setChartOptions}
+                    testID="widget-chart-options"
+                  />
+                </YStack>
+              </>
+            )}
 
             <YStack gap="$2">
               <Label>Preview</Label>
@@ -174,7 +269,7 @@ export function WidgetConfigScreen() {
                     <WidgetContent
                       kind={kind}
                       data={sample ?? null}
-                      config={{ metric, fields }}
+                      config={previewConfig}
                       noServer={!server}
                       loading={isLoading}
                       error={error ? error.message : null}

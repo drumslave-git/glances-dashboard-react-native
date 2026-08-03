@@ -22,19 +22,16 @@ const WIDGET_TYPES: WidgetTypeOption[] = [
     kind: 'donut',
     label: 'Donut chart',
     description: 'Numeric fields as a donut, with an optional centre label.',
-    availableFrom: 'M3',
   },
   {
     kind: 'pie',
     label: 'Pie chart',
     description: 'Numeric fields as a pie chart.',
-    availableFrom: 'M3',
   },
   {
     kind: 'bar',
     label: 'Bar chart',
     description: 'Numeric fields side by side as bars.',
-    availableFrom: 'M3',
   },
   {
     kind: 'processes',

@@ -48,6 +48,9 @@ coverage/
 # tamagui build cache
 .tamagui/
 
+# copied out of node_modules by `npm run setup:skia-web` (8 MB, not source)
+public/canvaskit.wasm
+
 # editors
 .idea/
 
