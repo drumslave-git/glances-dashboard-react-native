@@ -18,7 +18,7 @@ async function measure(element: Parameters<typeof fireEvent>[0], size = 200) {
 
 // `system` is 0.8% of this payload — a sliver too thin to carry a label, which
 // is exactly what `sliceLabels` filters out, so the label tests use the two big ones.
-const cpuSegments = getChartData(cpuFixture, ['user', 'idle']);
+const cpuSegments = getChartData(cpuFixture, ['user', 'idle'], 'dark');
 
 async function renderChart(kind: ChartKind, props: Partial<ChartViewProps> = {}) {
   const view = await renderWithProviders(
@@ -49,7 +49,7 @@ describe('ChartView — donut', () => {
   });
 
   it('labels segments with their formatted value when a formatter is set', async () => {
-    const segments = getChartData(memFixture, ['percent'], null, false, { percent: 'round(0)' });
+    const segments = getChartData(memFixture, ['percent'], 'dark', null, false, { percent: 'round(0)' });
     const { getByTestId } = await renderChart('donut', { segments, metric: 'mem' });
 
     expect(getByTestId('chart-label-percent')).toHaveTextContent('16');
@@ -94,7 +94,7 @@ describe('ChartView — pie', () => {
   });
 
   it('splits a single percentage into Used and Free', async () => {
-    const segments = getChartData(memFixture, ['percent'], null, true);
+    const segments = getChartData(memFixture, ['percent'], 'dark', null, true);
     const { getByTestId } = await renderChart('pie', { segments, metric: 'mem' });
 
     expect(getByTestId('chart-label-Used')).toHaveTextContent('Used');

@@ -2,7 +2,8 @@ import { useState } from 'react';
 import { Button, Label, Paragraph, XStack, YStack } from 'tamagui';
 
 import { FormatterEditor } from '@/components/config/formatter-editor';
-import { CHART_PALETTE, getFieldColor } from '@/utils/chartColors';
+import { useTelemetry } from '@/theme/use-telemetry';
+import { chartPalette, getFieldColor } from '@/utils/chartColors';
 import { describeFormatter, setFieldFormatter } from '@/utils/formatterSpec';
 
 interface FieldOptionsSectionProps {
@@ -43,6 +44,8 @@ export function FieldOptionsSection({
   onFormattersChange,
   testID,
 }: FieldOptionsSectionProps) {
+  const { mode } = useTelemetry();
+  const palette = chartPalette(mode);
   const [openField, setOpenField] = useState<string | null>(null);
 
   if (fields.length === 0) {
@@ -56,7 +59,7 @@ export function FieldOptionsSection({
   return (
     <YStack gap="$2">
       {fields.map((field, index) => {
-        const current = getFieldColor(field, fieldColors);
+        const current = getFieldColor(field, fieldColors, mode);
         const isOpen = openField === field;
         return (
           <YStack key={field} gap="$2">
@@ -119,7 +122,7 @@ export function FieldOptionsSection({
                   <YStack gap="$2">
                     <Label size="$1">Colour</Label>
                     <XStack flexWrap="wrap" gap="$2" testID={`${testID}-${field}-palette`}>
-                      {CHART_PALETTE.map((color, colorIndex) => (
+                      {palette.map((color, colorIndex) => (
                         <Button
                           key={color}
                           size="$3"

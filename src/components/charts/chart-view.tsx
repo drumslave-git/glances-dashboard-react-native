@@ -4,6 +4,7 @@ import { XStack, YStack } from 'tamagui';
 
 import { GaugeValue } from '@/components/telemetry/hero';
 import { MicroLabel, MonoText } from '@/components/telemetry/text';
+import { onColorText } from '@/theme/telemetry';
 import { useTelemetry } from '@/theme/use-telemetry';
 import {
   donutInnerRadius,
@@ -283,6 +284,7 @@ function RoundChartView({ kind, segments, metric, chartLabel, options, testID }:
 
   const innerRadius = size != null && kind === 'donut' ? donutInnerRadius(size, opts.thickness) : 0;
   const labels = size != null && opts.withLabels ? sliceLabels(segments, { size, innerRadius }) : [];
+  const colorByName = new Map(segments.map((segment) => [segment.name, segment.color]));
   const gap = size != null ? paddingAngleToGap(opts.paddingAngle, size / 2) : 0;
   // Only the donut has a hole to write in — the reference app did the same.
   const centreLabel = kind === 'donut' ? (chartLabel ?? metric) : null;
@@ -334,7 +336,10 @@ function RoundChartView({ kind, segments, metric, chartLabel, options, testID }:
               <MonoText
                 variant="footer"
                 numberOfLines={1}
-                color="#ffffff"
+                // Chosen from the slice it sits on, not fixed to white: segment
+                // fills are user-configurable, and a light slice in light mode
+                // used to carry white text.
+                color={onColorText(colorByName.get(label.name) ?? '#000000')}
                 style={LABEL_TEXT_STYLE}
                 testID={testID ? `${testID}-label-${label.name}` : undefined}
               >

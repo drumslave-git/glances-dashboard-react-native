@@ -6,7 +6,7 @@ import {
   getTextBody,
   resolveTitleTokens,
 } from './widgetData';
-import { defaultColorForField } from './chartColors';
+import { seriesPalette, tokensFor } from '@/theme/telemetry';
 
 describe('getRecordFromPayload', () => {
   it('returns objects unchanged', () => {
@@ -155,52 +155,55 @@ describe('getTextBody', () => {
 
 describe('getChartData', () => {
   it('builds one segment per numeric field', () => {
-    expect(getChartData({ used: 30, free: 70 }, ['used', 'free'])).toEqual([
-      { name: 'used', value: 30, color: defaultColorForField('used') },
-      { name: 'free', value: 70, color: defaultColorForField('free') },
+    // Colours come from the palette in order, and `free` — the remainder of a
+    // used/free pair — takes the track colour so the chart reads as one arc
+    // against a track. See utils/chartColors.ts.
+    expect(getChartData({ used: 30, free: 70 }, ['used', 'free'], 'dark')).toEqual([
+      { name: 'used', value: 30, color: seriesPalette('dark')[0] },
+      { name: 'free', value: 70, color: tokensFor('dark').bg.track },
     ]);
   });
 
   it('drops non-numeric fields', () => {
-    const segments = getChartData({ used: 30, label: 'nope' }, ['used', 'label']);
+    const segments = getChartData({ used: 30, label: 'nope' }, ['used', 'label'], 'dark');
     expect(segments.map((s) => s.name)).toEqual(['used']);
   });
 
   it('uses every key when no fields are selected', () => {
-    const segments = getChartData({ a: 1, b: 2 }, []);
+    const segments = getChartData({ a: 1, b: 2 }, [], 'dark');
     expect(segments.map((s) => s.name)).toEqual(['a', 'b']);
   });
 
   it('honours configured colours', () => {
-    const [segment] = getChartData({ used: 30 }, ['used'], { used: '#123456' });
+    const [segment] = getChartData({ used: 30 }, ['used'], 'dark', { used: '#123456' });
     expect(segment.color).toBe('#123456');
   });
 
   it('attaches formatted display labels', () => {
-    const [segment] = getChartData({ used: 30.456 }, ['used'], null, false, { used: 'round(1)' });
+    const [segment] = getChartData({ used: 30.456 }, ['used'], 'dark', null, false, { used: 'round(1)' });
     expect(segment.displayLabel).toBe('30.5');
   });
 
   it('returns an empty list without a record', () => {
-    expect(getChartData(null, ['used'])).toEqual([]);
+    expect(getChartData(null, ['used'], 'dark')).toEqual([]);
   });
 
   describe('used/free split', () => {
     it('splits a single percentage field into Used and Free', () => {
-      const segments = getChartData({ percent: 30 }, ['percent'], null, true);
+      const segments = getChartData({ percent: 30 }, ['percent'], 'dark', null, true);
       expect(segments).toEqual([
-        { name: 'Used', value: 30, color: defaultColorForField('percent'), displayLabel: undefined },
-        { name: 'Free', value: 70, color: defaultColorForField('free') },
+        { name: 'Used', value: 30, color: seriesPalette('dark')[0], displayLabel: undefined },
+        { name: 'Free', value: 70, color: tokensFor('dark').bg.track },
       ]);
     });
 
     it('does not split when more than one field is selected', () => {
-      const segments = getChartData({ a: 30, b: 10 }, ['a', 'b'], null, true);
+      const segments = getChartData({ a: 30, b: 10 }, ['a', 'b'], 'dark', null, true);
       expect(segments.map((s) => s.name)).toEqual(['a', 'b']);
     });
 
     it('does not split values outside 0–100', () => {
-      const segments = getChartData({ a: 120 }, ['a'], null, true);
+      const segments = getChartData({ a: 120 }, ['a'], 'dark', null, true);
       expect(segments.map((s) => s.name)).toEqual(['a']);
     });
   });

@@ -520,6 +520,7 @@ for phone, tablet, web and the Tauri window are listed under *Adapted from deskt
 | 2026-08-03 | Unformatted numbers are capped to 2 decimals (`formatLooseNumber`) | Glances serves full float precision; `85.40915631665675` in a tabular column or beside a 5pt meter is not a readout. A cap, not a pad — and a field formatter still wins |
 | 2026-08-03 | Sample history is in-memory and time windows measure back from the newest sample | Matches the handoff and the reference app; measuring from the data rather than the clock is also pure, and shows the last window of data when polling stalls |
 | 2026-08-03 | `expo-linear-gradient` added for the surfaces and meter fills the design specifies as gradients | It runs in Expo Go, so it costs nothing in native surface, and flattening the CPU meter's `#5e8a2e → #b6f24a` would lose a visibly meaningful gradient |
+| 2026-08-03 | Chart segments take a Telemetry palette, assigned by position, with the remainder of a used/free pair on the track colour | The ported Mantine primaries read as noise on a near-black instrument surface; hashing also gave collisions (the M3 notes recorded used/free colliding on mem) |
 | 2026-08-03 | Space Grotesk and JetBrains Mono are bundled, not fetched | The app ships as a desktop and offline-capable web build; a dashboard that must reach Google Fonts before it can render a number is not one |
 
 ## Blockers / open questions

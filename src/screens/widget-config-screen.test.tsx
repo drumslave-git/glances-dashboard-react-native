@@ -1,7 +1,7 @@
 import { resetServerIdCounter, useServersStore } from '@/state/servers';
 import { useWidgetsStore } from '@/state/widgets';
 import { fireEvent, renderWithProviders, waitFor } from '@/test-utils/render';
-import { CHART_PALETTE } from '@/utils/chartColors';
+import { chartPalette } from '@/utils/chartColors';
 import { resetWidgetIdCounter } from '@/utils/widgetFactory';
 
 import { WidgetConfigScreen } from './widget-config-screen';
@@ -249,7 +249,7 @@ describe('WidgetConfigScreen — chart widgets', () => {
     await user.press(getByTestId('widget-field-user-option-2'));
     await user.press(getByTestId('widget-save'));
 
-    expect(useWidgetsStore.getState().widgets[0].fieldColors).toEqual({ user: CHART_PALETTE[2] });
+    expect(useWidgetsStore.getState().widgets[0].fieldColors).toEqual({ user: chartPalette('dark')[2] });
   });
 
   it('forgets colours for fields that were deselected', async () => {

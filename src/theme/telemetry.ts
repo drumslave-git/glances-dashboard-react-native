@@ -259,6 +259,60 @@ export function accentForIndex(mode: ThemeMode, accentIndex: number): AccentValu
   return accent(mode, accentNameForIndex(accentIndex));
 }
 
+/**
+ * The multi-series chart palette.
+ *
+ * The design names exactly three accents, which is enough for endpoints but not
+ * for a donut of eight fields. These extend that family rather than reaching for
+ * a general-purpose palette: the first three *are* lime, cyan and amber, and the
+ * rest are held to the same muted, mid-value register so a chart still reads as
+ * an instrument. Saturated primaries on a near-black surface do not.
+ *
+ * Ordered, and assigned **by position** rather than by hashing a field name —
+ * a three-field chart takes the first three, which are maximally distinct.
+ */
+const SERIES_PALETTES: Record<ThemeMode, readonly string[]> = {
+  dark: [
+    '#b6f24a', // lime — the primary accent
+    '#58aec9', // cyan
+    '#d9a13c', // amber
+    '#8fbf3f', // mid lime
+    '#6f8fd0', // slate
+    '#c98a6a', // clay
+    '#7fd1a8', // mint
+    '#b98fd0', // mauve
+    '#d0757a', // rose
+    '#9aa39c', // neutral — the text floor, doubling as a tenth series
+  ],
+  // A notch darker than the light *stroke* accents. The handoff's `#4e831a` and
+  // `#a06a12` are stroke values; as a filled slice they land in the band where
+  // neither white nor black label text clears 4.5:1, so the chart palette takes
+  // its own slightly deeper cut of the same hues.
+  light: [
+    '#44761a',
+    '#1d6f8b',
+    '#8f5c10',
+    '#2f5b12',
+    '#42598f',
+    '#8a5334',
+    '#297a58',
+    '#6f4a8f',
+    '#9c4348',
+    '#57554d',
+  ],
+};
+
+export function seriesPalette(mode: ThemeMode): readonly string[] {
+  return SERIES_PALETTES[mode];
+}
+
+export function seriesColor(mode: ThemeMode, index: number): string {
+  const palette = SERIES_PALETTES[mode];
+  const length = palette.length;
+  const safe = Number.isFinite(index) ? Math.trunc(index) : 0;
+  return palette[((safe % length) + length) % length];
+}
+
 /** Geometry, in points. The handoff's pixel values map 1:1 onto RN points. */
 export const GEOMETRY = {
   radius: {
@@ -362,3 +416,17 @@ export function contrastAgainstSurface(text: string, surface: string | Gradient)
 
 /** The floor every text colour in this design must clear. */
 export const CONTRAST_FLOOR = 4.5;
+
+/**
+ * Readable text on an arbitrary fill — a slice label sitting on whichever colour
+ * its segment happens to be. Black or white, whichever is further away.
+ *
+ * The rest of this design fixes text colours to tokens, but a chart segment's
+ * fill is user-configurable, so this is the one place the label has to be chosen
+ * from the background instead.
+ */
+export function onColorText(fill: string): '#07080a' | '#f4f7ef' {
+  return contrastRatio('#07080a', fill) >= contrastRatio('#f4f7ef', fill)
+    ? '#07080a'
+    : '#f4f7ef';
+}

@@ -1,4 +1,6 @@
-import { getFieldColor } from './chartColors';
+import type { ThemeMode } from '@/theme/telemetry';
+
+import { assignSeriesColors } from './chartColors';
 
 /**
  * Ported verbatim from the reference web app (src/utils/widgetData.ts). Behaviour
@@ -163,10 +165,20 @@ export interface ChartSegment {
   displayLabel?: string;
 }
 
-/** Build chart segments from payload + fields + fieldColors. */
+/**
+ * Build chart segments from payload + fields + fieldColors.
+ *
+ * Colours are assigned for the whole set at once rather than field by field —
+ * see `assignSeriesColors` for why that matters (palette order, and recognising
+ * a used/free pair).
+ */
 export function getChartData(
   data: unknown,
   fields: string[],
+  // Third rather than last: the options after it are all optional, and a
+  // required parameter behind them would force every caller to pass three
+  // `undefined`s to reach it.
+  mode: ThemeMode,
   fieldColors?: Record<string, string> | null,
   splitPercentageIntoUsedFree?: boolean,
   fieldFormatters?: Record<string, string> | null,
@@ -174,9 +186,15 @@ export function getChartData(
   const record = getRecordFromPayload(data);
   if (!record) return [];
 
+  interface NumericField {
+    name: string;
+    value: number;
+    displayLabel: string | undefined;
+  }
+
   const keys = fields.length > 0 ? fields : Object.keys(record);
-  const segments = keys
-    .map((field) => {
+  const numeric = keys
+    .map((field): NumericField | null => {
       const value = record[field];
       const num =
         typeof value === 'number'
@@ -186,35 +204,42 @@ export function getChartData(
             : Number.NaN;
       if (Number.isNaN(num)) return null;
       const fmt = fieldFormatters?.[field]?.trim();
-      const displayLabel = fmt ? formatFieldValue(value, fmt) : undefined;
-      return {
-        name: field,
-        value: num,
-        color: getFieldColor(field, fieldColors),
-        ...(displayLabel !== undefined && { displayLabel }),
-      };
+      return { name: field, value: num, displayLabel: fmt ? formatFieldValue(value, fmt) : undefined };
     })
-    .filter((item): item is ChartSegment => item !== null);
+    .filter((item): item is NumericField => item !== null);
 
   if (
     splitPercentageIntoUsedFree &&
-    segments.length === 1 &&
-    segments[0].value >= 0 &&
-    segments[0].value <= 100
+    numeric.length === 1 &&
+    numeric[0].value >= 0 &&
+    numeric[0].value <= 100
   ) {
-    const used = segments[0];
-    const freeValue = 100 - used.value;
+    const used = numeric[0];
     const usedFmt = fieldFormatters?.[used.name]?.trim();
+    // The synthetic pair goes through the same assignment, so Free lands on the
+    // track colour and the donut reads like the memory ring: one arc, one track.
+    const [usedColor, freeColor] = assignSeriesColors(['Used', 'Free'], fieldColors, mode);
     return [
       {
         name: 'Used',
         value: used.value,
-        color: used.color,
+        color: usedColor,
         displayLabel: usedFmt ? formatFieldValue(used.value, usedFmt) : undefined,
       },
-      { name: 'Free', value: freeValue, color: getFieldColor('free', fieldColors) },
+      { name: 'Free', value: 100 - used.value, color: freeColor },
     ];
   }
 
-  return segments;
+  const colors = assignSeriesColors(
+    numeric.map((item) => item.name),
+    fieldColors,
+    mode,
+  );
+
+  return numeric.map((item, index) => ({
+    name: item.name,
+    value: item.value,
+    color: colors[index],
+    ...(item.displayLabel !== undefined && { displayLabel: item.displayLabel }),
+  }));
 }

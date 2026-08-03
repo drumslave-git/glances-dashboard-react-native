@@ -125,7 +125,7 @@ export function WidgetContent({
   error = null,
   testID,
 }: WidgetContentProps) {
-  const { accent } = useTelemetry();
+  const { mode, accent } = useTelemetry();
   const resolvedAccent = accentColor ?? accent('lime').stroke;
   const resolvedSizeClass = sizeClass ?? sizeClassForWidth(width);
   const statusMessage = getStatusMessage({ noServer, loading, error, data });
@@ -198,6 +198,7 @@ export function WidgetContent({
     const segments = getChartData(
       data,
       fields,
+      mode,
       config.fieldColors,
       config.splitPercentageIntoUsedFree,
       config.fieldFormatters,
