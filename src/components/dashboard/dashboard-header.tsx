@@ -1,9 +1,9 @@
 import { Button, H1, Paragraph, XStack, YStack } from 'tamagui';
 
-import type { GlancesServer } from '@/types/dashboard';
+import type { GlancesEndpoint } from '@/types/dashboard';
 
 interface DashboardHeaderProps {
-  server: GlancesServer | undefined;
+  server: GlancesEndpoint | undefined;
   hostname?: string;
   linuxDistro?: string;
   unreachable: boolean;
@@ -33,7 +33,7 @@ export function DashboardHeader({
   // The reference app shows the polling cadence as a badge; the same information
   // fits beside the subtitle here. 0 means "fetch once", which has no cadence.
   const refresh =
-    server && server.refreshMs > 0 ? `${Math.round(server.refreshMs / 100) / 10}s` : null;
+    server && server.pollIntervalMs > 0 ? `${Math.round(server.pollIntervalMs / 100) / 10}s` : null;
 
   return (
     <YStack gap="$1">

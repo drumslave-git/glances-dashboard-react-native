@@ -2,6 +2,8 @@ import { Text, XStack, YStack } from 'tamagui';
 
 import { GEOMETRY, type AccentName } from '@/theme/telemetry';
 import { useTelemetry } from '@/theme/use-telemetry';
+import type { EndpointState } from '@/types/glances';
+import { endpointStateLabel, endpointTone } from '@/utils/endpointStatus';
 
 /**
  * Endpoint provenance, and the small state chips beside a widget label.
@@ -14,16 +16,44 @@ import { useTelemetry } from '@/theme/use-telemetry';
 
 interface EndpointChipProps {
   name: string;
-  /** The server's persisted accent index. */
-  accentIndex: number;
+  /** The endpoint's chosen accent, or `null` for none — then the chip shows its state colour. */
+  color?: AccentName | null;
+  /** Connection state. Absent is treated as `online`, for previews with no live endpoint behind them. */
+  state?: EndpointState;
   /** `dot` is the compact rung of the header ladder. */
   variant?: 'chip' | 'dot';
   testID?: string;
 }
 
-export function EndpointChip({ name, accentIndex, variant = 'chip', testID }: EndpointChipProps) {
-  const { size, accentFor } = useTelemetry();
-  const skin = accentFor(accentIndex);
+/**
+ * The colour resolution both variants share.
+ *
+ * `endpointTone` decides *which* palette applies (accent when healthy, signal otherwise); this
+ * turns that into the actual chip skin. A signal-coloured chip is drawn as the colour over a
+ * transparent fill rather than getting its own tinted background — the design has chip fills for
+ * the three accents only, and inventing four more would be five new surfaces to hold to the
+ * contrast floor for no gain.
+ */
+function useEndpointSkin(state: EndpointState, color: AccentName | null) {
+  const { t, accent } = useTelemetry();
+  const tone = endpointTone(state, color);
+  if (tone.kind === 'accent') {
+    const skin = accent(tone.name);
+    return { dot: skin.stroke, text: skin.chip.text, border: skin.chip.border, bg: skin.chip.bg };
+  }
+  const colour = t.signal[tone.role];
+  return { dot: colour, text: colour, border: t.border.chip, bg: 'transparent' };
+}
+
+export function EndpointChip({
+  name,
+  color = null,
+  state = 'online',
+  variant = 'chip',
+  testID,
+}: EndpointChipProps) {
+  const { size } = useTelemetry();
+  const skin = useEndpointSkin(state, color);
 
   if (variant === 'dot') {
     return (
@@ -32,10 +62,11 @@ export function EndpointChip({ name, accentIndex, variant = 'chip', testID }: En
         height={6}
         rounded={GEOMETRY.radius.pill}
         // Arbitrary hex: Tamagui's `bg` takes theme tokens only.
-        style={{ backgroundColor: skin.stroke }}
+        style={{ backgroundColor: skin.dot }}
         // The dot is the *only* provenance left at this size, so it keeps the
-        // accessible name the chip would have had.
-        aria-label={`Endpoint ${name}`}
+        // accessible name the chip would have had — and the state with it, which is
+        // otherwise carried by a colour a screen reader cannot see.
+        aria-label={`Endpoint ${name}, ${endpointStateLabel(state).toLowerCase()}`}
         testID={testID}
       />
     );
@@ -51,14 +82,15 @@ export function EndpointChip({ name, accentIndex, variant = 'chip', testID }: En
       borderWidth={1}
       // `flex: none` in the handoff — it never shrinks and never truncates.
       shrink={0}
-      style={{ backgroundColor: skin.chip.bg, borderColor: skin.chip.border }}
+      style={{ backgroundColor: skin.bg, borderColor: skin.border }}
+      aria-label={`Endpoint ${name}, ${endpointStateLabel(state).toLowerCase()}`}
       testID={testID}
     >
       <YStack
         width={4}
         height={4}
         rounded={GEOMETRY.radius.pill}
-        style={{ backgroundColor: skin.stroke }}
+        style={{ backgroundColor: skin.dot }}
       />
       <Text
         fontFamily="$mono"
@@ -67,7 +99,7 @@ export function EndpointChip({ name, accentIndex, variant = 'chip', testID }: En
         letterSpacing={size('chip') * 0.1}
         textTransform="uppercase"
         numberOfLines={1}
-        style={{ color: skin.chip.text }}
+        style={{ color: skin.text }}
       >
         {name}
       </Text>
@@ -131,14 +163,24 @@ export function StateChip({ label, accent, onPress, testID }: StateChipProps) {
  * metric-coded ticks as an alternative and asks for one choice applied
  * consistently; this is that choice.
  */
-export function AccentTick({ accentIndex, testID }: { accentIndex: number; testID?: string }) {
-  const { accentFor } = useTelemetry();
+export function AccentTick({
+  color = null,
+  state = 'online',
+  testID,
+}: {
+  color?: AccentName | null;
+  state?: EndpointState;
+  testID?: string;
+}) {
+  const skin = useEndpointSkin(state, color);
   return (
     <YStack
       width={2}
       height={11}
       rounded={1}
-      style={{ backgroundColor: accentFor(accentIndex).stroke }}
+      // The tick follows the chip, so a failing endpoint's widgets are marked as failing down
+      // their whole left edge rather than only in the chip a squeezed header may have dropped.
+      style={{ backgroundColor: skin.dot }}
       testID={testID}
     />
   );

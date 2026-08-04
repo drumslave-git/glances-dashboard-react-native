@@ -14,7 +14,7 @@ import { OptionList } from '@/components/config/option-list';
 import { isChartKind, WidgetContent } from '@/components/widgets/widget-content';
 import { TIME_WINDOW_ORDER, type TimeWindow } from '@/utils/sampleBuffer';
 import { useGlancesQuery, usePluginsList } from '@/hooks/useGlancesQuery';
-import { selectServerById, useServersStore } from '@/state/servers';
+import { selectEndpointById, useEndpointsStore } from '@/state/endpoints';
 import { useWidgetsStore, type WidgetPatch } from '@/state/widgets';
 import type { DonutChartOptions, WidgetKind } from '@/types/dashboard';
 import { pickFormatters } from '@/utils/formatterSpec';
@@ -36,8 +36,8 @@ export function WidgetConfigScreen() {
   const params = useLocalSearchParams<{ id: string; kind?: string }>();
   const isNew = !params.id || params.id === 'new';
 
-  const servers = useServersStore((state) => state.servers);
-  const defaultServerId = useServersStore((state) => state.defaultServerId);
+  const servers = useEndpointsStore((state) => state.endpoints);
+  const defaultEndpointId = useEndpointsStore((state) => state.defaultEndpointId);
   const widgets = useWidgetsStore((state) => state.widgets);
   const addWidget = useWidgetsStore((state) => state.addWidget);
   const updateWidget = useWidgetsStore((state) => state.updateWidget);
@@ -56,7 +56,7 @@ export function WidgetConfigScreen() {
   const isSegmentChart = kind === 'donut' || kind === 'pie' || kind === 'bar';
 
   const [serverId, setServerId] = useState(
-    existing?.serverId ?? defaultServerId ?? servers[0]?.id ?? '',
+    existing?.serverId ?? defaultEndpointId ?? servers[0]?.id ?? '',
   );
   const [metric, setMetric] = useState(
     existing?.metric ?? (isProcesses ? 'processlist' : 'cpu'),
@@ -79,7 +79,7 @@ export function WidgetConfigScreen() {
   const [timeWindow, setTimeWindow] = useState<TimeWindow>(existing?.timeWindow ?? '15m');
   const [processSort, setProcessSort] = useState(existing?.processSort ?? DEFAULT_PROCESS_SORT);
 
-  const server = useServersStore((state) => selectServerById(state, serverId));
+  const server = useEndpointsStore((state) => selectEndpointById(state, serverId));
 
   const { data: plugins } = usePluginsList(server);
   const metricOptions = useMemo(() => {
@@ -91,7 +91,7 @@ export function WidgetConfigScreen() {
   // Live sample of the chosen endpoint: drives both the field picker and preview.
   const endpointPath = metricToEndpoint(resolveMetricForKind(kind, metric));
   const { data: sample, isLoading, error } = useGlancesQuery(server, endpointPath, {
-    refreshMs: 0,
+    pollIntervalMs: 0,
   });
 
   const availableFields = useMemo(() => {

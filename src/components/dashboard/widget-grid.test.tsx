@@ -5,7 +5,7 @@ import {
 } from 'react-native-gesture-handler/jest-utils';
 import type { PanGesture } from 'react-native-gesture-handler';
 
-import { useServersStore } from '@/state/servers';
+import { useEndpointsStore } from '@/state/endpoints';
 import { useWidgetsStore } from '@/state/widgets';
 import { fireEvent, renderWithProviders, waitFor } from '@/test-utils/render';
 import type { WidgetConfig } from '@/types/dashboard';
@@ -22,7 +22,7 @@ beforeEach(() => {
   global.fetch = jest
     .fn()
     .mockResolvedValue({ ok: true, text: async () => JSON.stringify({ total: 1 }) }) as unknown as typeof fetch;
-  useServersStore.setState({ servers: [], defaultServerId: null });
+  useEndpointsStore.setState({ endpoints: [], defaultEndpointId: null });
   useWidgetsStore.setState({ widgets: [] });
 });
 

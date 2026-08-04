@@ -1,14 +1,14 @@
 import { useQuery, type UseQueryResult } from '@tanstack/react-query';
 
 import { fetchGlances, GLANCES_ENDPOINTS } from '@/api/glances';
-import type { GlancesServer } from '@/types/dashboard';
+import type { GlancesEndpoint } from '@/types/dashboard';
 
 export interface UseGlancesQueryOptions {
   /**
-   * Poll interval override in ms. Defaults to the server's own refreshMs.
+   * Poll interval override in ms. Defaults to the server's own pollIntervalMs.
    * 0 fetches once and then stops.
    */
-  refreshMs?: number;
+  pollIntervalMs?: number;
   enabled?: boolean;
 }
 
@@ -21,18 +21,25 @@ export interface UseGlancesQueryOptions {
  * rather than serving the old address's cached result until the next poll.
  */
 export function useGlancesQuery<T = unknown>(
-  server: GlancesServer | undefined,
+  server: GlancesEndpoint | undefined,
   endpointPath: string | null | undefined,
   options: UseGlancesQueryOptions = {},
 ): UseQueryResult<T, Error> {
-  const refreshMs = options.refreshMs ?? server?.refreshMs ?? 0;
-  const enabled = (options.enabled ?? true) && Boolean(server?.url) && Boolean(endpointPath);
+  const pollIntervalMs = options.pollIntervalMs ?? server?.pollIntervalMs ?? 0;
+  // A paused endpoint means paused, everywhere. Until M12 moves the widgets onto the poller there
+  // are two things fetching, and a Pause button that visibly stopped one while the other kept
+  // going would be worse than no button at all.
+  const enabled =
+    (options.enabled ?? true) &&
+    Boolean(server?.url) &&
+    Boolean(endpointPath) &&
+    server?.enabled !== false;
 
   return useQuery<T, Error>({
     queryKey: [server?.id ?? 'no-server', server?.url ?? '', endpointPath ?? 'no-endpoint'],
     queryFn: ({ signal }) => fetchGlances<T>(server!.url, endpointPath!, signal),
     enabled,
-    refetchInterval: refreshMs > 0 ? refreshMs : false,
+    refetchInterval: pollIntervalMs > 0 ? pollIntervalMs : false,
     // Polling replaces the data anyway; keeping the last payload avoids the
     // widget flashing an empty state on every tick.
     placeholderData: (previous) => previous,
@@ -40,14 +47,14 @@ export function useGlancesQuery<T = unknown>(
 }
 
 /** Available plugin names for the metric picker. */
-export function usePluginsList(server: GlancesServer | undefined) {
-  return useGlancesQuery<string[]>(server, GLANCES_ENDPOINTS.pluginsList, { refreshMs: 0 });
+export function usePluginsList(server: GlancesEndpoint | undefined) {
+  return useGlancesQuery<string[]>(server, GLANCES_ENDPOINTS.pluginsList, { pollIntervalMs: 0 });
 }
 
 /** Hostname and distro for the dashboard header. */
-export function useSystemInfo(server: GlancesServer | undefined) {
+export function useSystemInfo(server: GlancesEndpoint | undefined) {
   return useGlancesQuery<Record<string, unknown>>(server, GLANCES_ENDPOINTS.system, {
-    refreshMs: 10_000,
+    pollIntervalMs: 10_000,
   });
 }
 
@@ -59,8 +66,8 @@ export function useSystemInfo(server: GlancesServer | undefined) {
  * turns the requests off entirely when the strip is hidden, so a user who does
  * not want it does not pay for it.
  */
-export function useSummarySources(server: GlancesServer | undefined, enabled = true) {
-  const options = { refreshMs: enabled ? 15_000 : 0, enabled };
+export function useSummarySources(server: GlancesEndpoint | undefined, enabled = true) {
+  const options = { pollIntervalMs: enabled ? 15_000 : 0, enabled };
   return {
     system: useGlancesQuery<Record<string, unknown>>(server, GLANCES_ENDPOINTS.system, options).data,
     uptime: useGlancesQuery<unknown>(server, GLANCES_ENDPOINTS.uptime, options).data,

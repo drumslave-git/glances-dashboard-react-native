@@ -1,4 +1,4 @@
-import { resetServerIdCounter, useServersStore } from '@/state/servers';
+import { resetEndpointIdCounter, useEndpointsStore } from '@/state/endpoints';
 import { useWidgetsStore } from '@/state/widgets';
 import { fireEvent, renderWithProviders, waitFor } from '@/test-utils/render';
 import { chartPalette } from '@/utils/chartColors';
@@ -33,11 +33,11 @@ beforeEach(() => {
   mockBack.mockClear();
   mockDismissTo.mockClear();
   mockParams = { id: 'new', kind: 'text' };
-  resetServerIdCounter();
+  resetEndpointIdCounter();
   resetWidgetIdCounter();
-  useServersStore.setState({ servers: [], defaultServerId: null });
+  useEndpointsStore.setState({ endpoints: [], defaultEndpointId: null });
   useWidgetsStore.setState({ widgets: [] });
-  useServersStore.getState().addServer({ name: 'NAS', url: '10.0.0.1' });
+  useEndpointsStore.getState().addEndpoint({ name: 'NAS', url: '10.0.0.1' });
 });
 
 afterEach(() => {
@@ -301,7 +301,7 @@ describe('WidgetConfigScreen — editing', () => {
       '/api/4/cpu': { total: 12, user: 4 },
     });
 
-    const serverId = useServersStore.getState().servers[0].id;
+    const serverId = useEndpointsStore.getState().endpoints[0].id;
     const widget = useWidgetsStore.getState().addWidget({ serverId, metric: 'cpu' });
     useWidgetsStore.getState().updateWidget(widget.id, { title: 'Original', fields: ['total'] });
     mockParams = { id: widget.id };

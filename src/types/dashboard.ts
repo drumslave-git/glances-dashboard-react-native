@@ -1,3 +1,4 @@
+import type { AccentName } from '@/theme/telemetry';
 import type { TimeWindow } from '@/utils/sampleBuffer';
 
 /**
@@ -6,21 +7,46 @@ import type { TimeWindow } from '@/utils/sampleBuffer';
  */
 export type GlancesMetricType = string;
 
-/** A configured Glances server. Widgets bind to one by id. */
-export interface GlancesServer {
+/**
+ * A configured Glances endpoint. Widgets bind to one by id.
+ *
+ * "Endpoint" rather than "server" throughout, matching the reference and the vocabulary the UI
+ * already used in its toolbar (ref §6).
+ */
+export interface GlancesEndpoint {
   id: string;
   name: string;
   /** Base URL, e.g. "http://192.168.1.10:61208". Stored without a trailing slash. */
   url: string;
-  /** Polling interval in milliseconds. 0 disables polling (fetch once). */
-  refreshMs: number;
   /**
-   * Index into the accent palette (lime → cyan → amber, cycling). Persisted with
-   * the server so a machine keeps its colour across restarts and reorders — the
-   * endpoint chip and the widget's accent tick are the only things on screen
-   * saying which machine a number came from.
+   * Polling interval in milliseconds for the fast tier. Floored at 1000 by the poller, because the
+   * server caches its own stats for a second and asking faster returns the same numbers.
    */
-  accentIndex: number;
+  pollIntervalMs: number;
+  /**
+   * Paused by the user. A disabled endpoint keeps its widgets on the board and shows them a
+   * *distinct* state — telling "I turned this off" apart from "this host is down" is the whole
+   * point, and conflating them would make a deliberate pause look like an outage.
+   */
+  enabled: boolean;
+  /**
+   * Accent, or `null` for none.
+   *
+   * `null` is a real default, not a missing value: with no accent the chip falls back to its
+   * **status** colour, which is the more useful thing to show. An accent is what tells three
+   * *healthy* hosts apart — so it colours a healthy chip only, and a failing one always wears its
+   * state instead (ref §7.1).
+   *
+   * Stored as the accent's **name**, where the reference stores a hex restricted to its own
+   * swatches. Same guarantee — an endpoint can only wear a colour the design already speaks — but
+   * a name re-resolves on a theme switch, and this palette's light and dark values genuinely
+   * differ. A stored hex would be right in one scheme and wrong in the other.
+   */
+  color: AccentName | null;
+  /** Position in the endpoint roster and the settings list. */
+  sortOrder: number;
+  /** Epoch ms. */
+  createdAt: number;
 }
 
 export interface DonutChartOptions {

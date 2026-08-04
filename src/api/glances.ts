@@ -116,24 +116,3 @@ export async function fetchGlances<T>(
     throw new GlancesRequestError('Response was not JSON — is this a Glances server?');
   }
 }
-
-/**
- * Probe a server for the settings screen: returns its hostname when reachable.
- * Errors are returned rather than thrown so the UI can show them inline.
- */
-export async function testGlancesConnection(
-  baseUrl: string,
-  signal?: AbortSignal,
-): Promise<{ ok: true; hostname?: string } | { ok: false; error: string }> {
-  try {
-    const system = await fetchGlances<Record<string, unknown>>(
-      baseUrl,
-      GLANCES_ENDPOINTS.system,
-      signal,
-    );
-    const hostname = typeof system.hostname === 'string' ? system.hostname : undefined;
-    return { ok: true, hostname };
-  } catch (error) {
-    return { ok: false, error: error instanceof Error ? error.message : 'Unknown error' };
-  }
-}

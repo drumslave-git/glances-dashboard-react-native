@@ -71,6 +71,27 @@ export interface TelemetryTokens {
     /** Text on a filled accent button. */
     onAccent: string;
   };
+  /**
+   * Semantic signal colours: an endpoint's connection state, and the Glances threshold levels a
+   * meter or ring is coloured by (`ThresholdTone` in `src/data/thresholds.ts`).
+   *
+   * There is deliberately **no `ok` entry** — a healthy reading is drawn in the *accent*. Spending
+   * a green on "fine" would leave two colours saying the same thing while the accent said nothing,
+   * and green then stays free for the one place it carries its own meaning: upload, against a cyan
+   * download.
+   */
+  signal: {
+    /** Careful thresholds, and an endpoint still connecting. */
+    info: string;
+    /** Warning thresholds, and a degraded endpoint. */
+    warning: string;
+    /** Critical thresholds, an offline endpoint, an unsupported version. */
+    error: string;
+    /** Upload — the one place green means something of its own. */
+    up: string;
+    /** Paused by the user: present and deliberate, not failing. */
+    muted: string;
+  };
   chart: {
     /** Dashed rule at the newest sample. */
     marker: string;
@@ -122,6 +143,13 @@ const DARK: TelemetryTokens = {
     bezel: '#1a1e1f',
     spark: '#5e8a2e',
   },
+  signal: {
+    info: '#58aec9',
+    warning: '#d9a13c',
+    error: '#e2604e',
+    up: '#8fbf3f',
+    muted: '#9aa39c',
+  },
   meterFill: ['#5e8a2e', '#b6f24a'],
   thermalBands: ['#2a2f26', '#4a5c2c', '#8fbf3f', '#d9a13c', '#4a5c2c', '#2a2f26'],
 };
@@ -160,6 +188,15 @@ const LIGHT: TelemetryTokens = {
     baseline: '#e2dfd6',
     bezel: '#e0ddd4',
     spark: '#8ba85e',
+  },
+  // Darker than their dark-mode counterparts: these are read as text on bone-white, where the
+  // bright versions land well under the contrast floor.
+  signal: {
+    info: '#1d6f8b',
+    warning: '#8f5c10',
+    error: '#a32c20',
+    up: '#44761a',
+    muted: '#57554d',
   },
   // Flat in light: the bright dark-mode lime is a stroke/fill colour only.
   meterFill: ['#3c6610', '#3c6610'],

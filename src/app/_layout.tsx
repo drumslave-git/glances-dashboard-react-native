@@ -7,13 +7,14 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { TamaguiProvider, Theme } from 'tamagui';
 
+import { startPolling } from '@/data/start-polling';
 import { useTelemetryFonts } from '@/theme/fonts';
 import { tamaguiConfig } from '@/theme/tamagui.config';
 import { tokensFor } from '@/theme/telemetry';
 import { useThemeMode } from '@/theme/use-telemetry';
 
 /**
- * Polling cadence is set per query from each server's refreshMs, so the client
+ * Polling cadence is set per query from each server's pollIntervalMs, so the client
  * only carries cross-cutting behaviour.
  */
 const queryClient = new QueryClient({
@@ -38,6 +39,11 @@ export default function RootLayout() {
     document.documentElement.style.backgroundColor = tokens.bg.app;
     document.body.style.backgroundColor = tokens.bg.app;
   }, [tokens.bg.app]);
+  // The poller outlives every screen — it holds the ring buffers a chart draws from and the
+  // backoff state a failing endpoint accumulates — so it is started once here and torn down only
+  // when the app itself goes. `startPolling` is idempotent for the same reason.
+  useEffect(() => startPolling(), []);
+
   // Space Grotesk and JetBrains Mono are bundled, so this resolves in a frame or
   // two. Rendering before then would flash the platform font at a different
   // metric and reflow every number on the board.

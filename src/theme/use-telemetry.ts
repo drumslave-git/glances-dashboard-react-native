@@ -4,7 +4,6 @@ import { useColorScheme } from 'react-native';
 import { usePreferencesStore } from '@/state/preferences';
 import {
   accent as accentValues,
-  accentForIndex,
   tokensFor,
   type AccentName,
   type AccentValues,
@@ -28,8 +27,14 @@ export interface Telemetry {
   size: (role: TypeRole) => number;
   /** Letter-spacing for a named role, tracking its scaled size. */
   tracking: (role: TypeRole) => number;
-  /** The accent a server is bound to, by its persisted `accentIndex`. */
-  accentFor: (accentIndex: number) => AccentValues;
+  /**
+   * The accent an endpoint is bound to, by its persisted name.
+   *
+   * Takes a name rather than the old index: an endpoint's colour is now optional and named
+   * (`GlancesEndpoint.color`), so callers decide what `null` means for them — identity elements
+   * go colourless, a chart line falls back to the primary accent.
+   */
+  accentFor: (name: AccentName) => AccentValues;
   /** A metric-family accent by name — lime for CPU, cyan for network, amber for GPU. */
   accent: (name: AccentName) => AccentValues;
 }
@@ -53,7 +58,7 @@ export function useTelemetry(): Telemetry {
       scale,
       size: (role: TypeRole) => roleSize(role, scale),
       tracking: (role: TypeRole) => roleLetterSpacing(role, scale),
-      accentFor: (accentIndex: number) => accentForIndex(mode, accentIndex),
+      accentFor: (name: AccentName) => accentValues(mode, name),
       accent: (name: AccentName) => accentValues(mode, name),
     }),
     [mode, scale],

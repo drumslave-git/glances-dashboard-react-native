@@ -3,6 +3,7 @@ import type { LayoutChangeEvent } from 'react-native';
 import { ScrollView, XStack, YStack } from 'tamagui';
 
 import { EndpointChip } from '@/components/telemetry/chips';
+import { useEndpointState } from '@/hooks/useEndpointState';
 import { MicroLabel, MonoText } from '@/components/telemetry/text';
 import {
   GlyphButton,
@@ -13,17 +14,21 @@ import {
 } from '@/components/telemetry/surfaces';
 import { GEOMETRY } from '@/theme/telemetry';
 import { useTelemetry } from '@/theme/use-telemetry';
-import type { GlancesServer } from '@/types/dashboard';
+import type { GlancesEndpoint } from '@/types/dashboard';
 
 /**
  * The dashboard toolbar.
  *
- * **It carries no live data and no animation**, which is a rule rather than an
- * omission: the toolbar hides in immersive mode, so anything that has to stay
- * continuously readable belongs in the grid. The roster chips are static
- * identity — a machine's name and colour — not telemetry, and there is no
- * pulsing connection dot here. A widget whose endpoint is unreachable says so on
- * the widget.
+ * **It carries no metric values and no animation**, which is a rule rather than
+ * an omission: the toolbar hides in immersive mode, so anything that has to stay
+ * continuously readable belongs in the grid — a widget whose endpoint is
+ * unreachable says so on the widget.
+ *
+ * The roster chips do carry **connection state** (M11), which is not a metric:
+ * it answers "is this host answering at all", it changes on the order of
+ * minutes, and the reference shows it in the same place (ref §7.1). What is
+ * still deliberately absent is the reference's *pulsing* dot — an animation in
+ * chrome that hides itself is motion nobody asked to watch.
  *
  * Adapted from the desktop design in three ways:
  *
@@ -43,7 +48,7 @@ const WIDE_TOOLBAR = 760;
 const COMPACT_WORDMARK = 520;
 
 interface ToolbarProps {
-  servers: GlancesServer[];
+  endpoints: GlancesEndpoint[];
   editMode: boolean;
   /** Polling cadence of the default server, e.g. `5s`. */
   refreshLabel?: string | null;
@@ -54,7 +59,7 @@ interface ToolbarProps {
 }
 
 export function Toolbar({
-  servers,
+  endpoints,
   editMode,
   refreshLabel,
   onAddWidget,
@@ -71,7 +76,7 @@ export function Toolbar({
     setWidth((current) => (current === next ? current : next));
   };
 
-  const roster = <EndpointRoster servers={servers} />;
+  const roster = <EndpointRoster endpoints={endpoints} />;
 
   // Labels shorten before anything is dropped: a narrow toolbar loses words, not
   // controls, because every one of these is the only route to what it does.
@@ -176,8 +181,25 @@ export function Toolbar({
   );
 }
 
-function EndpointRoster({ servers }: { servers: GlancesServer[] }) {
-  if (servers.length === 0) {
+/**
+ * One roster entry. A component rather than an inline chip because it subscribes to its own
+ * endpoint's status — mapping over the list inline would make the whole toolbar re-render every
+ * time any host ticked.
+ */
+function RosterChip({ endpoint }: { endpoint: GlancesEndpoint }) {
+  const state = useEndpointState(endpoint);
+  return (
+    <EndpointChip
+      name={endpoint.name}
+      color={endpoint.color}
+      state={state}
+      testID={`toolbar-endpoint-${endpoint.id}`}
+    />
+  );
+}
+
+function EndpointRoster({ endpoints }: { endpoints: GlancesEndpoint[] }) {
+  if (endpoints.length === 0) {
     return (
       <MicroLabel testID="toolbar-roster-empty" color="$textFaint">
         No endpoints
@@ -197,13 +219,8 @@ function EndpointRoster({ servers }: { servers: GlancesServer[] }) {
         testID="toolbar-roster"
       >
         <XStack items="center" gap={7}>
-          {servers.map((server) => (
-            <EndpointChip
-              key={server.id}
-              name={server.name}
-              accentIndex={server.accentIndex}
-              testID={`toolbar-endpoint-${server.id}`}
-            />
+          {endpoints.map((endpoint) => (
+            <RosterChip key={endpoint.id} endpoint={endpoint} />
           ))}
         </XStack>
       </ScrollView>

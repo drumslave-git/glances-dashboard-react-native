@@ -7,13 +7,14 @@ import { ToolbarButton } from '@/components/telemetry/surfaces';
 import { Label as SectionLabel } from '@/components/telemetry/text';
 import { GEOMETRY } from '@/theme/telemetry';
 
-import { coerceServerUrl, testGlancesConnection } from '@/api/glances';
-import { DEFAULT_REFRESH_MS, useServersStore } from '@/state/servers';
+import { coerceServerUrl } from '@/api/glances';
+import { probeEndpoint } from '@/data/probe';
+import { DEFAULT_POLL_INTERVAL_MS, useEndpointsStore } from '@/state/endpoints';
 
 type TestState =
   | { status: 'idle' }
   | { status: 'testing' }
-  | { status: 'ok'; hostname?: string }
+  | { status: 'ok'; version: string; pluginCount: number }
   | { status: 'error'; message: string };
 
 export function ServerFormScreen() {
@@ -21,16 +22,16 @@ export function ServerFormScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const isNew = !id || id === 'new';
 
-  const servers = useServersStore((state) => state.servers);
-  const addServer = useServersStore((state) => state.addServer);
-  const updateServer = useServersStore((state) => state.updateServer);
+  const servers = useEndpointsStore((state) => state.endpoints);
+  const addEndpoint = useEndpointsStore((state) => state.addEndpoint);
+  const updateEndpoint = useEndpointsStore((state) => state.updateEndpoint);
 
   const existing = isNew ? undefined : servers.find((server) => server.id === id);
 
   const [name, setName] = useState(existing?.name ?? '');
   const [url, setUrl] = useState(existing?.url ?? '');
   const [refreshSeconds, setRefreshSeconds] = useState(
-    String((existing?.refreshMs ?? DEFAULT_REFRESH_MS) / 1000),
+    String((existing?.pollIntervalMs ?? DEFAULT_POLL_INTERVAL_MS) / 1000),
   );
   const [test, setTest] = useState<TestState>({ status: 'idle' });
 
@@ -39,27 +40,36 @@ export function ServerFormScreen() {
 
   const parsedRefreshMs = (() => {
     const seconds = Number.parseFloat(refreshSeconds.replace(',', '.'));
-    if (Number.isNaN(seconds) || seconds < 0) return DEFAULT_REFRESH_MS;
+    if (Number.isNaN(seconds) || seconds < 0) return DEFAULT_POLL_INTERVAL_MS;
     return Math.round(seconds * 1000);
   })();
 
+  /**
+   * Probe rather than merely fetch.
+   *
+   * The old test asked for `/system` and reported a hostname, which answers "did something reply"
+   * and nothing else. `probeEndpoint` answers the two questions that actually decide whether this
+   * address is usable: which Glances version is on the other end — a 3.x server is reported as
+   * unsupported instead of failing cryptically — and which plugins it exposes, which is what will
+   * decide the widgets this endpoint can offer.
+   */
   const handleTest = async () => {
     if (!canSave) return;
     setTest({ status: 'testing' });
-    const result = await testGlancesConnection(coerceServerUrl(trimmedUrl));
+    const result = await probeEndpoint(coerceServerUrl(trimmedUrl));
     setTest(
       result.ok
-        ? { status: 'ok', hostname: result.hostname }
-        : { status: 'error', message: result.error },
+        ? { status: 'ok', version: result.glancesVersion, pluginCount: result.capabilities.length }
+        : { status: 'error', message: result.message },
     );
   };
 
   const handleSave = () => {
     if (!canSave) return;
     if (existing) {
-      updateServer(existing.id, { name, url: trimmedUrl, refreshMs: parsedRefreshMs });
+      updateEndpoint(existing.id, { name, url: trimmedUrl, pollIntervalMs: parsedRefreshMs });
     } else {
-      addServer({ name, url: trimmedUrl, refreshMs: parsedRefreshMs });
+      addEndpoint({ name, url: trimmedUrl, pollIntervalMs: parsedRefreshMs });
     }
     router.back();
   };
@@ -130,7 +140,8 @@ export function ServerFormScreen() {
               {test.status === 'testing' && <Spinner testID="server-test-spinner" />}
               {test.status === 'ok' && (
                 <Paragraph size="$2" theme="green" testID="server-test-ok">
-                  {test.hostname ? `Connected to ${test.hostname}` : 'Connected'}
+                  {`Glances ${test.version}` +
+                    (test.pluginCount > 0 ? ` · ${test.pluginCount} plugins` : '')}
                 </Paragraph>
               )}
               {test.status === 'error' && (

@@ -70,6 +70,31 @@ describe('contrast floor', () => {
     expect(failures).toEqual([]);
   });
 
+  it.each(MODES)('%s signal colours clear the floor on every surface', (mode) => {
+    // These are read as text — a state chip, a threshold-coloured value — not just as fills, so
+    // they answer to the same floor the rest of the palette does.
+    const tokens = tokensFor(mode);
+    const surfaces = [tokens.bg.app, tokens.bg.chrome, tokens.bg.rail, tokens.bg.widget, tokens.bg.sheet];
+
+    const failures: string[] = [];
+    for (const [role, colour] of Object.entries(tokens.signal)) {
+      for (const surface of surfaces) {
+        const ratio = contrastAgainstSurface(colour, surface);
+        if (ratio < CONTRAST_FLOOR) {
+          failures.push(`signal.${role} (${colour}) on ${String(surface)} = ${ratio.toFixed(2)}:1`);
+        }
+      }
+    }
+    expect(failures).toEqual([]);
+  });
+
+  it('spends no colour on "healthy" — that is the accent job', () => {
+    // Two colours meaning "fine" would leave the accent saying nothing, and would cost green the
+    // one meaning it carries on its own.
+    expect(TELEMETRY_TOKENS.dark.signal).not.toHaveProperty('ok');
+    expect(TELEMETRY_TOKENS.dark.signal).not.toHaveProperty('success');
+  });
+
   it.each(MODES)('%s accent text clears the floor on the widget surface', (mode) => {
     const tokens = tokensFor(mode);
     for (const name of ACCENT_ORDER) {

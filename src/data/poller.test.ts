@@ -147,10 +147,13 @@ const endpoint = (over: Partial<PollerEndpoint> = {}): PollerEndpoint => ({
 beforeEach(resetBuffers);
 
 describe('plugin selection', () => {
-  it('polls a default set when no widget has asked for anything yet', async () => {
+  it('still polls something when no widget has asked for anything yet', async () => {
+    // It cannot poll nothing: degraded and offline are derived from polls failing, so an endpoint
+    // fetching nothing could never be noticed going down.
     const h = harness();
     await h.start([endpoint()]);
     expect(h.takePolls().sort()).toEqual([...DEFAULT_PLUGINS].sort());
+    expect(DEFAULT_PLUGINS.length).toBeGreaterThan(0);
   });
 
   it('polls exactly what the placed widgets require, and nothing else', async () => {

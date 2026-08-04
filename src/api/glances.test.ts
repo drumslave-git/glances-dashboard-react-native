@@ -9,7 +9,6 @@ import {
   GlancesRequestError,
   normalizeBaseUrl,
   normalizeEndpointPath,
-  testGlancesConnection,
 } from './glances';
 
 describe('normalizeBaseUrl', () => {
@@ -87,10 +86,11 @@ describe('against real captured payloads', () => {
       text: async () => JSON.stringify(systemFixture),
     }) as unknown as typeof fetch;
 
-    await expect(testGlancesConnection('https://glances.example.com')).resolves.toEqual({
-      ok: true,
-      hostname: 'TCloud',
-    });
+    const system = await fetchGlances<Record<string, unknown>>(
+      'https://glances.example.com',
+      '/api/4/system',
+    );
+    expect(system.hostname).toBe('TCloud');
   });
 
   it('reads a real pluginslist as a string array', async () => {
@@ -202,31 +202,3 @@ describe('describeNetworkError', () => {
   });
 });
 
-describe('testGlancesConnection', () => {
-  const originalFetch = global.fetch;
-
-  afterEach(() => {
-    global.fetch = originalFetch;
-  });
-
-  it('reports the hostname when reachable', async () => {
-    global.fetch = jest.fn().mockResolvedValue({
-      ok: true,
-      text: async () => JSON.stringify({ hostname: 'nas' }),
-    }) as unknown as typeof fetch;
-
-    await expect(testGlancesConnection('http://host:61208')).resolves.toEqual({
-      ok: true,
-      hostname: 'nas',
-    });
-  });
-
-  it('returns the error instead of throwing when unreachable', async () => {
-    global.fetch = jest.fn().mockRejectedValue(new Error('Network request failed')) as unknown as typeof fetch;
-
-    await expect(testGlancesConnection('http://host:61208')).resolves.toEqual({
-      ok: false,
-      error: 'Network request failed',
-    });
-  });
-});

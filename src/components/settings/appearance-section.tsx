@@ -3,6 +3,7 @@ import { XStack, YStack } from 'tamagui';
 import { ToolbarButton } from '@/components/telemetry/surfaces';
 import { Label, MicroLabel, UiText } from '@/components/telemetry/text';
 import { usePreferencesStore, type ThemePreference } from '@/state/preferences';
+import { ACCENT_ORDER, type AccentName } from '@/theme/telemetry';
 import { useTelemetry } from '@/theme/use-telemetry';
 import { READING_SCALE_MAX, READING_SCALE_MIN } from '@/utils/typeScale';
 
@@ -90,26 +91,39 @@ export function AppearanceSection() {
   );
 }
 
-/** The three-swatch endpoint colour picker, shown on each server row. */
+/**
+ * The endpoint colour picker, shown on each endpoint row.
+ *
+ * Offers the design's own accents and **nothing else** — an endpoint marked in a colour the
+ * dashboard does not already speak stops being legible against one of the two schemes, and a grid
+ * of arbitrary hues would turn a wall of panels into confetti. The reference restricts its picker
+ * for the same reason (ref §7.6).
+ *
+ * The first swatch is "none", which is also the default. Clearing the accent *is* its reset: with
+ * no colour the chip shows connection state instead, which is the more useful thing for someone
+ * running a single host.
+ */
 export function AccentPicker({
-  accentIndex,
+  color,
   onChange,
   testID,
 }: {
-  accentIndex: number;
-  onChange: (accentIndex: number) => void;
+  color: AccentName | null;
+  onChange: (color: AccentName | null) => void;
   testID?: string;
 }) {
   const { t, accentFor } = useTelemetry();
+  const options: (AccentName | null)[] = [null, ...ACCENT_ORDER];
 
   return (
     <XStack gap={8} items="center" testID={testID}>
       <MicroLabel>Colour</MicroLabel>
-      {[0, 1, 2].map((index) => {
-        const selected = accentIndex % 3 === index;
+      {options.map((option) => {
+        const selected = color === option;
+        const swatch = option ? accentFor(option).stroke : null;
         return (
           <YStack
-            key={index}
+            key={option ?? 'none'}
             width={26}
             height={26}
             rounded={4}
@@ -117,22 +131,27 @@ export function AccentPicker({
             justify="center"
             borderWidth={1}
             pressStyle={{ opacity: 0.6 }}
-            onPress={() => onChange(index)}
+            onPress={() => onChange(option)}
             role="button"
-            aria-label={`Endpoint colour ${index + 1}`}
-            style={{
-              borderColor: selected ? accentFor(index).stroke : t.border.control,
-            }}
-            testID={testID ? `${testID}-${index}` : undefined}
+            aria-label={option ? `Endpoint colour ${option}` : 'No endpoint colour'}
+            style={{ borderColor: selected ? (swatch ?? t.text.secondary) : t.border.control }}
+            testID={testID ? `${testID}-${option ?? 'none'}` : undefined}
           >
             {/* A plain swatch inside the control: a Button would paint over an
                 arbitrary hex background. */}
-            <YStack
-              width={14}
-              height={14}
-              rounded={3}
-              style={{ backgroundColor: accentFor(index).stroke }}
-            />
+            {swatch ? (
+              <YStack width={14} height={14} rounded={3} style={{ backgroundColor: swatch }} />
+            ) : (
+              // "None" is drawn as an empty outline rather than a coloured chip, so the absence
+              // reads as a deliberate option and not as a swatch that failed to load.
+              <YStack
+                width={14}
+                height={14}
+                rounded={3}
+                borderWidth={1}
+                style={{ borderColor: t.text.faint }}
+              />
+            )}
           </YStack>
         );
       })}

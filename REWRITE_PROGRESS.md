@@ -4,9 +4,11 @@ Tracks execution of [REWRITE_PLAN.md](REWRITE_PLAN.md). Update this file in the 
 commit as the work it describes. One line per task; add dated notes under each milestone
 when something non-obvious happened.
 
-**Current status:** M10 (data layer) complete — normalized types, the tiered poller, ring buffers,
-probe, thresholds and the transport seam, with Tauri's Rust HTTP client making the desktop build
-immune to CORS. Next is M11 (endpoint model). Background: M0–M8 complete and v0.1.2 shipped, but **the reference app they were ported from no longer exists**. On 2026-08-04 the reference was re-examined at **v1.13.0** — it is now an Electron desktop app with 26 purpose-built widget types, a main-process tiered poller and a free drag/resize grid, where the port's source was a Mantine web app with five generic widgets. The owner's instruction is full parity with the current reference, so [REWRITE_PLAN.md](REWRITE_PLAN.md) has been realigned: §2's parity checklist is replaced and milestones **M10–M17** carry the work. The visual language already matches (both are the same "Telemetry" design system); the gap is what the app does. M9's remaining items are folded into the new plan. **The plan is awaiting the owner's approval — no M10+ code has been written.**
+**Current status:** M10 (data layer) and M11 (endpoint model) complete. The poller now runs against
+the endpoints store: probing, tiered polling, backoff, and a state machine the endpoint chip renders
+identically in the toolbar, on every widget header and in settings. Next is M12 (widget framework +
+core metrics), which is where the typed widget catalog begins and `useGlancesQuery` finally goes.
+Background: M0–M8 complete and v0.1.2 shipped, but **the reference app they were ported from no longer exists**. On 2026-08-04 the reference was re-examined at **v1.13.0** — it is now an Electron desktop app with 26 purpose-built widget types, a main-process tiered poller and a free drag/resize grid, where the port's source was a Mantine web app with five generic widgets. The owner's instruction is full parity with the current reference, so [REWRITE_PLAN.md](REWRITE_PLAN.md) has been realigned: §2's parity checklist is replaced and milestones **M10–M17** carry the work. The visual language already matches (both are the same "Telemetry" design system); the gap is what the app does. M9's remaining items are folded into the new plan. **The plan is awaiting the owner's approval — no M10+ code has been written.**
 
 ## Milestones
 
@@ -610,10 +612,86 @@ same moment for a side-by-side.
   built desktop app needs no dev server, so verification went that way instead. Recorded in
   AGENTS.md — the ranges change on reboot.
 
-### M11 — Endpoint model — `not started`
-- [ ] `GlancesEndpoint` with `enabled` / `color` / `sortOrder` / `createdAt`, + store migration
-- [ ] Enable/disable, accent colour, test connection, cascade delete with confirmation
-- [ ] One endpoint chip used in the toolbar, every widget header and the list
+### M11 — Endpoint model — `done` (2026-08-04)
+- [x] `GlancesEndpoint` with `pollIntervalMs` / `enabled` / `color` / `sortOrder` / `createdAt`,
+      and a **v2 → v3 migration** that carries every existing server across
+- [x] The concept is renamed *endpoint* throughout — type, store (`src/state/endpoints.ts`),
+      screens and props. `WidgetConfig.serverId` is the one holdout, because M12 replaces the whole
+      widget model with `WidgetInstance.endpointId` and a rename now would cost a throwaway migration
+- [x] Enable/disable (Pause / Resume), which stops polling and keeps the widgets
+- [x] Accent colour as a named, **optional** accent with a "none" swatch; clearing it is its reset
+- [x] Connection test **probes**: reports the Glances version and plugin count, and names a 3.x
+      server as unsupported instead of failing cryptically
+- [x] Cascade delete with a confirmation naming the widget count (already present, reworded)
+- [x] One endpoint chip in the toolbar roster, every widget header and the settings list, coloured
+      by `endpointTone` — the accent on a healthy host, the state on any other
+- [x] `signal` tokens added to the theme (info / warning / error / up / muted) for both modes, and
+      brought under the same 4.5:1 contrast test as the rest of the palette
+- [x] **The poller is now running** — `src/data/start-polling.ts` subscribes the endpoints store and
+      reconciles the schedulers, evicting buffers and status for a deleted endpoint
+- [x] The poller's bootstrap set trimmed to `quicklook` alone — it must poll *something* (offline
+      is derived from polls failing), but until M12 retires `useGlancesQuery` both layers fetch,
+      and every extra plugin there is a request nothing on screen displays
+- [x] 602 tests across 37 suites; typecheck and lint clean
+- [x] **Verified in the built desktop app against the live server.** The v2 store this build
+      inherited migrated in place — `endpoints`, `pollIntervalMs: 2000`, `color: "lime"` (the colour
+      it already had), plus the new fields, nothing lost. The settings row reads
+      `Online · Glances 4.5.6` from the live probe. Pausing muted the tick and chip in the toolbar,
+      on all eight widget headers and in the settings row, blanked the summary strip, replaced every
+      body with "Endpoint paused" and stopped all traffic; resuming brought the whole board back
+      live. The colour picker leads with the "none" swatch.
+
+**Notes (2026-08-04)**
+- **The rename was done now rather than later, deliberately.** M12–M15 write a great deal of new
+  code against this model; renaming afterwards would mean touching all of it too. 17 files moved.
+  The `s-` **id prefix stayed**, because those ids are persisted and every widget stores one — a
+  cosmetic re-prefix would either orphan every widget or need a second migration to rewrite the
+  references, for a string nobody ever sees.
+- **`color` is a name, not a hex — a deliberate divergence.** The reference stores a hex restricted
+  to its own swatches so an endpoint can only wear a colour the design speaks. Same guarantee here,
+  but a *name* re-resolves on a theme switch, and this palette's light and dark accents genuinely
+  differ (`#b6f24a` against `#3f6b12`). A stored hex would be right in one scheme and wrong in the
+  other, which is the one thing a dual-mode design cannot afford.
+- **The default is now *no* accent**, matching the reference. A lone endpoint has nothing to be
+  told apart from, and its connection state is the more useful thing for the chip to carry. The
+  migration deliberately breaks this rule for existing endpoints, keeping the colour each already
+  had on screen — a fresh default is a default, but taking a colour away from a board someone has
+  been looking at reads as a bug.
+- **`refreshMs: 0` is gone.** It meant "fetch once", which was a second way of saying "do not poll
+  this" and a worse one, because the endpoint still looked live. Pausing says it properly, and the
+  interval is floored at 1 s because the server caches its own stats for that long anyway.
+- **The chip's colour rule is pure and tested** (`src/utils/endpointStatus.ts`) precisely because
+  it appears in three places. **Accent only ever colours a healthy endpoint** — telling three green
+  hosts apart is the entire reason the setting exists, and a host in trouble has something more
+  urgent to say than which machine it is.
+- **`degraded` deliberately does not overlay a widget.** One or two missed polls with the last
+  reading still on screen is exactly when a dashboard is most useful; covering it would hide the
+  numbers at the moment someone is watching them. It dims instead.
+- **The toolbar's own doc comment had to change.** It claimed the toolbar "carries no live data",
+  which stopped being true the moment the roster showed state. Connection state is not a metric —
+  it changes on the order of minutes and the reference shows it in the same place — but the comment
+  would otherwise have been a lie the next reader had to discover.
+- **Adding the `signal` tokens found no contrast failures**, which is worth recording only because
+  the light-mode values had to be picked several steps darker than their dark-mode counterparts to
+  get there.
+- **`testGlancesConnection` was deleted**, not left alongside `probeEndpoint`. It asked `/system`
+  and reported a hostname, which answers "did something reply" and nothing else.
+- **Pausing did not actually pause, and the desktop run is what caught it.** Every chip and tick
+  went grey correctly, but the numbers kept updating: the poller stopped, and `useGlancesQuery` —
+  which still drives every widget until M12 — knew nothing about `enabled`. Two fetchers, one
+  button. Fixed by gating the query on `server.enabled`; a Pause that visibly stops one and not the
+  other is worse than no Pause at all.
+- **And fixing that exposed the next one.** With polling genuinely stopped, every widget read
+  "No data yet." — true, and useless: it looks like a widget still trying when nothing is being
+  asked of the server at all. §2.1 calls for a *distinct* paused state, so `endpointOverlay` is now
+  wired into the body's message precedence, above loading and error.
+- **`connecting` was then removed from that overlay.** The first cut covered a connecting endpoint
+  too, which broke a dashboard test and would have been a regression on every launch: the probe is
+  in flight for a moment while the query may already hold perfectly good data, and replacing a live
+  reading with "Connecting…" is worse than saying nothing. The chip already carries it.
+- **The full-panel overlay is still M12.** The message replaces the widget *body*; the reference
+  covers the whole panel, header included, because it is the panel that is stale (ref §7.4). That
+  belongs with the frame rebuild.
 
 ### M12 — Widget framework + core metrics — `not started`
 - [ ] Registry split (data-only catalog importable by the poller / renderer half with components)
@@ -713,6 +791,12 @@ same moment for a side-by-side.
 | 2026-08-04 | Config storage **stays AsyncStorage + Zustand**; drizzle/SQLite is not ported | The reference's own design doc concedes SQLite is more machinery than config-only persistence needs; porting it would add a native module for no capability |
 | 2026-08-04 | The 4.5:1 contrast floor **outranks** matching the reference's text tokens | The reference's `textLabel`/`textFaint` do not clear it against its own panel colour. A test that has already caught one real bug is not worth trading for two shades of grey |
 | 2026-08-04 | The poller is platform-free TypeScript over a `transport` seam, unit-tested against a fake clock | It is about to become the most complex module in the app and it runs on three platforms; the reference's own copy is untestable because it is welded to `net.fetch` |
+| 2026-08-04 | "Server" becomes "endpoint" everywhere except `WidgetConfig.serverId`; the `s-` id prefix stays | M12–M15 write a lot of code against this model, so renaming later would cost more. The ids are persisted and referenced by every widget, so re-prefixing them buys nothing and risks orphaning |
+| 2026-08-04 | An endpoint's accent is stored as a **name**, not a hex, and defaults to none | A name re-resolves on a theme switch; this palette's light and dark accents differ, so a stored hex is wrong in one of the two schemes. No accent by default matches the reference — with none, the chip shows connection state, which is more useful for a single host |
+| 2026-08-04 | The migration keeps the colour each existing endpoint already had, against the new default | A changed default is a default; a board that silently loses its colours looks broken |
+| 2026-08-04 | `refreshMs: 0` ("fetch once") is retired in favour of pausing, and the interval is floored at 1 s | Two ways to say "do not poll this" is one too many, and the old one left the endpoint looking live. The server caches its stats for a second regardless |
+| 2026-08-04 | The accent colours a healthy endpoint only; state wins on every other | Telling three green hosts apart is what the accent is for, and it stops mattering the moment one of them is in trouble |
+| 2026-08-04 | A `degraded` endpoint dims its widgets but is **not** covered by a status overlay | One or two missed polls with the last reading on screen is when a dashboard is most useful; an overlay would hide the numbers exactly then |
 | 2026-08-04 | Free drag + resize on web, desktop and tablet; **a phone gets one column and picks footprints from the kebab** | Confirmed with the owner. The stored geometry is identical, so this is a gesture adaptation rather than a feature split — and a corner grip is not a touch target, which is why M0's plan chose presets in the first place |
 | 2026-08-04 | **In-app updates are out of scope**, and the Updates settings tab with them | Confirmed with the owner. It is a delivery feature, not a dashboard one, and it would cost a new native surface on desktop plus a separate Android story. Publishing releases is unaffected |
 | 2026-08-04 | **The transparent window is in scope** | Confirmed with the owner. It is what makes the appearance model's alpha mean anything on desktop. Note the reference's own trade: a transparent window cannot be edge-resized and loses the WM drop shadow, so it is only requested when an alpha is actually below 1 |
@@ -732,6 +816,14 @@ same moment for a side-by-side.
   M1 rule was right about the port and wrong about the scheme, so `normalizeEndpointUrl` now splits
   on what the host looks like: a bare **IP** is a direct `glances -w` (`http`, port 61208), a bare
   **hostname** is assumed proxied (`https`, default port).
+- **Two fetchers are running at once until M12.** The poller (M10) and `useGlancesQuery` both
+  reach the same endpoints — the poller for `quicklook` liveness, the query for every widget's own
+  payload. Both now respect `enabled`, so the behaviour is correct, but the traffic is duplicated
+  and there are two answers to "is this endpoint up". Resolved when M12 moves the widgets onto the
+  poller and `useGlancesQuery` is deleted.
+- **Android has not been run since M9.** M10 and M11 are platform-free TypeScript plus the Tauri
+  transport, and the suite runs under the native preset — but the M9 lesson cuts both ways, and a
+  milestone is not done until it has been looked at on both. Due before M12 closes.
 - Expo Go does not work on the local emulator (details below). The dev build does, so this
   does not block development. Untested on a physical device.
 - **Fabric mount crash seen once during M4 verification, cause unknown (2026-08-03).**

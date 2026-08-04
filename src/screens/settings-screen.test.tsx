@@ -1,5 +1,5 @@
 import { usePreferencesStore } from '@/state/preferences';
-import { resetServerIdCounter, useServersStore } from '@/state/servers';
+import { resetEndpointIdCounter, useEndpointsStore } from '@/state/endpoints';
 import { useWidgetsStore } from '@/state/widgets';
 import { renderWithProviders } from '@/test-utils/render';
 import { heroFontSize } from '@/utils/typeScale';
@@ -17,35 +17,36 @@ jest.mock('expo-router', () => ({
 beforeEach(() => {
   mockPush.mockClear();
   mockBack.mockClear();
-  resetServerIdCounter();
+  resetEndpointIdCounter();
   resetWidgetIdCounter();
-  useServersStore.setState({ servers: [], defaultServerId: null });
+  useEndpointsStore.setState({ endpoints: [], defaultEndpointId: null });
   useWidgetsStore.setState({ widgets: [] });
 });
 
-function addServer(name: string, url = '10.0.0.1') {
-  return useServersStore.getState().addServer({ name, url });
+function addEndpoint(name: string, url = '10.0.0.1') {
+  return useEndpointsStore.getState().addEndpoint({ name, url });
 }
 
 describe('SettingsScreen', () => {
   it('shows an empty state when no servers exist', async () => {
     const { getByTestId } = await renderWithProviders(<SettingsScreen />);
 
-    expect(getByTestId('servers-empty')).toBeTruthy();
+    expect(getByTestId('endpoints-empty')).toBeTruthy();
   });
 
   it('lists servers with their address and refresh interval', async () => {
-    addServer('NAS');
+    addEndpoint('NAS');
     const { getByText } = await renderWithProviders(<SettingsScreen />);
 
     expect(getByText('NAS')).toBeTruthy();
     expect(getByText('http://10.0.0.1:61208')).toBeTruthy();
-    expect(getByText('every 5s')).toBeTruthy();
+    // The default cadence is now the reference's 2 s, not the old 5 s.
+    expect(getByText('every 2s')).toBeTruthy();
   });
 
   it('marks the default server', async () => {
-    const first = addServer('A');
-    addServer('B');
+    const first = addEndpoint('A');
+    addEndpoint('B');
 
     const { getByTestId, queryByTestId } = await renderWithProviders(<SettingsScreen />);
 
@@ -54,28 +55,28 @@ describe('SettingsScreen', () => {
   });
 
   it('switches the default server', async () => {
-    addServer('A');
-    const second = addServer('B');
+    addEndpoint('A');
+    const second = addEndpoint('B');
 
     const { getByTestId, user } = await renderWithProviders(<SettingsScreen />);
     await user.press(getByTestId(`server-make-default-${second.id}`));
 
-    expect(useServersStore.getState().defaultServerId).toBe(second.id);
+    expect(useEndpointsStore.getState().defaultEndpointId).toBe(second.id);
   });
 
   it('requires confirmation before deleting, and warns about widgets', async () => {
-    const server = addServer('A');
+    const server = addEndpoint('A');
     useWidgetsStore.getState().addWidget({ serverId: server.id, metric: 'cpu' });
 
     const { getByTestId, getByText, user } = await renderWithProviders(<SettingsScreen />);
     await user.press(getByTestId(`server-delete-${server.id}`));
 
-    expect(getByText('Delete this server and its 1 widget?')).toBeTruthy();
-    expect(useServersStore.getState().servers).toHaveLength(1);
+    expect(getByText('Delete this endpoint and its 1 widget?')).toBeTruthy();
+    expect(useEndpointsStore.getState().endpoints).toHaveLength(1);
   });
 
   it('deletes the server and its widgets once confirmed', async () => {
-    const server = addServer('A');
+    const server = addEndpoint('A');
     useWidgetsStore.getState().addWidget({ serverId: server.id, metric: 'cpu' });
     useWidgetsStore.getState().addWidget({ serverId: 'other', metric: 'mem' });
 
@@ -83,7 +84,7 @@ describe('SettingsScreen', () => {
     await user.press(getByTestId(`server-delete-${server.id}`));
     await user.press(getByTestId(`server-confirm-delete-${server.id}`));
 
-    expect(useServersStore.getState().servers).toHaveLength(0);
+    expect(useEndpointsStore.getState().endpoints).toHaveLength(0);
     expect(useWidgetsStore.getState().widgets.map((w) => w.serverId)).toEqual(['other']);
   });
 
@@ -98,7 +99,7 @@ describe('SettingsScreen', () => {
   });
 
   it('navigates to the edit form for a server', async () => {
-    const server = addServer('A');
+    const server = addEndpoint('A');
 
     const { getByTestId, user } = await renderWithProviders(<SettingsScreen />);
     await user.press(getByTestId(`server-edit-${server.id}`));
@@ -143,12 +144,38 @@ describe('SettingsScreen — appearance', () => {
     expect(usePreferencesStore.getState().summaryStripVisible).toBe(false);
   });
 
-  it('recolours an endpoint, and the change sticks to the server', async () => {
-    const server = useServersStore.getState().addServer({ name: 'NAS', url: '10.0.0.1' });
+  it('recolours an endpoint, and the change sticks', async () => {
+    const endpoint = useEndpointsStore.getState().addEndpoint({ name: 'NAS', url: '10.0.0.1' });
+    // A new endpoint has no accent — the chip shows its state instead.
+    expect(endpoint.color).toBeNull();
 
     const { getByTestId, user } = await renderWithProviders(<SettingsScreen />);
-    await user.press(getByTestId(`server-accent-${server.id}-2`));
+    await user.press(getByTestId(`server-accent-${endpoint.id}-cyan`));
 
-    expect(useServersStore.getState().servers[0].accentIndex).toBe(2);
+    expect(useEndpointsStore.getState().endpoints[0].color).toBe('cyan');
+  });
+
+  it('clears the accent again, which is its reset', async () => {
+    const endpoint = useEndpointsStore
+      .getState()
+      .addEndpoint({ name: 'NAS', url: '10.0.0.1', color: 'amber' });
+
+    const { getByTestId, user } = await renderWithProviders(<SettingsScreen />);
+    await user.press(getByTestId(`server-accent-${endpoint.id}-none`));
+
+    expect(useEndpointsStore.getState().endpoints[0].color).toBeNull();
+  });
+
+  it('pauses an endpoint without deleting it or its widgets', async () => {
+    // Pausing has to be visibly different from a failure, and must not cost the board its widgets.
+    const endpoint = useEndpointsStore.getState().addEndpoint({ name: 'NAS', url: '10.0.0.1' });
+    useWidgetsStore.getState().addWidget({ serverId: endpoint.id, metric: 'cpu' });
+
+    const { getByTestId, user } = await renderWithProviders(<SettingsScreen />);
+    await user.press(getByTestId(`server-toggle-enabled-${endpoint.id}`));
+
+    expect(useEndpointsStore.getState().endpoints[0].enabled).toBe(false);
+    expect(useWidgetsStore.getState().widgets).toHaveLength(1);
+    expect(getByTestId(`server-state-${endpoint.id}`)).toHaveTextContent(/Paused/);
   });
 });

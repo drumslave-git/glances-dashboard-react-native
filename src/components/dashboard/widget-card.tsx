@@ -8,9 +8,11 @@ import { Label, MonoText } from '@/components/telemetry/text';
 import { WidgetContent } from '@/components/widgets/widget-content';
 import { useGlancesQuery } from '@/hooks/useGlancesQuery';
 import { useFieldHistory, useProcessHistory } from '@/hooks/useWidgetHistory';
-import { selectServerById, useServersStore } from '@/state/servers';
+import { selectEndpointById, useEndpointsStore } from '@/state/endpoints';
 import { GEOMETRY } from '@/theme/telemetry';
 import { useTelemetry } from '@/theme/use-telemetry';
+import { useEndpointState } from '@/hooks/useEndpointState';
+import { endpointOverlay } from '@/utils/endpointStatus';
 import type { WidgetConfig } from '@/types/dashboard';
 import { buildProcessTable, DEFAULT_PROCESS_SORT } from '@/utils/processTable';
 import { recentSamples, seriesStats, TIME_WINDOWS } from '@/utils/sampleBuffer';
@@ -65,7 +67,7 @@ function WidgetCardInner({
   count,
 }: WidgetCardProps) {
   const { t, accentFor } = useTelemetry();
-  const server = useServersStore((state) => selectServerById(state, widget.serverId));
+  const server = useEndpointsStore((state) => selectEndpointById(state, widget.serverId));
   const { data, isLoading, error, dataUpdatedAt } = useGlancesQuery(server, widget.endpointPath);
 
   const [menuOpen, setMenuOpen] = useState(false);
@@ -78,8 +80,11 @@ function WidgetCardInner({
     );
   };
 
-  const accentIndex = server?.accentIndex ?? 0;
-  const accent = accentFor(accentIndex);
+  const endpointState = useEndpointState(server);
+  // The *body* keeps an accent even when the endpoint has none: this colours chart lines and
+  // meter fills, where the question is "what does a healthy reading look like", not "which
+  // machine is this". Identity is the tick and the chip, and those do go colourless.
+  const accent = accentFor(server?.color ?? 'lime');
   // Before the first layout there is nothing to classify. Assuming `regular`
   // rather than the smallest class means the header does not flash a degraded
   // rung — a bare colour dot appearing and then becoming a chip — on every mount.
@@ -202,7 +207,11 @@ function WidgetCardInner({
       testID={`widget-${widget.id}`}
     >
       <XStack items="center" gap={9} height={HEADER_HEIGHT} flexWrap="nowrap">
-        <AccentTick accentIndex={accentIndex} testID={`widget-accent-${widget.id}`} />
+        <AccentTick
+          color={server?.color ?? null}
+          state={endpointState}
+          testID={`widget-accent-${widget.id}`}
+        />
         <Label
           numberOfLines={1}
           shrink={1}
@@ -215,7 +224,8 @@ function WidgetCardInner({
         {server && (
           <EndpointChip
             name={server.name}
-            accentIndex={accentIndex}
+            color={server.color}
+            state={endpointState}
             variant={rung === 'dot' ? 'dot' : 'chip'}
             testID={`widget-endpoint-${widget.id}`}
           />
@@ -274,6 +284,7 @@ function WidgetCardInner({
             ...(widget.processSort ? { processSort: widget.processSort } : {}),
           }}
           noServer={!server}
+          endpointMessage={endpointOverlay(endpointState)}
           loading={isLoading}
           error={error ? error.message : null}
           testID={`widget-content-${widget.id}`}

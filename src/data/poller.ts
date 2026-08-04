@@ -40,10 +40,17 @@ const BACKOFF_MAX_MS = 30_000;
 const OFFLINE_AFTER_FAILURES = 3;
 
 /**
- * What an endpoint with no widgets still polls, so the pipeline is observable end to end before the
- * widget catalog exists to drive plugin selection (M12). The reference did the same in its own M2.
+ * What an endpoint with nothing asking for anything still polls.
+ *
+ * It has to be *something*: `degraded` and `offline` are derived from polls failing, so an endpoint
+ * that fetched nothing could never be noticed going down — the probe only runs at connect.
+ *
+ * `quicklook` alone, because it is the most informative single request Glances offers: cpu, memory,
+ * swap and load in one payload. The reference bootstraps with four plugins here, but it has no
+ * second polling mechanism running beside it; until M12 retires `useGlancesQuery`, every extra
+ * plugin in this list is a request to someone's server that nothing on screen displays.
  */
-export const DEFAULT_PLUGINS: PluginName[] = ['quicklook', 'cpu', 'mem', 'network'];
+export const DEFAULT_PLUGINS: PluginName[] = ['quicklook'];
 
 const TIERS: PollTier[] = ['fast', 'heavy', 'slow', 'static'];
 

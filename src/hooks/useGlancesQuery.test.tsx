@@ -2,16 +2,19 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { renderHook, waitFor } from '@testing-library/react-native';
 import type { ReactNode } from 'react';
 
-import type { GlancesServer } from '@/types/dashboard';
+import type { GlancesEndpoint } from '@/types/dashboard';
 
 import { useGlancesQuery } from './useGlancesQuery';
 
-const server: GlancesServer = {
+const server: GlancesEndpoint = {
   id: 's-1',
   name: 'NAS',
   url: 'http://host:61208',
-  refreshMs: 0,
-  accentIndex: 0,
+  pollIntervalMs: 0,
+  enabled: true,
+  color: null,
+  sortOrder: 0,
+  createdAt: 0,
 };
 
 function createWrapper() {
@@ -51,6 +54,20 @@ describe('useGlancesQuery', () => {
       signal: expect.anything(),
       headers: { Accept: 'application/json' },
     });
+  });
+
+  it('does not fetch from a paused endpoint', async () => {
+    // Pausing has to mean paused everywhere. Until the widgets move onto the poller there are two
+    // things fetching, and stopping only one of them would make the button a lie.
+    mockJson({ total: 12 });
+
+    const { result } = await renderHook(
+      () => useGlancesQuery({ ...server, enabled: false }, '/api/4/cpu'),
+      { wrapper: createWrapper() },
+    );
+
+    expect(result.current.fetchStatus).toBe('idle');
+    expect(global.fetch).not.toHaveBeenCalled();
   });
 
   it('stays disabled without a server', async () => {

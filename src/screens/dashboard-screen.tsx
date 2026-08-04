@@ -13,7 +13,7 @@ import { UiText } from '@/components/telemetry/text';
 import { useImmersiveExit } from '@/hooks/useImmersiveMode';
 import { useSummarySources } from '@/hooks/useGlancesQuery';
 import { usePreferencesStore } from '@/state/preferences';
-import { selectServerById, useServersStore } from '@/state/servers';
+import { selectEndpointById, useEndpointsStore } from '@/state/endpoints';
 import { useUiStore } from '@/state/ui';
 import { selectOrderedWidgets, useWidgetsStore } from '@/state/widgets';
 import { nextTimeWindow } from '@/utils/sampleBuffer';
@@ -39,8 +39,8 @@ export function DashboardScreen() {
 
   const summaryStripVisible = usePreferencesStore((state) => state.summaryStripVisible);
 
-  const servers = useServersStore((state) => state.servers);
-  const defaultServer = useServersStore((state) => selectServerById(state, state.defaultServerId));
+  const endpoints = useEndpointsStore((state) => state.endpoints);
+  const defaultServer = useEndpointsStore((state) => selectEndpointById(state, state.defaultEndpointId));
   // Selecting the sorted array directly would hand useSyncExternalStore a new
   // reference on every render and loop, so sort outside the selector.
   const storedWidgets = useWidgetsStore((state) => state.widgets);
@@ -52,7 +52,7 @@ export function DashboardScreen() {
 
   // Immersive mode hides the strip along with the toolbar: it is chrome, and the
   // requests behind it stop with it.
-  const showStrip = summaryStripVisible && !immersive && servers.length > 0;
+  const showStrip = summaryStripVisible && !immersive && endpoints.length > 0;
   const summary = useSummarySources(defaultServer, showStrip);
 
   const handleExitImmersive = useCallback(() => exitImmersive(), [exitImmersive]);
@@ -69,8 +69,8 @@ export function DashboardScreen() {
   };
 
   const refreshLabel =
-    defaultServer && defaultServer.refreshMs > 0
-      ? `${Math.round(defaultServer.refreshMs / 100) / 10}s refresh`
+    defaultServer && defaultServer.pollIntervalMs > 0
+      ? `${Math.round(defaultServer.pollIntervalMs / 100) / 10}s refresh`
       : null;
 
   const grid = (
@@ -93,7 +93,7 @@ export function DashboardScreen() {
       <YStack flex={1} bg="$appBg">
         {!immersive && (
           <Toolbar
-            servers={servers}
+            endpoints={endpoints}
             editMode={editMode}
             refreshLabel={refreshLabel}
             onAddWidget={() => router.push('/widget/pick')}
@@ -105,12 +105,12 @@ export function DashboardScreen() {
 
         {showStrip && <SummaryStrip {...summary} testID="dashboard-summary" />}
 
-        {servers.length === 0 ? (
+        {endpoints.length === 0 ? (
           <EmptyState
             message="No endpoints configured. Add one to start reading metrics."
             action="Add an endpoint"
             onPress={() => router.push('/settings')}
-            testID="dashboard-no-servers"
+            testID="dashboard-no-endpoints"
             actionTestID="dashboard-add-server"
           />
         ) : widgets.length === 0 ? (

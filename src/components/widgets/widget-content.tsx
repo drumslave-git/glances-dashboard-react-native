@@ -67,27 +67,40 @@ export interface WidgetContentProps {
   trends?: Record<string, Sample[]>;
   /** No server is configured for this widget at all. */
   noServer?: boolean;
+  /**
+   * The endpoint's own state, when it is something a widget cannot draw through — paused,
+   * offline, unsupported. Outranks every other message: "No data yet." is true but useless when
+   * the real answer is that nobody is asking the server anything.
+   */
+  endpointMessage?: string | null;
   loading?: boolean;
   error?: string | null;
   testID?: string;
 }
 
 /**
- * Which message replaces the body, if any. Ported from the reference app so the
- * precedence (no server → loading → error → no data) stays identical.
+ * Which message replaces the body, if any.
+ *
+ * Precedence is ported from the reference — no server → loading → error → no data — with the
+ * endpoint's own state inserted **above all of them**. A paused endpoint used to read "No data
+ * yet.", which is true and tells the user nothing: it looks like a widget still trying, when in
+ * fact nothing is being asked of the server at all.
  */
 export function getStatusMessage({
   noServer,
+  endpointMessage,
   loading,
   error,
   data,
 }: {
   noServer?: boolean;
+  endpointMessage?: string | null;
   loading?: boolean;
   error?: string | null;
   data: unknown;
 }): string | null {
   if (noServer) return 'Pick a server for this widget.';
+  if (endpointMessage) return endpointMessage;
   if (loading && data == null) return 'Loading…';
   if (error) return `Error: ${error}`;
   if (data == null) return 'No data yet.';
@@ -121,6 +134,7 @@ export function WidgetContent({
   series,
   trends,
   noServer = false,
+  endpointMessage = null,
   loading = false,
   error = null,
   testID,
@@ -128,7 +142,7 @@ export function WidgetContent({
   const { mode, accent } = useTelemetry();
   const resolvedAccent = accentColor ?? accent('lime').stroke;
   const resolvedSizeClass = sizeClass ?? sizeClassForWidth(width);
-  const statusMessage = getStatusMessage({ noServer, loading, error, data });
+  const statusMessage = getStatusMessage({ noServer, endpointMessage, loading, error, data });
   // Memoised because it is a dependency below: a fresh `[]` every render would
   // recompute the readings on every poll of every other widget on the board.
   const fields = useMemo(

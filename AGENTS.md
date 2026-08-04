@@ -159,7 +159,7 @@ Verify against installed types (`node_modules/**/*.d.ts`) rather than memory —
   `netsh int ipv4 show excludedportrange protocol=tcp`; the ranges change on reboot. Either pick a
   port outside them or verify against the built desktop app, which serves `dist/` from
   `tauri.localhost` and needs no dev server at all.
-- **A Tauri window can be driven over CDP.** Launch the exe with `WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS=--remote-debugging-port=9222` and attach to `http://127.0.0.1:9222/json/list`. Unlike the automation pane's hidden tab, this window is genuinely visible, so Skia paints and `Page.captureScreenshot` works. Mouse events are dispatched in viewport coordinates — an element scrolled below the fold gets a click at a `y` outside the window, which silently does nothing.
+- **A Tauri window can be driven over CDP.** Launch the exe with `WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS=--remote-debugging-port=9222` and attach to `http://127.0.0.1:9222/json/list`. Unlike the automation pane's hidden tab, this window is genuinely visible, so Skia paints and `Page.captureScreenshot` works. Mouse events are dispatched in viewport coordinates — an element scrolled below the fold gets a click at a `y` outside the window, which silently does nothing. **Close the window before rebuilding**: a running app holds `target/release/glances-dashboard.exe` open and `tauri build` fails with `Access is denied. (os error 5)`.
 
 ## The "Telemetry" design system (M8)
 

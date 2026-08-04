@@ -1,5 +1,5 @@
 import { usePreferencesStore } from '@/state/preferences';
-import { resetServerIdCounter, useServersStore } from '@/state/servers';
+import { resetEndpointIdCounter, useEndpointsStore } from '@/state/endpoints';
 import { useUiStore } from '@/state/ui';
 import { useWidgetsStore } from '@/state/widgets';
 import { renderWithProviders, waitFor } from '@/test-utils/render';
@@ -28,9 +28,9 @@ function mockGlances(payloads: Record<string, unknown>) {
 
 beforeEach(() => {
   mockPush.mockClear();
-  resetServerIdCounter();
+  resetEndpointIdCounter();
   resetWidgetIdCounter();
-  useServersStore.setState({ servers: [], defaultServerId: null });
+  useEndpointsStore.setState({ endpoints: [], defaultEndpointId: null });
   useWidgetsStore.setState({ widgets: [] });
   // Edit and immersive mode live in a module-level store now, so without this
   // each test would inherit whatever the previous one toggled.
@@ -43,7 +43,7 @@ afterEach(() => {
 });
 
 function addServerAndWidget(fields?: string[]) {
-  const server = useServersStore.getState().addServer({ name: 'NAS', url: '10.0.0.1' });
+  const server = useEndpointsStore.getState().addEndpoint({ name: 'NAS', url: '10.0.0.1' });
   const widget = useWidgetsStore.getState().addWidget({ serverId: server.id, metric: 'cpu' });
   useWidgetsStore.getState().updateWidget(widget.id, {
     title: 'CPU',
@@ -56,12 +56,12 @@ describe('DashboardScreen - empty states', () => {
   it('asks for a server when none exist', async () => {
     const { getByTestId } = await renderWithProviders(<DashboardScreen />);
 
-    expect(getByTestId('dashboard-no-servers')).toBeTruthy();
+    expect(getByTestId('dashboard-no-endpoints')).toBeTruthy();
   });
 
   it('asks for a widget once a server exists', async () => {
     mockGlances({ '/api/4/system': { hostname: 'nas' } });
-    useServersStore.getState().addServer({ name: 'NAS', url: '10.0.0.1' });
+    useEndpointsStore.getState().addEndpoint({ name: 'NAS', url: '10.0.0.1' });
 
     const { getByTestId } = await renderWithProviders(<DashboardScreen />);
 
@@ -70,7 +70,7 @@ describe('DashboardScreen - empty states', () => {
 
   it('routes to the widget type picker', async () => {
     mockGlances({ '/api/4/system': { hostname: 'nas' } });
-    useServersStore.getState().addServer({ name: 'NAS', url: '10.0.0.1' });
+    useEndpointsStore.getState().addEndpoint({ name: 'NAS', url: '10.0.0.1' });
 
     const { getByTestId, user } = await renderWithProviders(<DashboardScreen />);
     await user.press(getByTestId('dashboard-add-first-widget'));
@@ -82,8 +82,8 @@ describe('DashboardScreen - empty states', () => {
 describe('DashboardScreen - toolbar', () => {
   it('lists every configured endpoint as a chip', async () => {
     mockGlances({ '/api/4/system': { hostname: 'nas' } });
-    const a = useServersStore.getState().addServer({ name: 'NAS', url: '10.0.0.1' });
-    const b = useServersStore.getState().addServer({ name: 'Builder', url: '10.0.0.2' });
+    const a = useEndpointsStore.getState().addEndpoint({ name: 'NAS', url: '10.0.0.1' });
+    const b = useEndpointsStore.getState().addEndpoint({ name: 'Builder', url: '10.0.0.2' });
 
     const { getByTestId } = await renderWithProviders(<DashboardScreen />);
 
@@ -95,20 +95,23 @@ describe('DashboardScreen - toolbar', () => {
     // The toolbar auto-hides in immersive mode, so nothing that has to stay
     // readable may live here. The polling cadence is configuration, not telemetry.
     mockGlances({ '/api/4/system': { hostname: 'nas' } });
-    useServersStore.getState().addServer({ name: 'NAS', url: '10.0.0.1', refreshMs: 2500 });
+    useEndpointsStore.getState().addEndpoint({ name: 'NAS', url: '10.0.0.1', pollIntervalMs: 2500 });
 
     const { getByTestId } = await renderWithProviders(<DashboardScreen />);
 
     expect(getByTestId('toolbar-refresh')).toHaveTextContent('2.5s refresh');
   });
 
-  it('shows no cadence for a server that is fetched once', async () => {
+  it('floors an unreasonably fast cadence at one second', async () => {
+    // There is no "fetch once" any more — stopping an endpoint is what pausing it is for. An
+    // interval below a second only costs requests, because the server caches its stats for that
+    // long and returns the same numbers.
     mockGlances({ '/api/4/system': { hostname: 'nas' } });
-    useServersStore.getState().addServer({ name: 'NAS', url: '10.0.0.1', refreshMs: 0 });
+    useEndpointsStore.getState().addEndpoint({ name: 'NAS', url: '10.0.0.1', pollIntervalMs: 100 });
 
-    const { queryByTestId } = await renderWithProviders(<DashboardScreen />);
+    const { getByTestId } = await renderWithProviders(<DashboardScreen />);
 
-    expect(queryByTestId('toolbar-refresh')).toBeNull();
+    expect(getByTestId('toolbar-refresh')).toHaveTextContent('1s refresh');
   });
 });
 
@@ -121,7 +124,7 @@ describe('DashboardScreen - summary strip', () => {
       '/api/4/processcount': { total: 412, running: 3 },
       '/api/4/fs': [{ device_name: '/dev/sda1', used: 1.2 * 1024 ** 4, size: 3.6 * 1024 ** 4 }],
     });
-    useServersStore.getState().addServer({ name: 'NAS', url: '10.0.0.1' });
+    useEndpointsStore.getState().addEndpoint({ name: 'NAS', url: '10.0.0.1' });
 
     const { getByTestId } = await renderWithProviders(<DashboardScreen />);
 
@@ -137,7 +140,7 @@ describe('DashboardScreen - summary strip', () => {
 
   it('can be turned off', async () => {
     mockGlances({ '/api/4/system': { hostname: 'nas' } });
-    useServersStore.getState().addServer({ name: 'NAS', url: '10.0.0.1' });
+    useEndpointsStore.getState().addEndpoint({ name: 'NAS', url: '10.0.0.1' });
     usePreferencesStore.setState({ summaryStripVisible: false });
 
     const { queryByTestId } = await renderWithProviders(<DashboardScreen />);
@@ -166,7 +169,7 @@ describe('DashboardScreen - widgets', () => {
       '/api/4/system': { hostname: 'nas' },
       '/api/4/cpu': { total: 12.5 },
     });
-    const server = useServersStore.getState().addServer({ name: 'NAS', url: '10.0.0.1' });
+    const server = useEndpointsStore.getState().addEndpoint({ name: 'NAS', url: '10.0.0.1' });
     const widget = useWidgetsStore.getState().addWidget({ serverId: server.id, metric: 'cpu' });
     useWidgetsStore.getState().updateWidget(widget.id, { title: 'CPU {{total}}%' });
 
