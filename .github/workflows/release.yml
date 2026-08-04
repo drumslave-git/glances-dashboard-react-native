@@ -36,7 +36,7 @@ jobs:
       version: ${{ steps.version.outputs.version }}
       release: ${{ steps.version.outputs.release }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 2
 
@@ -72,8 +72,8 @@ jobs:
     if: needs.check.outputs.release == 'true'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
@@ -95,8 +95,8 @@ jobs:
     needs: [check, verify]
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
@@ -110,7 +110,7 @@ jobs:
           cd dist
           zip -qr "../glances-dashboard-web-${{ needs.check.outputs.version }}.zip" .
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: web
           path: glances-dashboard-web-*.zip
@@ -121,20 +121,20 @@ jobs:
     needs: [check, verify]
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
 
       # JDK 17. Newer JDKs break AGP's CMake step with "a restricted method in
       # java.lang.System has been called" — the same trap documented in AGENTS.md.
-      - uses: actions/setup-java@v4
+      - uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: '17'
 
-      - uses: gradle/actions/setup-gradle@v4
+      - uses: gradle/actions/setup-gradle@v6
 
       - run: npm install
 
@@ -160,7 +160,7 @@ jobs:
           mv android/app/build/outputs/apk/release/app-release.apk \
              "glances-dashboard-${{ needs.check.outputs.version }}.apk"
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: android
           path: glances-dashboard-*.apk
@@ -171,8 +171,8 @@ jobs:
     needs: [check, verify]
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
@@ -196,7 +196,7 @@ jobs:
           cp src-tauri/target/release/glances-dashboard.exe \
              "artifacts/glances-dashboard-${{ needs.check.outputs.version }}-portable.exe"
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: desktop
           path: artifacts/*
@@ -212,9 +212,9 @@ jobs:
       TAG: v${{ needs.check.outputs.version }}
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           path: artifacts
           merge-multiple: true
