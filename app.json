@@ -14,6 +14,7 @@
     },
     "android": {
       "package": "com.glancesdashboard.app",
+      "versionCode": 100,
       "adaptiveIcon": {
         "backgroundColor": "#101113",
         "foregroundImage": "./assets/images/android-icon-foreground.png",

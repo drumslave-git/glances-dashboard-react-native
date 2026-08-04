@@ -35,6 +35,7 @@ Then press `a` for Android (Expo Go or an emulator) or `w` for web.
 | `npm test` | Jest unit + component tests |
 | `npm run lint` | ESLint |
 | `npm run typecheck` | `tsc --noEmit` |
+| `npm run release:patch` | Bump the version to cut a release — see [Releases](#releases) |
 
 ## Requirements
 
@@ -153,6 +154,50 @@ The one way desktop is *better* than a hosted PWA: that origin is `http://`, so 
 mixed-content rule stopping it from reading a plain-http Glances on the LAN. (Tauri's
 `useHttpsScheme` would switch the origin to `https://tauri.localhost` and reintroduce
 exactly that problem, which is why it is left off.)
+
+## Releases
+
+**The version field in `package.json` is the release trigger.** Bump it, commit, push to
+`main` — [`.github/workflows/release.yml`](.github/workflows/release.yml) does the rest:
+
+```bash
+npm run release:patch
+```
+
+(`release:minor` and `release:major` for the other two; pick by semver intent.) The bump
+deliberately creates **no git tag** — the workflow owns tags, so a local one can never
+disagree with what shipped. `npm version` runs `scripts/sync-version.js` on the way through,
+which propagates the new version into `app.json` (including a monotonic Android
+`versionCode`) and `src-tauri/tauri.conf.json`. Commit all four files together.
+
+On push, the workflow compares the version against the previous commit. Unchanged means
+nothing runs, so ordinary dependency edits to `package.json` are free. Changed means:
+
+1. **Gate** — `lint`, `typecheck`, `test`, plus a check that the three version fields agree.
+2. **Build**, in parallel — the web export, the Android APK, and the Windows installer.
+3. **Publish** — tag `vX.Y.Z`, create the GitHub Release, attach everything.
+
+| Asset | Built by |
+| --- | --- |
+| `Glances Dashboard_<version>_x64-setup.exe` | `windows-latest`, Rust + `npm run build:desktop` |
+| `glances-dashboard-<version>-portable.exe` | the same build, unpacked |
+| `glances-dashboard-<version>.apk` | `expo prebuild` + `gradlew assembleRelease` |
+| `glances-dashboard-web-<version>.zip` | `npm run build:web`, zipped `dist/` |
+
+The tag is pushed only after all three builds succeed, so a broken build leaves no tag and
+no half-empty release. Re-running the workflow on the same version is safe — the tag, the
+release and each upload all check for what is already there.
+
+A release needs no code change: bumping the version alone is enough to rebuild, which is how
+you pick up a base-image or toolchain fix.
+
+**The APK is debug-signed.** Expo's generated project points its `release` buildType at the
+template's debug keystore, and CI leaves it there — no secrets to manage, and the signature
+is stable across builds so upgrades install over each other. It is fine for sideloading and
+not fine for a store listing. Moving to a real keystore means generating one, adding it
+base64-encoded plus its passwords as repository secrets, and giving `android/app/build.gradle`
+a proper `signingConfig` via a config plugin (the `android/` directory is generated, so the
+edit cannot simply be committed).
 
 ## Documentation
 

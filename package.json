@@ -18,7 +18,12 @@
     "lint": "expo lint",
     "typecheck": "tsc --noEmit",
     "test": "jest",
-    "test:watch": "jest --watch"
+    "test:watch": "jest --watch",
+    "sync:version": "node scripts/sync-version.js",
+    "version": "node scripts/sync-version.js",
+    "release:patch": "npm version patch --no-git-tag-version",
+    "release:minor": "npm version minor --no-git-tag-version",
+    "release:major": "npm version major --no-git-tag-version"
   },
   "dependencies": {
     "@expo-google-fonts/jetbrains-mono": "^0.4.1",

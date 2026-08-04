@@ -1,0 +1,240 @@
+# The version field in package.json is the release trigger.
+#
+# Bump it locally (`npm run release:patch`), commit, push to main — this workflow
+# notices the change, runs the full gate, builds all three targets and publishes
+# a GitHub Release with the artifacts attached. Ordinary edits to package.json
+# (a dependency added, a script renamed) leave the version alone and release
+# nothing.
+#
+# The tag is created here rather than locally so a local tag can never disagree
+# with what actually shipped, and only after every build has succeeded — a failed
+# desktop build means no tag and no half-empty release. Re-running the workflow
+# on the same version is safe: the tag and release steps both check first.
+name: Release
+
+on:
+  push:
+    branches: [main]
+    paths: ['package.json']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+env:
+  NODE_VERSION: '24'
+
+jobs:
+  check:
+    name: Version changed?
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      release: ${{ steps.version.outputs.release }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - id: version
+        shell: bash
+        run: |
+          current=$(node -p "require('./package.json').version")
+          echo "version=$current" >> "$GITHUB_OUTPUT"
+
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "Manual run — releasing v$current."
+            echo "release=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          if git show HEAD^:package.json > /tmp/previous-package.json 2>/dev/null; then
+            previous=$(node -p "require('/tmp/previous-package.json').version")
+          else
+            previous=""
+          fi
+
+          if [ "$current" = "$previous" ]; then
+            echo "Version unchanged at $current — nothing to release."
+            echo "release=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "Version $previous -> $current."
+            echo "release=true" >> "$GITHUB_OUTPUT"
+          fi
+
+  verify:
+    name: Lint, typecheck, test
+    needs: check
+    if: needs.check.outputs.release == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      # `npm install`, not `npm ci`: the lockfile is generated on Windows and so
+      # omits the Linux-only optional native builds (lightningcss and friends),
+      # which `npm ci`'s strict sync check then rejects.
+      - run: npm install
+
+      - name: Versions agree across package.json, app.json and tauri.conf.json
+        run: node scripts/sync-version.js --check
+
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm test -- --ci
+
+  web:
+    name: Web bundle
+    needs: [check, verify]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+      - run: npm install
+
+      # Pulls canvaskit.wasm into public/ first — charts do not render without it.
+      - run: npm run build:web
+
+      - name: Zip the export
+        run: |
+          cd dist
+          zip -qr "../glances-dashboard-web-${{ needs.check.outputs.version }}.zip" .
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: web
+          path: glances-dashboard-web-*.zip
+          if-no-files-found: error
+
+  android:
+    name: Android APK
+    needs: [check, verify]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      # JDK 17. Newer JDKs break AGP's CMake step with "a restricted method in
+      # java.lang.System has been called" — the same trap documented in AGENTS.md.
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - run: npm install
+
+      # expo-modules-autolinking pins this exact NDK; the runner image ships a
+      # different patch release, and Gradle will not substitute one for the other.
+      - name: Install NDK 27.1.12297006
+        run: yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --install "ndk;27.1.12297006"
+
+      # android/ is gitignored — it is generated output, so CI regenerates it.
+      - run: npx expo prebuild --platform android --no-install
+
+      # Signed with the debug keystore Expo's template ships (the generated
+      # project's release buildType already points at it). Fine for sideloading
+      # and stable across builds, so upgrades install over each other — but it is
+      # not a distribution signature. Swapping in a real keystore means adding
+      # secrets and a signingConfig; see README.
+      - name: Assemble release APK
+        working-directory: android
+        run: ./gradlew assembleRelease --no-daemon
+
+      - name: Name it after the release
+        run: |
+          mv android/app/build/outputs/apk/release/app-release.apk \
+             "glances-dashboard-${{ needs.check.outputs.version }}.apk"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: android
+          path: glances-dashboard-*.apk
+          if-no-files-found: error
+
+  desktop:
+    name: Windows installer
+    needs: [check, verify]
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - run: npm install
+
+      # `tauri build` runs `npm run build:web` itself (beforeBuildCommand) and
+      # then wraps the export; NSIS is downloaded on demand.
+      - run: npm run build:desktop
+
+      - name: Collect the installer and the portable exe
+        shell: bash
+        run: |
+          mkdir -p artifacts
+          cp src-tauri/target/release/bundle/nsis/*-setup.exe artifacts/
+          cp src-tauri/target/release/glances-dashboard.exe \
+             "artifacts/glances-dashboard-${{ needs.check.outputs.version }}-portable.exe"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: desktop
+          path: artifacts/*
+          if-no-files-found: error
+
+  publish:
+    name: Tag and publish
+    needs: [check, verify, web, android, desktop]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      TAG: v${{ needs.check.outputs.version }}
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+
+      - name: Tag the release commit
+        run: |
+          if git ls-remote --exit-code --tags origin "refs/tags/$TAG" > /dev/null 2>&1; then
+            echo "$TAG already exists — leaving it alone."
+          else
+            git tag "$TAG"
+            git push origin "$TAG"
+          fi
+
+      - name: Create the release
+        run: |
+          if gh release view "$TAG" > /dev/null 2>&1; then
+            echo "Release $TAG already exists — uploading into it."
+          else
+            gh release create "$TAG" --title "$TAG" --generate-notes
+          fi
+
+      - name: Attach the artifacts
+        run: gh release upload "$TAG" artifacts/* --clobber

@@ -4,7 +4,7 @@ Tracks execution of [REWRITE_PLAN.md](REWRITE_PLAN.md). Update this file in the 
 commit as the work it describes. One line per task; add dated notes under each milestone
 when something non-obvious happened.
 
-**Current status:** M8 complete — the "Telemetry" redesign is implemented across every target: token layer for dark and light with the contrast floor under test, bundled Space Grotesk / JetBrains Mono, two-channel type scaling, the widget shell anatomy with its degrade ladders, per-endpoint accent colours, the toolbar and summary strip, and two new widget archetypes (ring gauge, time series). Next up: M9 hardening and release.
+**Current status:** M8 complete — the "Telemetry" redesign is implemented across every target: token layer for dark and light with the contrast floor under test, bundled Space Grotesk / JetBrains Mono, two-channel type scaling, the widget shell anatomy with its degrade ladders, per-endpoint accent colours, the toolbar and summary strip, and two new widget archetypes (ring gauge, time series). M9 is under way: the release pipeline is in place (a `package.json` version bump on `main` gates, builds and publishes the Windows installer, Android APK and web bundle). Still open in M9: component tests for the settings and config screens, the perf pass, and the README pass over every target.
 
 ## Milestones
 
@@ -460,11 +460,32 @@ for phone, tablet, web and the Tauri window are listed under *Adapted from deskt
   `explicitSize` prop so the widget shell's own measurement is reused — one fewer layout pass,
   and deterministic geometry in tests, where no layout event ever fires.
 
-### M9 — Hardening & release — `not started`
+### M9 — Hardening & release — `in progress`
 - [ ] Component tests: settings + config screens, error paths
 - [ ] Perf pass (memoization, background polling pause, processlist cost)
-- [ ] EAS Android build profile
+- [x] Release pipeline — `.github/workflows/release.yml` + `scripts/sync-version.js`
 - [ ] README for all targets
+
+**Notes (2026-08-04)**
+- The release trigger is the **`package.json` version field**, not a tag or a manual dispatch:
+  `npm run release:patch` bumps it with `--no-git-tag-version`, and the workflow tags only
+  after every build has passed. Local and remote tags therefore cannot disagree, and a broken
+  desktop build leaves no tag and no half-empty release rather than something to clean up.
+- Three files carry a version (`package.json`, `app.json`, `src-tauri/tauri.conf.json`), so
+  `scripts/sync-version.js` runs from `npm version`'s lifecycle hook and CI re-checks it with
+  `--check`. It edits the JSON by targeted string replacement rather than round-tripping it,
+  which keeps the files' hand-written formatting. Android's `versionCode` is derived —
+  `major*10000 + minor*100 + patch` — because Android refuses to install over an equal or
+  higher code and a hand-maintained counter would drift.
+- **The APK is debug-signed** (chosen with the owner). Expo's generated `release` buildType
+  already points at the template's debug keystore, so CI needs no secrets and the signature is
+  stable enough that upgrades install over each other. Not a distribution signature; the README
+  records what moving to a real keystore would take.
+- CI installs **NDK 27.1.12297006** explicitly: `expo-modules-autolinking`'s
+  `ExpoRootProjectPlugin` pins that exact version and Gradle will not substitute the runner
+  image's patch release. Java is pinned to **17** for the same reason the local build is.
+- `npm install`, not `npm ci`, everywhere in CI — the lockfile is generated on Windows and
+  omits the Linux-only optional native builds that `npm ci`'s strict sync check then rejects.
 
 ## Decisions log
 
@@ -521,6 +542,8 @@ for phone, tablet, web and the Tauri window are listed under *Adapted from deskt
 | 2026-08-03 | Sample history is in-memory and time windows measure back from the newest sample | Matches the handoff and the reference app; measuring from the data rather than the clock is also pure, and shows the last window of data when polling stalls |
 | 2026-08-03 | `expo-linear-gradient` added for the surfaces and meter fills the design specifies as gradients | It runs in Expo Go, so it costs nothing in native surface, and flattening the CPU meter's `#5e8a2e → #b6f24a` would lose a visibly meaningful gradient |
 | 2026-08-03 | Chart segments take a Telemetry palette, assigned by position, with the remainder of a used/free pair on the track colour | The ported Mantine primaries read as noise on a near-black instrument surface; hashing also gave collisions (the M3 notes recorded used/free colliding on mem) |
+| 2026-08-04 | Releases are triggered by the `package.json` version field; CI creates the tag, not the developer | A tag pushed only after all three builds pass cannot describe a release that does not exist, and there is no local tag to diverge from the remote |
+| 2026-08-04 | The Android APK is debug-signed in CI | Confirmed with the owner: the artifact is for sideloading, and the template keystore keeps CI secret-free while staying stable enough for in-place upgrades |
 | 2026-08-03 | Space Grotesk and JetBrains Mono are bundled, not fetched | The app ships as a desktop and offline-capable web build; a dashboard that must reach Google Fonts before it can render a number is not one |
 
 ## Blockers / open questions
