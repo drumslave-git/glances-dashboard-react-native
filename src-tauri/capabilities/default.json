@@ -1,11 +1,20 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "enables the default permissions",
+  "description": "Core defaults, plus HTTP access for the Glances poller. The http scope cannot be narrowed to a host list: an endpoint is whatever address the user configures — a LAN IP, a hostname, a reverse-proxied domain, on any port — and Tauri evaluates this scope at build time with no runtime hook to tighten it once a server has been added. It still confines the plugin to http and https, so no file:// or custom scheme is reachable, and the poller is the only caller.",
   "windows": [
     "main"
   ],
   "permissions": [
-    "core:default"
+    "core:default",
+    {
+      "identifier": "http:default",
+      "allow": [
+        { "url": "http://*" },
+        { "url": "http://*:*" },
+        { "url": "https://*" },
+        { "url": "https://*:*" }
+      ]
+    }
   ]
 }

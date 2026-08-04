@@ -4,7 +4,9 @@ Tracks execution of [REWRITE_PLAN.md](REWRITE_PLAN.md). Update this file in the 
 commit as the work it describes. One line per task; add dated notes under each milestone
 when something non-obvious happened.
 
-**Current status:** M8 complete — the "Telemetry" redesign is implemented across every target: token layer for dark and light with the contrast floor under test, bundled Space Grotesk / JetBrains Mono, two-channel type scaling, the widget shell anatomy with its degrade ladders, per-endpoint accent colours, the toolbar and summary strip, and two new widget archetypes (ring gauge, time series). M9 is under way: the release pipeline is in place (a `package.json` version bump on `main` gates, builds and publishes the Windows installer, Android APK and web bundle). **v0.1.1 shipped a desktop (and web) build that rendered a blank window** — `GradientSurface` covered the app; fixed and verified in the real Tauri window, details under M9. Still open in M9: component tests for the settings and config screens, the perf pass, and the README pass over every target.
+**Current status:** M10 (data layer) complete — normalized types, the tiered poller, ring buffers,
+probe, thresholds and the transport seam, with Tauri's Rust HTTP client making the desktop build
+immune to CORS. Next is M11 (endpoint model). Background: M0–M8 complete and v0.1.2 shipped, but **the reference app they were ported from no longer exists**. On 2026-08-04 the reference was re-examined at **v1.13.0** — it is now an Electron desktop app with 26 purpose-built widget types, a main-process tiered poller and a free drag/resize grid, where the port's source was a Mantine web app with five generic widgets. The owner's instruction is full parity with the current reference, so [REWRITE_PLAN.md](REWRITE_PLAN.md) has been realigned: §2's parity checklist is replaced and milestones **M10–M17** carry the work. The visual language already matches (both are the same "Telemetry" design system); the gap is what the app does. M9's remaining items are folded into the new plan. **The plan is awaiting the owner's approval — no M10+ code has been written.**
 
 ## Milestones
 
@@ -516,6 +518,136 @@ for phone, tablet, web and the Tauri window are listed under *Adapted from deskt
 - `npm install`, not `npm ci`, everywhere in CI — the lockfile is generated on Windows and
   omits the Linux-only optional native builds that `npm ci`'s strict sync check then rejects.
 
+---
+
+## Realignment against reference v1.13.0 — 2026-08-04
+
+The reference project was re-cloned and run. It is not the app M0–M9 were ported from.
+
+**What was done.** `npm install`, then the app run against the owner's live server
+(`https://glances.tcloud.monster`, Glances 4.5.6, 28 plugins) and driven over CDP; a board of 18
+widgets seeded through its own IPC; the add-widget picker, endpoint drawer, settings and
+appearance panels walked through. The RN build v0.1.2 was then run against the same server at the
+same moment for a side-by-side.
+
+**Findings.**
+
+- **The reference is a different application.** Vite + React + Mantine → Electron + MUI + ECharts +
+  better-sqlite3/drizzle, at v1.13.0. Five generic widgets → **26 typed ones** (14 metrics × their
+  renderings). Per-widget `fetch` → a **main-process poller** with four cadence tiers, plugin sets
+  derived from the placed widgets, backoff, and ring buffers outside React. Size presets → **free
+  drag and resize** over `{x,y,w,h}` on density-driven columns.
+- **The looks already match.** Both implement the same "Telemetry" system, and the token values
+  agree nearly literally — `#07080a` canvas, `#b6f24a` accent, `#5e8a2e` accent-dim, `#3d4a2b`
+  marker. The one deliberate divergence is text: this app brightened the muted steps to clear its
+  4.5:1 contrast floor, which the reference's `textLabel`/`textFaint` do not. The floor wins.
+- **Two real bugs in this app, found by running it.** Both are recorded under *Blockers* below.
+- **The reference's own install is not clean either**: `npm run setup` reported success without
+  downloading the Electron binary, and `electron-vite dev` then failed with `Error: Electron
+  uninstall`. `node node_modules/electron/install.js` is the fix.
+
+**Milestones.** The plan's new §4. Nothing started.
+
+### M10 — Data layer — `done` (2026-08-04)
+- [x] Normalized snapshot types (`src/types/glances.ts`) + `PLUGIN_SPECS` — paths, tiers, list
+      re-keying, rate resolution, composite sensor ids
+- [x] Real payloads captured from the live 4.5.6 server into `src/__fixtures__/payloads.ts`
+- [x] Tiered poller: fast / heavy (3 s floor) / slow (10 s) / static (60 s), backoff, hidden
+      cadence, immediate fetch of gained plugins, transient preview set — `src/data/poller.ts`
+- [x] Ring buffers outside React + the coordination store — `src/data/{buffers,feed-store}.ts`
+- [x] Probe: version detection (v3 → unsupported), capabilities, flattened `/api/4/all/limits`
+- [x] Threshold resolution (`ok` → the accent, not green) — `src/data/thresholds.ts`
+- [x] Transport seam (`transport.ts` / `transport.web.ts`) with Tauri's Rust HTTP client behind it;
+      `tauri-plugin-http` added to the Rust side and scoped in `capabilities/default.json`
+- [x] `fetchGlances` routed through the seam, so the existing UI gains the desktop path too
+- [x] `coerceServerUrl` scheme rule fixed (the blocker below)
+- [x] Visibility wiring — `src/data/lifecycle.ts` (AppState on native, `visibilitychange` on web)
+- [x] 582 tests across 36 suites; typecheck and lint clean
+- [x] **Verified in the built Windows app against the live server, on the URL that used to fail.**
+      `http://glances.tcloud.monster` — plain http, the one that 301s — now drives the whole board:
+      summary strip, CPU hero and trace, ring gauges, memory donut, process table, all polling. In
+      the *same* window, `fetch('http://glances.tcloud.monster/api/4/status')` still rejects with
+      `Failed to fetch`, which is the proof that the Rust client is what carries it. No error text
+      and no CORS wording anywhere on screen.
+- [ ] `useGlancesQuery` still serves the current generic widgets. It is superseded by the poller
+      but cannot be removed until the last generic widget goes in M12 — deleting it now would take
+      the running app with it.
+
+**Notes (2026-08-04)**
+- **The poller is a port, not a rewrite.** Tiers, backoff, the 3 s heavy floor and the
+  gained-plugin rule all come straight from `main/services/poller.ts`. What changed is what it
+  depends on: `PollerDeps` injects the transport, a clock, plugin derivation and the two store
+  writes, so the whole scheduler is exercised by `poller.test.ts` against a hand-driven clock and a
+  stub transport. The reference cannot do that — its copy is welded to `net.fetch` and `BrowserWindow`.
+- **Writing that test found a real bug.** `#onSuccess` set `state: 'online'` unconditionally, so a
+  plugin request that happened to succeed against a server whose *version* the probe had already
+  rejected would promote it back to online, and the chip would flip between the two. The probe is
+  now the only thing entitled to decide whether an endpoint is usable at all, and
+  `unsupported-version` is treated as terminal.
+- **The fake clock has to drain microtasks between timers.** The poller reschedules from an async
+  `.finally`, so a clock that only advanced time would never see the next timer registered and every
+  cadence test would appear to hang after one tick.
+- **The opening poll is a timer, not an inline call** (`#schedule(tier, 0)`), which is why the tests
+  need `advance(0)` and not merely a flushed promise. Worth knowing before assuming a poller with no
+  requests is broken.
+- **The replay cache was dropped on purpose.** The reference keeps the newest value of every plugin
+  in main so a *renderer reload* does not blank the static-tier widgets. Here the poller and the
+  buffers share one JS context: a reload restarts both, and there is nothing left to replay from.
+- **The Tauri http scope cannot be narrowed.** An endpoint is whatever address the user types, and
+  Tauri evaluates capability scopes at build time with no runtime hook — so `http://*` and
+  `https://*` is the honest floor. What it still buys is recorded in the capability's own
+  `description`: no `file://`, no custom schemes, and the poller is the only caller.
+- **`fetchGlances` was moved onto the seam too.** Without that, only the new poller would have
+  escaped CORS and the settings screen's own connection test would still have failed on desktop —
+  the very screen where a user first meets the problem. It also means bodies are read as text and
+  parsed here, so a proxy answering 200 with an HTML error page now says "Response was not JSON"
+  instead of leaking `Unexpected token <`.
+- **Four suites failed on the URL rule change, all correctly.** Tests using a bare host `'a'` now
+  normalise to `https://a` rather than `http://a:61208`. Updated rather than worked around: that is
+  the fix, not a regression.
+- **`tauri dev` could not run on this machine.** Windows had reserved TCP 8081–8580 for Hyper-V, so
+  Metro cannot bind and Expo reports the port "in use" while `netstat` shows nothing listening. The
+  built desktop app needs no dev server, so verification went that way instead. Recorded in
+  AGENTS.md — the ranges change on reboot.
+
+### M11 — Endpoint model — `not started`
+- [ ] `GlancesEndpoint` with `enabled` / `color` / `sortOrder` / `createdAt`, + store migration
+- [ ] Enable/disable, accent colour, test connection, cascade delete with confirmation
+- [ ] One endpoint chip used in the toolbar, every widget header and the list
+
+### M12 — Widget framework + core metrics — `not started`
+- [ ] Registry split (data-only catalog importable by the poller / renderer half with components)
+- [ ] Widget frame to the reference anatomy; measured tier + short; degrade ladders; error boundary
+- [ ] cpu · cpuGauge · cpuText · percpu · percpuText · memory · memoryGauge · memoryText · load ·
+      loadText · systemInfo · endpointSummary · endpointSummaryText
+
+### M13 — Rate and table metrics — `not started`
+- [ ] network · networkText · diskio · diskioText · filesystem · filesystemText · sensors ·
+      sensorsText · gpu · gpuText
+- [ ] `DualRateReadout`, `MetricBar`, `RingGauge`, `DataGrid` primitives
+
+### M14 — Processes, containers, alerts — `not started`
+- [ ] Process table with per-row sparklines and the `processcount` footer
+- [ ] Containers table
+- [ ] `alerts` as the first **global** widget — forces `endpointId: null` through the stores
+
+### M15 — Grid and shell — `not started`
+- [ ] Free drag + resize, density-driven columns, viewport-filling rows; a phone gets one column
+      and picks footprints from the kebab instead of a resize grip
+- [ ] Two-step add-widget picker with **live** previews, size cards, transient preview plugin set
+- [ ] Widget config with endpoint rebind (clears endpoint-scoped keys, remounts the body)
+- [ ] Full screen with the auto-hiding bar; keyboard shortcuts on web and desktop
+
+### M16 — Appearance and settings — `not started`
+- [ ] Per-scheme colours with alpha, rem sizes, interface scale, draft-based live preview, resets
+- [ ] Per-widget background override; two settings tabs (no Updates); hidden widget headers
+- [ ] The transparent Tauri window — requested only when an alpha is actually below 1
+
+### M17 — Release parity — `not started`
+- [ ] CORS story per target, README for all four targets, release across Windows / Android / web
+
+---
+
 ## Decisions log
 
 | Date | Decision | Why |
@@ -575,9 +707,31 @@ for phone, tablet, web and the Tauri window are listed under *Adapted from deskt
 | 2026-08-04 | The Android APK is debug-signed in CI | Confirmed with the owner: the artifact is for sideloading, and the template keystore keeps CI secret-free while staying stable enough for in-place upgrades |
 | 2026-08-03 | Space Grotesk and JetBrains Mono are bundled, not fetched | The app ships as a desktop and offline-capable web build; a dashboard that must reach Google Fonts before it can render a number is not one |
 | 2026-08-04 | A milestone is not done until the **web build** has been looked at, not only Android | v0.1.1 shipped a desktop window that rendered nothing. The bug was web-only in both of its halves, Android was flawless, and the native-preset Jest suite passed 472/472 against it |
+| 2026-08-04 | Parity is re-aimed at reference **v1.13.0**; the generic widget model is **retired** for a catalog of 26 typed widgets | Confirmed with the owner. The reference dropped the generic model, and a widget that knows what it measures can lay itself out, degrade properly and colour against real thresholds |
+| 2026-08-04 | Saved v1 widgets are **dropped** by the migration rather than mapped | There is no honest mapping from `{kind, metric, fields}` onto a typed catalog entry, and "no migration" has been the plan since §1 |
+| 2026-08-04 | Desktop fetches route through **Tauri's Rust HTTP client**; Android keeps plain `fetch`; hosted web keeps the browser's rules | Confirmed with the owner. It is the only available equivalent of the reference's main process, and without it the app cannot read a server that redirects or restricts its origin — proved against the owner's own server |
+| 2026-08-04 | Config storage **stays AsyncStorage + Zustand**; drizzle/SQLite is not ported | The reference's own design doc concedes SQLite is more machinery than config-only persistence needs; porting it would add a native module for no capability |
+| 2026-08-04 | The 4.5:1 contrast floor **outranks** matching the reference's text tokens | The reference's `textLabel`/`textFaint` do not clear it against its own panel colour. A test that has already caught one real bug is not worth trading for two shades of grey |
+| 2026-08-04 | The poller is platform-free TypeScript over a `transport` seam, unit-tested against a fake clock | It is about to become the most complex module in the app and it runs on three platforms; the reference's own copy is untestable because it is welded to `net.fetch` |
+| 2026-08-04 | Free drag + resize on web, desktop and tablet; **a phone gets one column and picks footprints from the kebab** | Confirmed with the owner. The stored geometry is identical, so this is a gesture adaptation rather than a feature split — and a corner grip is not a touch target, which is why M0's plan chose presets in the first place |
+| 2026-08-04 | **In-app updates are out of scope**, and the Updates settings tab with them | Confirmed with the owner. It is a delivery feature, not a dashboard one, and it would cost a new native surface on desktop plus a separate Android story. Publishing releases is unaffected |
+| 2026-08-04 | **The transparent window is in scope** | Confirmed with the owner. It is what makes the appearance model's alpha mean anything on desktop. Note the reference's own trade: a transparent window cannot be edge-resized and loses the WM drop shadow, so it is only requested when an alpha is actually below 1 |
+| 2026-08-04 | This app **replaces** the Electron one — same product name, same install path, no rename | Confirmed with the owner. They are not meant to coexist, so the install collision is not a case to design around |
 
 ## Blockers / open questions
 
+- ~~**A redirecting Glances server is unreadable on web and desktop (2026-08-04).**~~ **Fixed in
+  M10** on desktop and native. The owner's `http://glances.tcloud.monster` 301-redirects to
+  `https://`, and **the 301 response carries no `Access-Control-Allow-Origin`** — so the browser
+  blocks the redirect before it can follow one, and every widget read `Failed to fetch … (CORS)`.
+  The reference is immune because it polls from the Electron main process; desktop now goes through
+  Tauri's Rust client for the same reason. **On hosted web it remains a limitation**, because only
+  the server's own config can lift it.
+- ~~**`coerceServerUrl` makes it worse for a bare hostname (2026-08-04).**~~ **Fixed in M10.** It
+  became `http://glances.example.com:61208` — wrong scheme *and* a port that is not listening. The
+  M1 rule was right about the port and wrong about the scheme, so `normalizeEndpointUrl` now splits
+  on what the host looks like: a bare **IP** is a direct `glances -w` (`http`, port 61208), a bare
+  **hostname** is assumed proxied (`https`, default port).
 - Expo Go does not work on the local emulator (details below). The dev build does, so this
   does not block development. Untested on a physical device.
 - **Fabric mount crash seen once during M4 verification, cause unknown (2026-08-03).**

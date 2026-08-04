@@ -54,7 +54,9 @@ describe('updateServer', () => {
 
     const updated = useServersStore.getState().servers[0];
     expect(updated.name).toBe('Renamed');
-    expect(updated.url).toBe('http://a:61208');
+    // A bare *hostname* normalises to https with no port — only a bare IP is assumed to be a
+    // direct `glances -w` on 61208. See `normalizeEndpointUrl`.
+    expect(updated.url).toBe('https://a');
   });
 
   it('re-normalises an updated url', () => {

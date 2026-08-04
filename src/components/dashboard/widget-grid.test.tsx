@@ -21,7 +21,7 @@ const originalFetch = global.fetch;
 beforeEach(() => {
   global.fetch = jest
     .fn()
-    .mockResolvedValue({ ok: true, json: async () => ({ total: 1 }) }) as unknown as typeof fetch;
+    .mockResolvedValue({ ok: true, text: async () => JSON.stringify({ total: 1 }) }) as unknown as typeof fetch;
   useServersStore.setState({ servers: [], defaultServerId: null });
   useWidgetsStore.setState({ widgets: [] });
 });

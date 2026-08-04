@@ -33,7 +33,7 @@ afterEach(() => {
 function mockJson(payload: unknown) {
   global.fetch = jest.fn().mockResolvedValue({
     ok: true,
-    json: async () => payload,
+    text: async () => JSON.stringify(payload),
   }) as unknown as typeof fetch;
 }
 
@@ -49,6 +49,7 @@ describe('useGlancesQuery', () => {
     expect(result.current.data).toEqual({ total: 12 });
     expect(global.fetch).toHaveBeenCalledWith('http://host:61208/api/4/cpu', {
       signal: expect.anything(),
+      headers: { Accept: 'application/json' },
     });
   });
 
@@ -89,6 +90,7 @@ describe('useGlancesQuery', () => {
       ok: false,
       status: 500,
       statusText: 'Server Error',
+      text: async () => '',
     }) as unknown as typeof fetch;
 
     const { result } = await renderHook(() => useGlancesQuery(server, '/api/4/cpu'), {

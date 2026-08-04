@@ -22,7 +22,7 @@ function mockGlances(payloads: Record<string, unknown>) {
     if (body === undefined) {
       return Promise.resolve({ ok: false, status: 404, statusText: 'Not Found' });
     }
-    return Promise.resolve({ ok: true, json: async () => body });
+    return Promise.resolve({ ok: true, text: async () => JSON.stringify(body) });
   }) as unknown as typeof fetch;
 }
 

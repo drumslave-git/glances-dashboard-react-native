@@ -1,9 +1,17 @@
 # AGENTS.md — How to work in this repo
 
-This repo is a **React Native (Expo) rewrite** of the web app at
+This repo is a **React Native (Expo) rewrite** of the app at
 `E:\projects\glances-dashboard` ([GitHub](https://github.com/drumslave-git/glances-dashboard)).
-The web app is the **behavioral reference** — when in doubt about what a feature should do,
+That project is the **behavioral reference** — when in doubt about what a feature should do,
 read its source. Never modify the reference project.
+
+**The reference changed underneath this port.** M0–M9 were built against a Vite + React +
+**Mantine** web app with five *generic* widgets (pick a plugin, pick some fields). It is now an
+**Electron desktop app at v1.13.0** — MUI + ECharts + SQLite, a main-process poller, and **26
+purpose-built widget types**. Its design document is `E:\projects\glances-dashboard\DESIGN.md`,
+and it is the authority: cite it as *(ref §7.4)*. Realigning this app onto it is milestones
+M10–M17. **Anything in this file or in the docs that describes the old Mantine app is history,
+not a specification** — the "Reference map" table below is kept only to explain existing code.
 
 ## Start of every session
 
@@ -145,6 +153,12 @@ Verify against installed types (`node_modules/**/*.d.ts`) rather than memory —
   usually more correct.
 - **`react-hooks/immutability` forbids two effects writing the same shared value** when one is
   also a dependency of the other. Animations that share a `useSharedValue` go in one effect.
+- **"Port 8081 is being used by another process" can be a lie.** Windows reserves TCP ranges for
+  Hyper-V/WSL, and on this machine that included **8081–8580** — so Metro cannot bind, `netstat`
+  shows nothing listening, and `tauri dev` dies in its `beforeDevCommand`. Check with
+  `netsh int ipv4 show excludedportrange protocol=tcp`; the ranges change on reboot. Either pick a
+  port outside them or verify against the built desktop app, which serves `dist/` from
+  `tauri.localhost` and needs no dev server at all.
 - **A Tauri window can be driven over CDP.** Launch the exe with `WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS=--remote-debugging-port=9222` and attach to `http://127.0.0.1:9222/json/list`. Unlike the automation pane's hidden tab, this window is genuinely visible, so Skia paints and `Page.captureScreenshot` works. Mouse events are dispatched in viewport coordinates — an element scrolled below the fold gets a click at a `y` outside the window, which silently does nothing.
 
 ## The "Telemetry" design system (M8)
@@ -194,9 +208,39 @@ through `formatLooseNumber` — Glances serves full float precision and raw valu
 - `/api/4/{plugin}` (e.g. `cpu`, `mem`, `load`, `fs`, `gpu`, `processlist`) → object **or array** (fs/gpu/processlist are arrays; widget logic takes the first element except processes, which uses the whole array).
 - No auth in scope. CORS matters only for web/desktop-webview targets.
 
-## Reference map (web app → this repo)
+## Running the reference (v1.13.0)
 
-| Web app file | Becomes |
+```bash
+npm install && npm run setup
+```
+
+`npm run setup` is documented as mandatory (`.npmrc` sets `ignore-scripts=true`), but on this
+machine it reported success **without** downloading the Electron binary and `electron-vite dev`
+then died with `Error: Electron uninstall`. The actual fix is
+`node node_modules/electron/install.js`.
+
+```bash
+npx electron-vite dev --remoteDebuggingPort=9333
+```
+
+Both apps are **CDP-drivable and genuinely visible**, which is the only way to see either one
+render for real (the RN Tauri build via
+`WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS=--remote-debugging-port=9444`). Seed a board without
+clicking: the reference takes `window.api.invoke('widgets:save', …)`, this app takes
+`localStorage['glances-dashboard:widgets']`.
+
+Test server: **`https://glances.tcloud.monster`** (Glances 4.5.6, 28 plugins including
+`containers`, `gpu`, `sensors`, `alert`). Use `https` — the `http` URL 301s and **the redirect
+response carries no CORS header**, so a browser blocks it before following. That single fact is
+why the reference polls from its main process and why this app's desktop target has to go
+through Tauri's Rust HTTP client.
+
+## Reference map (the *old* Mantine web app → this repo)
+
+Historical. It explains why the current `src/utils/` looks the way it does; it is not a spec for
+new work — see REWRITE_PLAN.md §3.3 for what survives the realignment and what goes.
+
+| Old web app file | Became |
 |---|---|
 | `src/utils/widgetData.ts`, `chartColors.ts`, `widgetFactory.ts` | `src/utils/` — verbatim port + tests |
 | `src/hooks/useGlancesEndpoint.ts` | `src/hooks/useGlancesQuery.ts` (TanStack Query) |

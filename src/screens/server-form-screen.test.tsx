@@ -95,7 +95,7 @@ describe('ServerFormScreen — connection test', () => {
   it('reports the hostname when the server answers', async () => {
     global.fetch = jest.fn().mockResolvedValue({
       ok: true,
-      json: async () => ({ hostname: 'nas' }),
+      text: async () => JSON.stringify({ hostname: 'nas' }),
     }) as unknown as typeof fetch;
 
     const { getByTestId, findByTestId, user } = await renderWithProviders(<ServerFormScreen />);
@@ -120,7 +120,7 @@ describe('ServerFormScreen — connection test', () => {
   it('clears a previous result when the address changes', async () => {
     global.fetch = jest.fn().mockResolvedValue({
       ok: true,
-      json: async () => ({ hostname: 'nas' }),
+      text: async () => JSON.stringify({ hostname: 'nas' }),
     }) as unknown as typeof fetch;
 
     const { getByTestId, findByTestId, queryByTestId, user } = await renderWithProviders(
