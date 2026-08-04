@@ -24,12 +24,26 @@ interface GradientSurfaceProps extends YStackProps {
 
 export function GradientSurface({ colors, children, ...props }: GradientSurfaceProps) {
   return (
-    <YStack overflow="hidden" {...props}>
+    // `position` and `zIndex` come after the spread because both are load-bearing
+    // on web, where this component behaves nothing like it does on native:
+    //
+    //  - Tamagui leaves a `YStack` `position: static`, so without `relative` the
+    //    absolutely-filled gradient escapes to the nearest positioned ancestor and
+    //    covers the whole window.
+    //  - CSS paints positioned boxes after in-flow ones, so even once contained the
+    //    gradient would sit on top of `children` rather than behind them. `zIndex: 0`
+    //    makes this box a stacking context and `-1` puts the gradient at its back —
+    //    the containment matters, or the gradient would fall behind an ancestor's
+    //    background instead.
+    //
+    // On native both are inert: every view is already a containing block and the
+    // gradient is behind the children by tree order.
+    <YStack overflow="hidden" {...props} position="relative" style={{ zIndex: 0 }}>
       <LinearGradient
         colors={colors}
         start={{ x: 0, y: 0 }}
         end={{ x: 0, y: 1 }}
-        style={StyleSheet.absoluteFill}
+        style={[StyleSheet.absoluteFill, { zIndex: -1 }]}
         pointerEvents="none"
       />
       {children}

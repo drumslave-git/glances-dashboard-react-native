@@ -4,7 +4,7 @@ Tracks execution of [REWRITE_PLAN.md](REWRITE_PLAN.md). Update this file in the 
 commit as the work it describes. One line per task; add dated notes under each milestone
 when something non-obvious happened.
 
-**Current status:** M8 complete — the "Telemetry" redesign is implemented across every target: token layer for dark and light with the contrast floor under test, bundled Space Grotesk / JetBrains Mono, two-channel type scaling, the widget shell anatomy with its degrade ladders, per-endpoint accent colours, the toolbar and summary strip, and two new widget archetypes (ring gauge, time series). M9 is under way: the release pipeline is in place (a `package.json` version bump on `main` gates, builds and publishes the Windows installer, Android APK and web bundle). Still open in M9: component tests for the settings and config screens, the perf pass, and the README pass over every target.
+**Current status:** M8 complete — the "Telemetry" redesign is implemented across every target: token layer for dark and light with the contrast floor under test, bundled Space Grotesk / JetBrains Mono, two-channel type scaling, the widget shell anatomy with its degrade ladders, per-endpoint accent colours, the toolbar and summary strip, and two new widget archetypes (ring gauge, time series). M9 is under way: the release pipeline is in place (a `package.json` version bump on `main` gates, builds and publishes the Windows installer, Android APK and web bundle). **v0.1.1 shipped a desktop (and web) build that rendered a blank window** — `GradientSurface` covered the app; fixed and verified in the real Tauri window, details under M9. Still open in M9: component tests for the settings and config screens, the perf pass, and the README pass over every target.
 
 ## Milestones
 
@@ -464,7 +464,36 @@ for phone, tablet, web and the Tauri window are listed under *Adapted from deskt
 - [ ] Component tests: settings + config screens, error paths
 - [ ] Perf pass (memoization, background polling pause, processlist cost)
 - [x] Release pipeline — `.github/workflows/release.yml` + `scripts/sync-version.js`
+- [x] Fix: v0.1.1 desktop rendered a blank window (`GradientSurface` covered it)
 - [ ] README for all targets
+
+**v0.1.1 shipped a blank desktop window (found and fixed 2026-08-04)**
+- **Symptom.** The installed Windows app opened to an empty dark rectangle with a single
+  ~5px dot in the top-left corner. No console errors, no failed requests.
+- **Cause.** `GradientSurface` (`components/telemetry/surfaces.tsx`) hit *both* halves of the
+  Tamagui-on-web positioning trap at once. Its wrapper `YStack` had no `position="relative"`,
+  so the `StyleSheet.absoluteFill` gradient escaped to the nearest positioned ancestor and
+  sized itself to the whole window; and because CSS paints positioned boxes after in-flow
+  ones, it then painted *over* everything. The toolbar's `#0d1011 → #0a0c0d` gradient was
+  covering the entire app. The dot was the logo's inner square — it carries `rotate="45deg"`,
+  which promotes it to its own compositor layer, so it alone composited above the gradient.
+- **Why nothing caught it.** Native is immune to both halves (every view is a containing
+  block; tree order alone keeps an earlier child behind), so Android looked perfect, and the
+  desktop target runs the *web* bundle. The Jest suite renders through the native preset, so
+  all 472 tests passed against a build that rendered nothing at all.
+- **Fix.** `position="relative"` plus `style={{ zIndex: 0 }}` on the wrapper (containing block
+  *and* stacking context — without the latter, `-1` sends the layer behind an ancestor's
+  background instead), and `zIndex: -1` on the gradient. Both are inert on native.
+  `surfaces.test.tsx` now asserts all three.
+- **Technique worth reusing.** The app was fully laid out, themed and clickable underneath the
+  whole time — `elementFromPoint` returned the real controls, because the gradient is
+  `pointerEvents="none"`. A blank window whose DOM is correct is an occlusion bug, not a crash.
+  Injecting `#root, #root * { will-change: transform }` over CDP promotes everything to its own
+  layer; if the UI appears, something is painting on top of it. Driving the Tauri window over
+  CDP (per the AGENTS.md note) is what made all of this observable.
+- **Audited the rest:** the four `position="absolute"` uses in `charts/chart-view.tsx` all sit
+  inside an explicit `position="relative"` parent, and `meter.tsx`'s gradient is in-flow
+  (`flex: 1`). `GradientSurface` was the only instance.
 
 **Notes (2026-08-04)**
 - The release trigger is the **`package.json` version field**, not a tag or a manual dispatch:
@@ -545,6 +574,7 @@ for phone, tablet, web and the Tauri window are listed under *Adapted from deskt
 | 2026-08-04 | Releases are triggered by the `package.json` version field; CI creates the tag, not the developer | A tag pushed only after all three builds pass cannot describe a release that does not exist, and there is no local tag to diverge from the remote |
 | 2026-08-04 | The Android APK is debug-signed in CI | Confirmed with the owner: the artifact is for sideloading, and the template keystore keeps CI secret-free while staying stable enough for in-place upgrades |
 | 2026-08-03 | Space Grotesk and JetBrains Mono are bundled, not fetched | The app ships as a desktop and offline-capable web build; a dashboard that must reach Google Fonts before it can render a number is not one |
+| 2026-08-04 | A milestone is not done until the **web build** has been looked at, not only Android | v0.1.1 shipped a desktop window that rendered nothing. The bug was web-only in both of its halves, Android was flawless, and the native-preset Jest suite passed 472/472 against it |
 
 ## Blockers / open questions
 
