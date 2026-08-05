@@ -27,11 +27,7 @@ export const GROUP_LABELS: Record<WidgetGroup, string> = {
   alerts: 'Alerts',
 };
 
-/**
- * Metrics implemented so far. The reference has fourteen; processes, containers and alerts arrive
- * with their renderings in M14. Declaring a metric before any widget can draw it would only put a
- * dead entry in the picker.
- */
+/** Every metric the reference has. */
 export const METRIC_IDS = [
   'cpu',
   'percpu',
@@ -44,6 +40,9 @@ export const METRIC_IDS = [
   'filesystem',
   'sensors',
   'gpu',
+  'processes',
+  'containers',
+  'alerts',
 ] as const;
 export type MetricId = (typeof METRIC_IDS)[number];
 
@@ -133,6 +132,24 @@ export const METRIC_DEFINITIONS: Record<MetricId, MetricDefinition> = {
     group: 'system',
     description: 'Per-GPU utilization, memory and temperature.',
   },
+  processes: {
+    id: 'processes',
+    label: 'Processes',
+    group: 'processes',
+    description: 'The busiest processes, with a count of everything running.',
+  },
+  containers: {
+    id: 'containers',
+    label: 'Containers',
+    group: 'processes',
+    description: 'Docker / Podman containers and what they are using.',
+  },
+  alerts: {
+    id: 'alerts',
+    label: 'Alerts',
+    group: 'alerts',
+    description: 'Warning and critical events from every endpoint.',
+  },
 };
 
 /**
@@ -175,6 +192,9 @@ export const WIDGET_TYPES = [
   'sensorsText',
   'gpu',
   'gpuText',
+  'processes',
+  'containers',
+  'alerts',
 ] as const;
 export type WidgetType = (typeof WIDGET_TYPES)[number];
 
@@ -665,6 +685,48 @@ const WIDGET_SPECS: Record<WidgetType, WidgetSpec> = {
     capabilityPlugins: ['gpu'],
     sizes: tiers([1, 4], [1, 4], [2, 4]),
     configSchema: z.object({ gpus }),
+  },
+
+  processes: {
+    type: 'processes',
+    label: 'Processes',
+    metric: 'processes',
+    variant: 'table',
+    description: 'The busiest processes, with a trend, a CPU bar and a count in the footer.',
+    requiredPlugins: ['processlist', 'processcount'],
+    capabilityPlugins: ['processlist'],
+    sizes: tiers([1, 5], [1, 5], [2, 5]),
+    configSchema: z.object({
+      sort: z.enum(['cpu', 'memory', 'name']).default('cpu'),
+      rows: z.number().int().min(5).max(50).default(20),
+    }),
+  },
+  containers: {
+    type: 'containers',
+    label: 'Containers',
+    metric: 'containers',
+    variant: 'table',
+    description: 'Every container, with its state, CPU, memory and traffic.',
+    requiredPlugins: ['containers'],
+    capabilityPlugins: ['containers'],
+    sizes: tiers([2, 4], [2, 4], [3, 4]),
+    configSchema: emptyConfig,
+  },
+  alerts: {
+    type: 'alerts',
+    label: 'Alerts',
+    metric: 'alerts',
+    variant: 'table',
+    // The one cross-endpoint type: bound to no host, so it survives the deletion of any of them
+    // and its plugins are pulled onto every endpoint rather than one (ref §4.4).
+    scope: 'global',
+    description: 'Warning and critical events from every endpoint, ongoing first.',
+    requiredPlugins: ['alert'],
+    capabilityPlugins: ['alert'],
+    sizes: tiers([2, 4], [2, 4], [3, 4]),
+    configSchema: z.object({
+      includeResolved: z.boolean().default(true),
+    }),
   },
 };
 

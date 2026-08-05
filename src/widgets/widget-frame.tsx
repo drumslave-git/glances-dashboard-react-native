@@ -208,20 +208,24 @@ function WidgetBody({
     );
   }
 
-  if (!widget.endpointId && widget.type !== 'alerts') {
-    return (
-      <UiText variant="metric" color="$textDim" testID={`widget-status-${widget.id}`}>
-        Pick an endpoint for this widget.
-      </UiText>
-    );
-  }
-
   if (!isWidgetType(widget.type)) {
     // A row of a type this build does not have — a downgrade, or a widget removed from the
     // catalog. Saying so beats an empty panel that looks like a rendering fault.
     return (
       <UiText variant="metric" color="$textDim" testID={`widget-status-${widget.id}`}>
         Unknown widget type “{widget.type}”.
+      </UiText>
+    );
+  }
+
+  const definition = widgetDefinition(widget.type);
+  // A **global** widget reads from every endpoint, so having no `endpointId` is its normal state
+  // rather than a misconfiguration. Asked of the catalog rather than hardcoded against a type
+  // name, so the next cross-endpoint widget needs no change here.
+  if (!widget.endpointId && definition.scope !== 'global') {
+    return (
+      <UiText variant="metric" color="$textDim" testID={`widget-status-${widget.id}`}>
+        Pick an endpoint for this widget.
       </UiText>
     );
   }

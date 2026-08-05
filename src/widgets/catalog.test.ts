@@ -36,10 +36,11 @@ describe('definitions', () => {
     }
   });
 
-  it('makes every wide footprint two columns, and every regular one', () => {
+  it('makes every wide footprint wider than its regular one', () => {
+    // The tables start at two columns rather than one — a five-column grid in a single column
+    // would shed almost everything before it drew a row.
     for (const definition of Object.values(WIDGET_DEFINITIONS)) {
-      expect(definition.sizes.regular.w).toBe(1);
-      expect(definition.sizes.wide.w).toBe(2);
+      expect(definition.sizes.wide.w).toBeGreaterThan(definition.sizes.regular.w);
     }
   });
 
@@ -86,10 +87,9 @@ describe('widgetsForMetric', () => {
 });
 
 describe('metricsByGroup', () => {
-  it('lists groups in catalog order and drops empty ones', () => {
-    // `processes` and `alerts` have no metrics yet (M14), so they must not appear as empty headings.
+  it('lists groups in catalog order', () => {
     const groups = metricsByGroup().map((entry) => entry.group);
-    expect(groups).toEqual(['core', 'system', 'io']);
+    expect(groups).toEqual(['core', 'system', 'io', 'processes', 'alerts']);
   });
 });
 
@@ -243,9 +243,16 @@ describe('catalog coverage', () => {
     expect(Object.keys(WIDGET_DEFINITIONS).sort()).toEqual([...WIDGET_TYPES].sort());
   });
 
-  it('covers the core renderings plus the io, sensor and GPU ones', () => {
-    // 13 from M12, 10 more in M13. The remaining three metrics arrive in M14.
-    expect(WIDGET_TYPES).toHaveLength(23);
+  it('covers all 26 of the reference renderings', () => {
+    // 13 from M12, 10 in M13, 3 in M14 — the reference's own count (ref §8).
+    expect(WIDGET_TYPES).toHaveLength(26);
+  });
+
+  it('marks exactly one type as cross-endpoint', () => {
+    // Scope belongs to the type, never the instance, and the alerts feed is the only global one:
+    // it answers for the whole fleet, so filing it under one host would be wrong twice over.
+    const global = Object.values(WIDGET_DEFINITIONS).filter((d) => d.scope === 'global');
+    expect(global.map((d) => d.type)).toEqual(['alerts']);
   });
 
   it('offers a text rendering for every metric that has a graphical one', () => {
@@ -313,5 +320,20 @@ describe('endpoint-scoped selections', () => {
     expect(WIDGET_DEFINITIONS.filesystem.requiredPlugins).toContain(ENDPOINT_SCOPED_SELECTIONS.mounts.plugin);
     expect(WIDGET_DEFINITIONS.sensors.requiredPlugins).toContain(ENDPOINT_SCOPED_SELECTIONS.types.plugin);
     expect(WIDGET_DEFINITIONS.gpu.requiredPlugins).toContain(ENDPOINT_SCOPED_SELECTIONS.gpus.plugin);
+  });
+});
+
+describe('a global widget belongs to no endpoint', () => {
+  it('contributes its plugins to every endpoint, not one', () => {
+    // It has no `endpointId` to derive them from, so without this rule the alerts feed would poll
+    // /alert nowhere at all (ref §4.4).
+    const widgets = [{ type: 'alerts', endpointId: null }];
+    expect(pluginsForEndpoint('e1', widgets)).toEqual(['alert']);
+    expect(pluginsForEndpoint('e2', widgets)).toEqual(['alert']);
+  });
+
+  it('is not confused with an endpoint-scoped widget that has lost its host', () => {
+    const orphan = [{ type: 'cpu', endpointId: null }];
+    expect(pluginsForEndpoint('e1', orphan)).toEqual([]);
   });
 });

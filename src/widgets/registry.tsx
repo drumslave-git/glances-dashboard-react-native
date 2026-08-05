@@ -11,6 +11,7 @@ import { CpuChartWidget, CpuGaugeWidget, CpuTextWidget, PerCpuTextWidget, PerCpu
 import { DiskIoChartWidget, DiskIoTextWidget, NetworkChartWidget, NetworkTextWidget } from './bodies/io';
 import { LoadChartWidget, LoadTextWidget } from './bodies/load';
 import { MemoryChartWidget, MemoryGaugeWidget, MemoryTextWidget } from './bodies/memory';
+import { AlertsWidget, ContainersWidget, ProcessesWidget } from './bodies/processes';
 import {
   FilesystemTextWidget,
   FilesystemWidget,
@@ -63,6 +64,9 @@ export const WIDGET_RENDERERS: Record<WidgetType, WidgetRenderer> = {
   sensorsText: { component: SensorsTextWidget },
   gpu: { component: GpuWidget },
   gpuText: { component: GpuTextWidget },
+  processes: { component: ProcessesWidget },
+  containers: { component: ContainersWidget },
+  alerts: { component: AlertsWidget },
 };
 
 export function widgetRenderer(type: WidgetType): WidgetRenderer {

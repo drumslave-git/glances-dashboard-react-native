@@ -11,6 +11,12 @@ import { useTelemetry } from '@/theme/use-telemetry';
 import type { FsItem, GpuItem, SensorItem } from '@/types/glances';
 import { formatFieldValue, formatLooseNumber } from '@/utils/widgetData';
 
+import { XStack, YStack } from 'tamagui';
+
+import { MonoText } from '@/components/telemetry/text';
+
+import { DataGrid } from '../data-grid';
+import type { GridColumn } from '../grid-columns';
 import { MeterList, TextReadout, type MeterRow, type ReadoutGroup, type ReadoutRow } from '../readout';
 import { dedupeMounts, shortenMountPath } from '../rates';
 import type { WidgetProps } from '../types';
@@ -35,10 +41,23 @@ function visibleMounts(items: FsItem[], config: Record<string, unknown>): FsItem
   ).sort((a, b) => b.size - a.size || a.mntPoint.localeCompare(b.mntPoint));
 }
 
+/**
+ * The mount path always survives — it names the row — and the device/type pair is the first thing
+ * to go, being a qualifier rather than a figure (ref §8).
+ */
+const FILESYSTEM_COLUMNS: GridColumn[] = [
+  { key: 'mount', label: 'Mount', priority: 0 },
+  { key: 'device', label: 'Device', width: 110, priority: 4 },
+  { key: 'size', label: 'Size', width: 74, align: 'right', priority: 3 },
+  { key: 'used', label: 'Used', width: 74, align: 'right', priority: 1 },
+  { key: 'free', label: 'Free', width: 74, align: 'right', priority: 2 },
+  { key: 'usage', label: 'Usage', width: 92, align: 'right', priority: 0 },
+];
+
 export function FilesystemWidget({
   endpointId,
   config,
-  mode,
+  width,
   height,
   accentColor,
   status,
@@ -47,20 +66,48 @@ export function FilesystemWidget({
   const mounts = visibleMounts(useLatest<FsItem[]>(endpointId, 'fs') ?? [], config);
   const { t } = useTelemetry();
 
-  const rows: MeterRow[] = mounts.map((mount) => {
-    const tone = thresholdTone(thresholdLevel(status?.limits, 'fs', mount.percent));
-    return {
-      label: shortenMountPath(mount.mntPoint),
-      percent: mount.percent,
-      // The figure people read off a disk is how much is left, not the percentage — the bar
-      // already says the percentage.
-      value: `${bytes(mount.used)} / ${bytes(mount.size)}`,
-      color: tone === 'accent' ? accentColor : t.signal[tone],
-    };
-  });
-
   return (
-    <MeterList rows={rows} mode={mode} height={height} accentColor={accentColor} testID={testID} />
+    <DataGrid
+      columns={FILESYSTEM_COLUMNS}
+      rows={mounts}
+      keyOf={(mount) => mount.mntPoint}
+      width={width}
+      height={height}
+      emptyMessage="No filesystems reported."
+      testID={testID}
+      cell={(mount, column) => {
+        switch (column.key) {
+          case 'mount':
+            // Shortened from the left: mount paths agree at the start and differ at the end, so
+            // the default truncation destroys exactly what identifies the row.
+            return shortenMountPath(mount.mntPoint, 28);
+          case 'device':
+            return [mount.deviceName, mount.fsType].filter(Boolean).join(' · ') || '—';
+          case 'size':
+            return bytes(mount.size) ?? '—';
+          case 'used':
+            return bytes(mount.used) ?? '—';
+          case 'free':
+            return bytes(mount.free) ?? '—';
+          case 'usage': {
+            const tone = thresholdTone(thresholdLevel(status?.limits, 'fs', mount.percent));
+            const color = tone === 'accent' ? accentColor : t.signal[tone];
+            return (
+              <XStack items="center" gap={6} justify="flex-end">
+                <YStack flex={1} height={3} bg="$trackBg" rounded={2} overflow="hidden">
+                  <YStack height={3} width={`${Math.min(100, mount.percent)}%`} style={{ backgroundColor: color }} />
+                </YStack>
+                <MonoText variant="row" numberOfLines={1} style={{ color }}>
+                  {`${Math.round(mount.percent)}%`}
+                </MonoText>
+              </XStack>
+            );
+          }
+          default:
+            return '—';
+        }
+      }}
+    />
   );
 }
 
@@ -111,25 +158,64 @@ function sensorValue(sensor: SensorItem): string | null {
   return `${formatLooseNumber(sensor.value)}${sensor.unit ? ` ${sensor.unit}` : ''}`;
 }
 
-export function SensorsWidget({ endpointId, config, mode, height, testID }: WidgetProps) {
+const SENSOR_COLUMNS: GridColumn[] = [
+  { key: 'label', label: 'Sensor', priority: 0 },
+  { key: 'group', label: 'Type', width: 104, priority: 2 },
+  { key: 'value', label: 'Reading', width: 90, align: 'right', priority: 0 },
+];
+
+interface SensorRow extends SensorItem {
+  group: string;
+}
+
+export function SensorsWidget({ endpointId, config, width, height, testID }: WidgetProps) {
   const sensors = useLatest<SensorItem[]>(endpointId, 'sensors') ?? [];
   const { t } = useTelemetry();
 
-  const groups: ReadoutGroup[] = [...groupSensors(sensors, config)].map(([label, items]) => ({
-    label,
-    rows: items.map((sensor) => {
-      // Per-item limits, because a fan and a CPU core share no scale — a global threshold key
-      // could not describe either.
-      const tone = thresholdTone(sensorThresholdLevel(sensor.value, sensor.warning, sensor.critical));
-      return {
-        label: sensor.label,
-        value: sensorValue(sensor),
-        ...(tone === 'accent' ? {} : { color: t.signal[tone] }),
-      };
-    }),
-  }));
+  // Grouped into a `Type` column rather than into headings: a grid has one row shape, and a
+  // heading row that is not a reading would have to fake every other column.
+  const rows: SensorRow[] = [...groupSensors(sensors, config)].flatMap(([group, items]) =>
+    items.map((sensor) => ({ ...sensor, group })),
+  );
 
-  return <TextReadout groups={groups} mode={mode} height={height} testID={testID} />;
+  return (
+    <DataGrid
+      columns={SENSOR_COLUMNS}
+      rows={rows}
+      keyOf={(sensor) => sensor.id}
+      width={width}
+      height={height}
+      emptyMessage="No sensors reported."
+      testID={testID}
+      cell={(sensor, column) => {
+        switch (column.key) {
+          case 'label':
+            return sensor.label;
+          case 'group':
+            return sensor.group;
+          case 'value': {
+            // Per-item limits, because a fan and a CPU core share no scale — a global threshold
+            // key could not describe either.
+            const tone = thresholdTone(
+              sensorThresholdLevel(sensor.value, sensor.warning, sensor.critical),
+            );
+            return (
+              <MonoText
+                variant="row"
+                numberOfLines={1}
+                text="right"
+                style={{ color: tone === 'accent' ? t.text.strong : t.signal[tone] }}
+              >
+                {sensorValue(sensor) ?? '—'}
+              </MonoText>
+            );
+          }
+          default:
+            return '—';
+        }
+      }}
+    />
+  );
 }
 
 export function SensorsTextWidget({ endpointId, config, mode, height, testID }: WidgetProps) {
