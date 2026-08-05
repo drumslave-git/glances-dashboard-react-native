@@ -4,10 +4,11 @@ Tracks execution of [REWRITE_PLAN.md](REWRITE_PLAN.md). Update this file in the 
 commit as the work it describes. One line per task; add dated notes under each milestone
 when something non-obvious happened.
 
-**Current status:** M10–M13 complete — the data layer, the endpoint model, and 23 typed widgets
-across 11 metrics, all verified on desktop and Android against a live server. Next is M14: the
-process and container tables, the alerts feed as the first **global** widget, and the `DataGrid`
-those need — onto which M13's filesystem and sensors are then retrofitted. Background: M10 (data
+**Current status:** M10–M14 complete — the data layer, the endpoint model, and the full catalog of
+**26 widget renderings** across 14 metrics, all verified on desktop and Android against a live
+server. The widget layer now matches the reference in what it can draw; what remains is the shell
+around it. Next is M15: free drag and resize, the two-step add-widget picker with live previews,
+endpoint rebind, and full screen. Background: M10 (data
 layer) and M11 (endpoint model) complete. The poller now runs against
 the endpoints store: probing, tiered polling, backoff, and a state machine the endpoint chip renders
 identically in the toolbar, on every widget header and in settings. Next is M12 (widget framework +
@@ -800,10 +801,8 @@ same moment for a side-by-side.
       plugin no placed widget requires yet
 - [x] 653 tests across 39 suites; typecheck and lint clean
 - [x] **Verified on desktop and Android** against the live server — see the notes below
-- [ ] **Deferred to M14 (owner's call):** `DataGrid`. The reference draws `filesystem` and `sensors`
-      as **table** variants; these render as meter lists and grouped rows, carrying the same data
-      and degrading sensibly but not through a real grid. M14's processes and containers need one,
-      so it is built there — where three widgets justify it — and these two are retrofitted onto it.
+- [x] **Deferred to M14 (owner's call), and done there:** `DataGrid`. Filesystem moved onto it;
+      sensors stayed on grouped rows, which is what the reference does too — see M14's notes.
       `DualRateReadout`, `MetricBar` and `RingGauge` were not built as separate primitives either:
       `MeterList` and the lifted `RingPanel` already cover what they were named for.
 
@@ -832,10 +831,83 @@ same moment for a side-by-side.
 - **On Android the dev-warning toast sits over the Add button** and swallows a tap. Worth knowing
   before concluding a button is broken — dismiss it first.
 
-### M14 — Processes, containers, alerts — `not started`
-- [ ] Process table with per-row sparklines and the `processcount` footer
-- [ ] Containers table
-- [ ] `alerts` as the first **global** widget — forces `endpointId: null` through the stores
+### M14 — Processes, containers, alerts — `done` (2026-08-05)
+- [x] `DataGrid` — priority column dropping, whole rows only, sticky header, sortable headings
+- [x] Process table with per-row sparklines and the `processcount` footer
+- [x] Containers table
+- [x] `alerts` as the first **global** widget — forces `endpointId: null` through the stores
+- [x] Filesystem retrofitted onto the grid; sensors deliberately **not** (see below)
+- [x] The catalog reaches **26 renderings**, the reference's own count
+
+**Notes**
+
+- **A grid row is two lines, and that is not decoration.** Every table in the reference puts a
+  qualifier under its value — the device under the mount, the engine under the container, `avg`
+  under the peak, `of <limit>` under the memory figure. It is what lets a five-column table carry
+  ten figures. The first cut of this milestone shipped single-line rows and paid for it twice: the
+  containers table promised `Net ↓↑` in its heading and showed only `rx`, and the filesystem table
+  spent a whole column on the device, which left three different mounts of the same disk all
+  rendering as `/host_mnt/disk…`. `DataGrid` now takes `stacked`, and the device has no column at
+  all — it is the second line, where it costs the table no width.
+- **Sensors is the one table that is not a table.** The owner asked for filesystem *and* sensors on
+  the grid; the reference groups sensors under type headings instead, and it is right to. A sensor
+  row is a label and one reading — there is no second column to line up — and on real hardware
+  `Core 0` appears under temperatures *and* under fans, so a flat table needs a `Type` column that
+  repeats itself down the whole widget to say what a heading says once. Filesystem is on the grid
+  as asked; sensors went back to headings.
+- **Row heights follow the reading scale** rather than a constant. The fixed 22 px was a latent
+  bug: at a large interface size every row would have clipped its own text.
+- **Sorting is the process table's main control**, so it lives in the headings, not the config
+  screen — these are the widgets whose rows are a *ranking*, and "by what?" should not be a
+  four-tap round trip. A heading press overrides the configured sort for the session without
+  rewriting the widget.
+- **Ties break by name then pid.** Glances reports `cpu_percent: 0` for every process whenever
+  `/processlist` is polled faster than it refreshes; without a tie-break that sample reshuffles the
+  entire table for a frame. Seen live on the first desktop run, and now covered by a test.
+- **Row traces are pinned to 0–100.** Scaled to their own peak, an idle process draws the same busy
+  silhouette as a saturated one and the column stops meaning anything.
+- **`Date.now()` cannot be called during render** (`react-hooks/purity`), which rules out the
+  obvious "now" for an ongoing event's duration. It is measured from the newest `alert` sample
+  instead — purer, and more honest: an event's age is only known as far as the last poll, so a
+  duration that ticks up while the endpoint is offline would be inventing observation.
+- **`healthy` is accented like `running`.** The reference accents only `running`, which draws a
+  container that is running *and* passing its healthcheck dimmer than one that is merely running.
+  A deliberate divergence, noted here rather than silently.
+- Deleted with this milestone: `components/widgets/processes-table.tsx` and `utils/processTable.ts`,
+  the last of the old generation's widget code — `DataGrid` replaces them.
+
+**Verified on desktop and Android (2026-08-05).** Running it found six more things the suite could
+not, which is now eight milestones in a row:
+
+1. **The containers table promised `Net ↓↑` and showed only `rx`** — the header was writing a cheque
+   the single-line row could not cash. Fixed by the two-line row, which also brought back the `IO
+   r/w` pair, the memory limit and the engine, all of which the reference has and this port had
+   silently dropped.
+2. **Three mounts of the same disk all rendered as `/host_mnt/disk…`.** Two causes: a `Device`
+   column taking a third of the row, and a fixed 40-character shorten budget that cannot match a
+   width it does not know. The device moved to the second line, and `flexibleColumnWidth` now
+   derives the budget from the pixels the column actually got.
+3. **`Use %` printed the same number as the bar beside it.** The reference offers that column *for
+   when the bar is switched off*; with no column picker yet, showing both just looked like a bug.
+4. **The config screen rendered nothing for a string or number option**, so `sort`, `rows` and
+   `severity` were unreachable — the Options section was simply empty. It now renders choices read
+   off the zod schema (`optionChoices`), so a new enum case is a new button and nothing else.
+5. **The alerts widget was being saved against an endpoint.** Caught by walking the real add-widget
+   flow on the phone: the config screen offered an endpoint picker for a *global* widget. Because
+   `removeWidgetsForEndpoint` deletes by endpoint id, deleting that host would have deleted the
+   alerts feed — exactly what the global scope exists to prevent. Fixed at both ends: the screen
+   saves `endpointId: null`, and the cascade now checks the type's scope, so a record written
+   before the fix is not collateral either.
+6. **A 2686% CPU reading was clipped** by the fixed-width number beside the bar. The number now
+   takes what it needs and the bar yields.
+
+**Not a port bug, and worth writing down:** this server intermittently reports `cpu_percent: 0` for
+every process, and it does so *because we are polling it*. With the app closed, `/processlist/top/50`
+returns 42–50 non-zero rows; with it running, samples alternate between ~35 non-zero and ~0.
+Raising the endpoint interval to 6 s does not help, so it is not simply the heavy tier's 3 s floor —
+which this port shares with the reference exactly (`HEAVY_TIER_MIN_MS = 3000`). The reference
+acknowledges the same behaviour in its own sort comment, and its mitigation is the tie-break, which
+is ported. The trend column keeps the history visible through a zero sample.
 
 ### M15 — Grid and shell — `not started`
 - [ ] Free drag + resize, density-driven columns, viewport-filling rows; a phone gets one column
@@ -925,6 +997,12 @@ same moment for a side-by-side.
 | 2026-08-04 | `refreshMs: 0` ("fetch once") is retired in favour of pausing, and the interval is floored at 1 s | Two ways to say "do not poll this" is one too many, and the old one left the endpoint looking live. The server caches its stats for a second regardless |
 | 2026-08-04 | The accent colours a healthy endpoint only; state wins on every other | Telling three green hosts apart is what the accent is for, and it stops mattering the moment one of them is in trouble |
 | 2026-08-04 | A `degraded` endpoint dims its widgets but is **not** covered by a status overlay | One or two missed polls with the last reading on screen is when a dashboard is most useful; an overlay would hide the numbers exactly then |
+| 2026-08-05 | A global widget saves `endpointId: null`, and the endpoint-deletion cascade checks the widget's *scope* rather than its stored id | Found by walking the add-widget flow on a phone: the config screen was binding the alerts feed to a host, and `removeWidgetsForEndpoint` would then have deleted it with that host |
+| 2026-08-05 | The config screen renders a control for enums and numbers, with the cases read off the zod schema | Three options shipped unreachable because the screen only knew booleans. Reading the schema means a new enum case is a new button and nothing else to remember |
+| 2026-08-05 | A `DataGrid` row is **two lines** — a value with its qualifier under it | It is what every table in the reference does, and what lets five columns carry ten figures. Single-line rows cost the containers table its `tx` figure and the filesystem table its mount identity |
+| 2026-08-05 | Sensors stays on **grouped headings**, not the grid | A sensor row is a label and one reading, and the grouping is the structure: a flat table needs a `Type` column repeating itself down the widget to say what one heading says once. The reference does the same |
+| 2026-08-05 | Table sorting lives in the **column headings**, not the config screen | These are the widgets whose rows are a ranking; "by what?" is the main control and should not be a four-tap round trip |
+| 2026-08-05 | "Now" for an ongoing alert is the **newest sample's timestamp**, not `Date.now()` | `react-hooks/purity` forbids the latter during render, and the former is more honest — an event's age is only known as far as the last poll |
 | 2026-08-05 | `DataGrid` is built in **M14**, and M13's filesystem and sensors are retrofitted onto it | Confirmed with the owner. Processes, containers and alerts all need a real grid, so building it where three widgets justify it beats hand-rolling a fourth almost-table in M13 |
 | 2026-08-05 | A reading with no full scale (a temperature) gets an **empty track**, not a bar | Drawing 24 °C as a 24% bar invents a ceiling the metric does not have |
 | 2026-08-05 | Where a selection key's options come from lives in the **catalog**, not the config screen | The screen renders the picker, but *what is selectable* is a fact about the metric — and the catalog stays React-free, so it is still the poller's to read |

@@ -17,6 +17,7 @@ import {
   ENDPOINT_SCOPED_SELECTIONS,
   clearEndpointScopedConfig,
   isEndpointScopedKey,
+  optionChoices,
   isWidgetType,
   parseWidgetConfig,
   widgetDefinition,
@@ -88,10 +89,19 @@ export function WidgetConfigScreen() {
     setConfig((current) => clearEndpointScopedConfig(current));
   };
 
+  // A global widget belongs to no host (ref §4.4). Saving it against one is not a cosmetic slip:
+  // `removeWidgetsForEndpoint` deletes by endpoint id, so an alerts feed bound to a host would be
+  // deleted along with that host — the exact outcome the global scope exists to prevent.
+  const isGlobal = definition.scope === 'global';
+
   const save = () => {
-    if (!endpointId) return;
+    if (!isGlobal && !endpointId) return;
     const trimmed = title.trim();
-    const patch = { endpointId, title: trimmed === '' ? null : trimmed, config };
+    const patch = {
+      endpointId: isGlobal ? null : endpointId,
+      title: trimmed === '' ? null : trimmed,
+      config,
+    };
     if (existing) {
       updateWidget(existing.id, patch);
     } else {
@@ -131,6 +141,14 @@ export function WidgetConfigScreen() {
               </Paragraph>
             </YStack>
 
+            {isGlobal ? (
+              <YStack gap="$2">
+                <MicroLabel>Endpoint</MicroLabel>
+                <UiText variant="footer" color="$textDim" testID="widget-endpoint-global">
+                  Reads every endpoint. This widget is not bound to one.
+                </UiText>
+              </YStack>
+            ) : (
             <YStack gap="$2">
               <MicroLabel>Endpoint</MicroLabel>
               <XStack gap={8} flexWrap="wrap">
@@ -152,8 +170,14 @@ export function WidgetConfigScreen() {
                 ))}
               </XStack>
             </YStack>
+            )}
 
-            <WidgetOptions config={config} endpointId={endpointId} onChange={setOption} />
+            <WidgetOptions
+              type={definition.type}
+              config={config}
+              endpointId={endpointId}
+              onChange={setOption}
+            />
           </YStack>
         </ScrollView>
 
@@ -174,7 +198,24 @@ const OPTION_LABELS: Record<string, string> = {
   perCoreOverlay: 'Overlay per-core traces',
   showSwap: 'Show swap',
   normalize: 'Normalize per core',
+  showEveryMount: 'Show every mount, including bind mounts',
+  includeResolved: 'Include resolved events',
+  sort: 'Sort by',
+  severity: 'Severity',
+  rows: 'Rows',
 };
+
+/** Readable names for enum cases. Anything unnamed shows the case as the schema spells it. */
+const CHOICE_LABELS: Record<string, string> = {
+  cpu: 'CPU',
+  memory: 'Memory',
+  name: 'Name',
+  all: 'All',
+  critical: 'Critical only',
+};
+
+/** The row counts offered for a table. A free-text number field would need a keyboard and a parse. */
+const ROW_CHOICES = [10, 20, 30, 50];
 
 /**
  * The options a widget type declares, rendered from its parsed config.
@@ -184,10 +225,12 @@ const OPTION_LABELS: Record<string, string> = {
  * thirteen schemas, and the schemas are already the source of truth.
  */
 function WidgetOptions({
+  type,
   config,
   endpointId,
   onChange,
 }: {
+  type: WidgetType;
   config: Record<string, unknown>;
   endpointId: string | null;
   onChange: (key: string, value: unknown) => void;
@@ -246,6 +289,48 @@ function WidgetOptions({
                 testID={`widget-option-${key}`}
               />
             </XStack>
+          );
+        }
+
+        // A string option's cases come from the schema rather than from a list kept here, so
+        // adding one to an enum adds a button with nothing else to remember.
+        if (typeof value === 'string') {
+          const choices = optionChoices(type, key);
+          if (!choices) return null;
+          return (
+            <YStack key={key} gap={7}>
+              <MicroLabel>{OPTION_LABELS[key] ?? key}</MicroLabel>
+              <XStack gap={8} flexWrap="wrap">
+                {choices.map((choice) => (
+                  <ToolbarButton
+                    key={choice}
+                    label={CHOICE_LABELS[choice] ?? choice}
+                    active={value === choice}
+                    onPress={() => onChange(key, choice)}
+                    testID={`widget-option-${key}-${choice}`}
+                  />
+                ))}
+              </XStack>
+            </YStack>
+          );
+        }
+
+        if (typeof value === 'number') {
+          return (
+            <YStack key={key} gap={7}>
+              <MicroLabel>{OPTION_LABELS[key] ?? key}</MicroLabel>
+              <XStack gap={8} flexWrap="wrap">
+                {ROW_CHOICES.map((count) => (
+                  <ToolbarButton
+                    key={count}
+                    label={String(count)}
+                    active={value === count}
+                    onPress={() => onChange(key, count)}
+                    testID={`widget-option-${key}-${count}`}
+                  />
+                ))}
+              </XStack>
+            </YStack>
           );
         }
 

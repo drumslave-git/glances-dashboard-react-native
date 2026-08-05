@@ -12,6 +12,13 @@ interface SparklineProps {
   width: number;
   height: number;
   color: string;
+  /**
+   * Pin the scale to 0–100 instead of following the data.
+   *
+   * What a stack of sparklines is for: with each row scaled to its own peak, an idle process draws
+   * the same busy silhouette as a saturated one, and comparing two rows becomes impossible.
+   */
+  percentage?: boolean;
   testID?: string;
 }
 
@@ -23,7 +30,14 @@ interface SparklineProps {
  * implementation, so a sparkline and the chart it degrades from cannot drift
  * apart. The `sparkline` rung is what turns everything else off.
  */
-export function Sparkline({ samples, width, height, color, testID }: SparklineProps) {
+export function Sparkline({
+  samples,
+  width,
+  height,
+  color,
+  percentage = false,
+  testID,
+}: SparklineProps) {
   const { t } = useTelemetry();
 
   if (samples.length === 0 || width <= 0 || height <= 0) {
@@ -39,7 +53,7 @@ export function Sparkline({ samples, width, height, color, testID }: SparklinePr
           width={width}
           height={height}
           layers={[{ samples, color, fill: false }]}
-          domain={seriesDomain(samples)}
+          domain={seriesDomain(samples, { percentage })}
           tokens={t}
           rung="sparkline"
         />

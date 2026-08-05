@@ -10,6 +10,7 @@ import {
   isWidgetType,
   metricsByGroup,
   parseWidgetConfig,
+  optionChoices,
   pluginsForEndpoint,
   requestedWindowSec,
   retentionSecForEndpoint,
@@ -335,5 +336,30 @@ describe('a global widget belongs to no endpoint', () => {
   it('is not confused with an endpoint-scoped widget that has lost its host', () => {
     const orphan = [{ type: 'cpu', endpointId: null }];
     expect(pluginsForEndpoint('e1', orphan)).toEqual([]);
+  });
+});
+
+describe('optionChoices', () => {
+  it('reads an enum option’s cases off the schema, through its default wrapper', () => {
+    expect(optionChoices('processes', 'sort')).toEqual(['cpu', 'memory', 'name']);
+    expect(optionChoices('alerts', 'severity')).toEqual(['all', 'critical']);
+  });
+
+  it('returns nothing for an option that is not a set of choices', () => {
+    // The config screen renders a control per *shape*; these two have their own.
+    expect(optionChoices('processes', 'rows')).toBeNull();
+    expect(optionChoices('alerts', 'includeResolved')).toBeNull();
+    expect(optionChoices('cpu', 'nothingByThisName')).toBeNull();
+  });
+
+  it('offers a choice for every string option any widget declares', () => {
+    // A string with no cases renders no control at all, so the option would be unreachable.
+    for (const definition of Object.values(WIDGET_DEFINITIONS)) {
+      const defaults = parseWidgetConfig(definition.type, {});
+      for (const [key, value] of Object.entries(defaults)) {
+        if (typeof value !== 'string') continue;
+        expect(optionChoices(definition.type, key)).not.toBeNull();
+      }
+    }
   });
 });

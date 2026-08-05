@@ -66,6 +66,27 @@ export function visibleColumns(columns: readonly GridColumn[], available: number
   return kept.length > 0 ? kept : essential;
 }
 
+/**
+ * How wide one flexible column actually lands, in points.
+ *
+ * Needed because one cell has to shorten its own text rather than let the text layer do it: a
+ * mount path has to lose its *head*, and `ellipsizeMode="head"` is a no-op on web, where React
+ * Native DOM has only CSS `text-overflow`. Shortening to a fixed character budget instead was the
+ * first attempt and it cannot work — the budget has to match the pixels, and the pixels depend on
+ * which columns survived.
+ */
+export function flexibleColumnWidth(columns: readonly GridColumn[], available: number): number {
+  let fixed = 0;
+  let shares = 0;
+  for (const column of columns) {
+    fixed += COLUMN_GAP;
+    if (column.width === undefined) shares += column.flex ?? 1;
+    else fixed += column.width;
+  }
+  if (shares === 0) return 0;
+  return Math.max(0, (available - fixed) / shares);
+}
+
 /** The flex style for one column — a fixed width, or a share of what is left. */
 export function columnStyle(column: GridColumn): {
   width?: number;

@@ -11,12 +11,12 @@ import { useTelemetry } from '@/theme/use-telemetry';
 import type { FsItem, GpuItem, SensorItem } from '@/types/glances';
 import { formatFieldValue, formatLooseNumber } from '@/utils/widgetData';
 
-import { XStack, YStack } from 'tamagui';
+import { ScrollView, XStack, YStack } from 'tamagui';
 
-import { MonoText } from '@/components/telemetry/text';
+import { MicroLabel, MonoText } from '@/components/telemetry/text';
 
-import { DataGrid } from '../data-grid';
-import type { GridColumn } from '../grid-columns';
+import { DataGrid, GridStack } from '../data-grid';
+import { flexibleColumnWidth, visibleColumns, type GridColumn } from '../grid-columns';
 import { MeterList, TextReadout, type MeterRow, type ReadoutGroup, type ReadoutRow } from '../readout';
 import { dedupeMounts, shortenMountPath } from '../rates';
 import type { WidgetProps } from '../types';
@@ -42,17 +42,25 @@ function visibleMounts(items: FsItem[], config: Record<string, unknown>): FsItem
 }
 
 /**
- * The mount path always survives — it names the row — and the device/type pair is the first thing
- * to go, being a qualifier rather than a figure (ref §8).
+ * The mount path always survives — it names the row — and the bar is what the table is for.
+ *
+ * The device and its filesystem type get **no column**: they identify a mount rather than measure
+ * it, so they go on the small second line under the path, where they cost the table no width.
+ * Giving them a track of their own was the first cut of this table and it was wrong — it took a
+ * third of the row from the one string that tells three mounts of the same disk apart (ref §8).
  */
 const FILESYSTEM_COLUMNS: GridColumn[] = [
   { key: 'mount', label: 'Mount', priority: 0 },
-  { key: 'device', label: 'Device', width: 110, priority: 4 },
   { key: 'size', label: 'Size', width: 74, align: 'right', priority: 3 },
   { key: 'used', label: 'Used', width: 74, align: 'right', priority: 1 },
   { key: 'free', label: 'Free', width: 74, align: 'right', priority: 2 },
+  // No separate `Use %` column: the bar already prints that figure beside itself, and a table
+  // that states the same number twice in adjacent columns reads as a bug in the table.
   { key: 'usage', label: 'Usage', width: 92, align: 'right', priority: 0 },
 ];
+
+/** Roughly the advance width of one JetBrains Mono glyph, as a fraction of the font size. */
+const MONO_ADVANCE = 0.6;
 
 export function FilesystemWidget({
   endpointId,
@@ -63,8 +71,20 @@ export function FilesystemWidget({
   status,
   testID,
 }: WidgetProps) {
-  const mounts = visibleMounts(useLatest<FsItem[]>(endpointId, 'fs') ?? [], config);
-  const { t } = useTelemetry();
+  const reported = useLatest<FsItem[]>(endpointId, 'fs');
+  const mounts = visibleMounts(reported ?? [], config);
+  const { t, size } = useTelemetry();
+
+  // How many characters the mount column can actually show, from the width it actually got. A
+  // fixed budget cannot work: it has to match the pixels, and the pixels depend on which columns
+  // survived the drop ladder.
+  const mountChars = Math.max(
+    12,
+    Math.floor(
+      flexibleColumnWidth(visibleColumns(FILESYSTEM_COLUMNS, width), width) /
+        (size('row') * MONO_ADVANCE),
+    ),
+  );
 
   return (
     <DataGrid
@@ -73,16 +93,25 @@ export function FilesystemWidget({
       keyOf={(mount) => mount.mntPoint}
       width={width}
       height={height}
-      emptyMessage="No filesystems reported."
+      stacked
+      emptyMessage={reported === undefined ? 'Waiting for data…' : 'No mount points reported.'}
       testID={testID}
       cell={(mount, column) => {
+        const tone = thresholdTone(thresholdLevel(status?.limits, 'fs', mount.percent));
+        const color = tone === 'accent' ? accentColor : t.signal[tone];
         switch (column.key) {
           case 'mount':
-            // Shortened from the left: mount paths agree at the start and differ at the end, so
-            // the default truncation destroys exactly what identifies the row.
-            return shortenMountPath(mount.mntPoint, 28);
-          case 'device':
-            return [mount.deviceName, mount.fsType].filter(Boolean).join(' · ') || '—';
+            return (
+              <GridStack
+                // Shortened from the *left*, in the string rather than by the text layer: mount
+                // paths agree at the start and differ at the end, so cutting the tail destroys
+                // exactly what identifies the row — and `ellipsizeMode="head"` is a no-op on web,
+                // where React Native DOM has only CSS `text-overflow`, which cuts the tail.
+                value={shortenMountPath(mount.mntPoint, mountChars)}
+                meta={[mount.deviceName, mount.fsType].filter(Boolean).join(' · ') || '—'}
+                ellipsize="head"
+              />
+            );
           case 'size':
             return bytes(mount.size) ?? '—';
           case 'used':
@@ -90,14 +119,12 @@ export function FilesystemWidget({
           case 'free':
             return bytes(mount.free) ?? '—';
           case 'usage': {
-            const tone = thresholdTone(thresholdLevel(status?.limits, 'fs', mount.percent));
-            const color = tone === 'accent' ? accentColor : t.signal[tone];
             return (
               <XStack items="center" gap={6} justify="flex-end">
-                <YStack flex={1} height={3} bg="$trackBg" rounded={2} overflow="hidden">
+                <YStack flex={1} minW={20} height={3} bg="$trackBg" rounded={2} overflow="hidden">
                   <YStack height={3} width={`${Math.min(100, mount.percent)}%`} style={{ backgroundColor: color }} />
                 </YStack>
-                <MonoText variant="row" numberOfLines={1} style={{ color }}>
+                <MonoText variant="row" numberOfLines={1} width={34} text="right" style={{ color }}>
                   {`${Math.round(mount.percent)}%`}
                 </MonoText>
               </XStack>
@@ -158,63 +185,63 @@ function sensorValue(sensor: SensorItem): string | null {
   return `${formatLooseNumber(sensor.value)}${sensor.unit ? ` ${sensor.unit}` : ''}`;
 }
 
-const SENSOR_COLUMNS: GridColumn[] = [
-  { key: 'label', label: 'Sensor', priority: 0 },
-  { key: 'group', label: 'Type', width: 104, priority: 2 },
-  { key: 'value', label: 'Reading', width: 90, align: 'right', priority: 0 },
-];
-
-interface SensorRow extends SensorItem {
-  group: string;
-}
-
-export function SensorsWidget({ endpointId, config, width, height, testID }: WidgetProps) {
-  const sensors = useLatest<SensorItem[]>(endpointId, 'sensors') ?? [];
+/**
+ * Temperatures, fans and battery, **grouped under type headings** rather than tabled (ref §8).
+ *
+ * This one deliberately does not use `DataGrid`, unlike the filesystem table beside it. A sensor
+ * row is a label and one reading — there is no second column to line up — and the grouping is the
+ * structure: on real hardware `Core 0` appears under temperatures *and* under fans, so a flat
+ * table has to carry a `Type` column that repeats itself down the whole widget to say what a
+ * heading says once.
+ */
+export function SensorsWidget({ endpointId, config, height, testID }: WidgetProps) {
+  const sensors = useLatest<SensorItem[]>(endpointId, 'sensors');
   const { t } = useTelemetry();
 
-  // Grouped into a `Type` column rather than into headings: a grid has one row shape, and a
-  // heading row that is not a reading would have to fake every other column.
-  const rows: SensorRow[] = [...groupSensors(sensors, config)].flatMap(([group, items]) =>
-    items.map((sensor) => ({ ...sensor, group })),
-  );
+  const groups = [...groupSensors(sensors ?? [], config)];
+
+  if (groups.length === 0) {
+    return (
+      <MonoText variant="row" color="$textDim" testID={testID ? `${testID}-empty` : undefined}>
+        {sensors === undefined ? 'Waiting for data…' : 'No sensors reported by this endpoint.'}
+      </MonoText>
+    );
+  }
 
   return (
-    <DataGrid
-      columns={SENSOR_COLUMNS}
-      rows={rows}
-      keyOf={(sensor) => sensor.id}
-      width={width}
-      height={height}
-      emptyMessage="No sensors reported."
-      testID={testID}
-      cell={(sensor, column) => {
-        switch (column.key) {
-          case 'label':
-            return sensor.label;
-          case 'group':
-            return sensor.group;
-          case 'value': {
-            // Per-item limits, because a fan and a CPU core share no scale — a global threshold
-            // key could not describe either.
-            const tone = thresholdTone(
-              sensorThresholdLevel(sensor.value, sensor.warning, sensor.critical),
-            );
-            return (
-              <MonoText
-                variant="row"
-                numberOfLines={1}
-                text="right"
-                style={{ color: tone === 'accent' ? t.text.strong : t.signal[tone] }}
-              >
-                {sensorValue(sensor) ?? '—'}
-              </MonoText>
-            );
-          }
-          default:
-            return '—';
-        }
-      }}
-    />
+    <ScrollView flex={1} showsVerticalScrollIndicator={false} testID={testID}>
+      <YStack gap={12} maxH={height}>
+        {groups.map(([label, items]) => (
+          <YStack key={label} gap={3}>
+            <MicroLabel borderBottomWidth={1} borderColor="$hairline" pb={3}>
+              {label}
+            </MicroLabel>
+            {items.map((sensor) => {
+              // Per-item limits, because a fan and a CPU core share no scale — a global threshold
+              // key could not describe either.
+              const tone = thresholdTone(
+                sensorThresholdLevel(sensor.value, sensor.warning, sensor.critical),
+              );
+              return (
+                // Labels repeat across types on real hardware, so the key is composite.
+                <XStack key={sensor.id} items="baseline" justify="space-between" gap={8}>
+                  <MonoText variant="row" color="$textDim" numberOfLines={1} shrink={1}>
+                    {sensor.label}
+                  </MonoText>
+                  <MonoText
+                    variant="row"
+                    numberOfLines={1}
+                    style={{ color: tone === 'accent' ? t.text.strong : t.signal[tone] }}
+                  >
+                    {sensorValue(sensor) ?? '—'}
+                  </MonoText>
+                </XStack>
+              );
+            })}
+          </YStack>
+        ))}
+      </YStack>
+    </ScrollView>
   );
 }
 

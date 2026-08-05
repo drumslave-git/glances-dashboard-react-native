@@ -1,4 +1,9 @@
-import { columnStyle, visibleColumns, type GridColumn } from './grid-columns';
+import {
+  columnStyle,
+  flexibleColumnWidth,
+  visibleColumns,
+  type GridColumn,
+} from './grid-columns';
 
 /** Roughly the processes table: a flexible command column and four numeric ones. */
 const COLUMNS: GridColumn[] = [
@@ -84,5 +89,39 @@ describe('columnStyle', () => {
 
   it('honours an explicit share', () => {
     expect(columnStyle({ key: 'name', label: 'Command', flex: 2, priority: 0 }).flexGrow).toBe(2);
+  });
+});
+
+describe('flexibleColumnWidth', () => {
+  it('gives the flexible column what the fixed ones and the gaps leave', () => {
+    const columns: GridColumn[] = [
+      { key: 'name', label: 'Name', priority: 0 },
+      { key: 'a', label: 'A', width: 100, priority: 1 },
+      { key: 'b', label: 'B', width: 100, priority: 1 },
+    ];
+    // 500 − (100 + 100) − 3 gaps of 10 = 270.
+    expect(flexibleColumnWidth(columns, 500)).toBe(270);
+  });
+
+  it('splits the remainder between flexible columns by their share', () => {
+    const columns: GridColumn[] = [
+      { key: 'a', label: 'A', priority: 0 },
+      { key: 'b', label: 'B', flex: 2, priority: 0 },
+    ];
+    // 320 − 2 gaps = 300, over 3 shares.
+    expect(flexibleColumnWidth(columns, 320)).toBe(100);
+  });
+
+  it('never goes negative, however cramped the table', () => {
+    const columns: GridColumn[] = [
+      { key: 'name', label: 'Name', priority: 0 },
+      { key: 'wide', label: 'Wide', width: 400, priority: 0 },
+    ];
+    expect(flexibleColumnWidth(columns, 100)).toBe(0);
+  });
+
+  it('is zero when every column is fixed, so no caller divides by it', () => {
+    const columns: GridColumn[] = [{ key: 'a', label: 'A', width: 50, priority: 0 }];
+    expect(flexibleColumnWidth(columns, 500)).toBe(0);
   });
 });

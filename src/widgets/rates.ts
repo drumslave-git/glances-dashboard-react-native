@@ -46,6 +46,26 @@ export function formatTotal(bytes: number | null | undefined, unit: RateUnit = '
 }
 
 /**
+ * A span of seconds as `H:MM:SS` — process CPU time and how long an event has been running.
+ *
+ * Deliberately **not** wrapped to a clock and deliberately not the uptime formatter's `2d 3h`: a
+ * process that has burned 26 hours of CPU has burned 26 hours, and rendering that as `2:00:00`
+ * would be a different number. Hours simply keep counting (ref §7.4).
+ */
+export function formatElapsed(seconds: number | null | undefined): string {
+  if (seconds == null || !Number.isFinite(seconds) || seconds < 0) return '—';
+  const whole = Math.floor(seconds);
+  const minutes = Math.floor((whole % 3600) / 60);
+  return `${Math.floor(whole / 3600)}:${String(minutes).padStart(2, '0')}:${String(whole % 60).padStart(2, '0')}`;
+}
+
+/** `1.9%`, or a dash. The percent sign belongs to the value here — these sit in unlabelled cells. */
+export function formatPercent(value: number | null | undefined, digits = 1): string {
+  if (value == null || !Number.isFinite(value)) return '—';
+  return `${value.toFixed(digits)}%`;
+}
+
+/**
  * Which items a widget shows when its config names none.
  *
  * "The busiest few", by the combined rate — the reference's own fallback. A selection always wins

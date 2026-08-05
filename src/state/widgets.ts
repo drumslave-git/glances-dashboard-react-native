@@ -6,6 +6,10 @@ import { isWidgetType, parseWidgetConfig, widgetDefinition, type WidgetType } fr
 
 import { asyncStorageJSON, STORAGE_KEYS } from './storage';
 
+/** Whether a stored type belongs to no endpoint. An unknown type is treated as endpoint-scoped. */
+const isGlobalWidgetType = (type: string): boolean =>
+  isWidgetType(type) && widgetDefinition(type).scope === 'global';
+
 export interface AddWidgetInput {
   type: WidgetType;
   /** `null` only for a widget whose type is `global`. */
@@ -160,9 +164,14 @@ export const useWidgetsStore = create<WidgetsState>()(
       removeWidgetsForEndpoint: (endpointId) => {
         set((state) => ({
           widgets: withSequentialRows(
-            // `endpointId === null` is a general widget, which belongs to no host and outlives the
-            // deletion of any of them.
-            state.widgets.filter((widget) => widget.endpointId !== endpointId),
+            state.widgets.filter(
+              (widget) =>
+                // `endpointId === null` is a general widget, which belongs to no host and outlives
+                // the deletion of any of them. The *type* is checked as well, so a record written
+                // before the config screen stopped offering an endpoint for a global widget is not
+                // collateral damage — the scope is the authority, not what happens to be stored.
+                widget.endpointId !== endpointId || isGlobalWidgetType(widget.type),
+            ),
           ),
         }));
       },

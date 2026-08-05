@@ -193,3 +193,33 @@ describe('WidgetConfigScreen — host-specific selections', () => {
     expect(getByTestId('widget-selection-gpus')).toHaveTextContent(/Nothing reported yet/);
   });
 });
+
+describe('WidgetConfigScreen — a global widget', () => {
+  beforeEach(() => {
+    mockParams = { id: 'new', type: 'alerts' };
+  });
+
+  it('offers no endpoint to bind to, and says why', async () => {
+    const { getByTestId, queryByTestId } = await renderWithProviders(<WidgetConfigScreen />);
+
+    expect(queryByTestId('widget-endpoint-s-1')).toBeNull();
+    expect(getByTestId('widget-endpoint-global')).toHaveTextContent(/every endpoint/);
+  });
+
+  it('saves with no endpoint, so deleting a host cannot take it down', async () => {
+    // `removeWidgetsForEndpoint` deletes by endpoint id. A global widget stored against a host
+    // would be deleted with that host — the exact outcome the global scope exists to prevent.
+    const { getByTestId, user } = await renderWithProviders(<WidgetConfigScreen />);
+    await user.press(getByTestId('widget-save'));
+
+    expect(widgets()).toHaveLength(1);
+    expect(widgets()[0]).toMatchObject({ type: 'alerts', endpointId: null });
+  });
+
+  it('renders the options its schema declares', async () => {
+    const { getByTestId } = await renderWithProviders(<WidgetConfigScreen />);
+
+    expect(getByTestId('widget-option-includeResolved')).toBeTruthy();
+    expect(getByTestId('widget-option-severity-critical')).toBeTruthy();
+  });
+});

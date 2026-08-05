@@ -726,6 +726,9 @@ const WIDGET_SPECS: Record<WidgetType, WidgetSpec> = {
     sizes: tiers([2, 4], [2, 4], [3, 4]),
     configSchema: z.object({
       includeResolved: z.boolean().default(true),
+      // The one filter the feed needs. Ordering stays chronological whatever this says — see
+      // `AlertsWidget` for why severity is a filter and never a sort.
+      severity: z.enum(['all', 'critical']).default('all'),
     }),
   },
 };
@@ -802,6 +805,29 @@ export function parseWidgetConfig(type: WidgetType, config: unknown): Record<str
 
   const fallback = schema.safeParse({});
   return fallback.success ? fallback.data : {};
+}
+
+/**
+ * The choices a string option offers, read off the schema.
+ *
+ * The config screen renders controls from the *shape* of each value rather than from a per-type
+ * form, and a bare string is the one shape that cannot say what it accepts. Asking the schema keeps
+ * the two in step: adding a case to an enum adds a button, with nothing else to remember.
+ */
+export function optionChoices(type: WidgetType, key: string): string[] | null {
+  /** Zod's own shape is not in the public type of a `ZodType`, so it is narrowed rather than cast. */
+  interface Introspectable {
+    def?: { type?: string; innerType?: Introspectable; entries?: Record<string, string> };
+  }
+  const schema = WIDGET_DEFINITIONS[type].configSchema as unknown as {
+    shape?: Record<string, Introspectable>;
+  };
+
+  let field = schema.shape?.[key];
+  // Every option here is `.default(…)`-wrapped, so the enum sits one or more unwraps down.
+  while (field?.def?.innerType) field = field.def.innerType;
+  if (field?.def?.type !== 'enum') return null;
+  return Object.values(field.def.entries ?? {});
 }
 
 /** What one widget row asks the poller to fetch. */

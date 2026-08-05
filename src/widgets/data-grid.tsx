@@ -6,12 +6,20 @@
  * grid, so the same job is done with flex rows over a shared column spec: header and body read the
  * same `GridColumn[]`, which is what stops a column drifting between the two.
  *
- * Two behaviours are the point of the component rather than decoration:
+ * Three behaviours are the point of the component rather than decoration:
  *
  * - **Columns drop by priority, they never clip.** The measured width decides which survive
  *   (`visibleColumns`), and a priority-0 column survives everything.
  * - **Rows are never half-cut.** The row count follows the measured height, so the table ends on a
  *   whole row and a partial one is simply not drawn.
+ * - **A row is two lines.** Every table in the reference puts a qualifier under its value — the
+ *   device under the mount, the engine under the container, the average under the peak. It is what
+ *   lets a five-column table carry ten figures, and it is why `stacked` changes the row height
+ *   rather than each cell deciding for itself: rows that disagree about their height cannot be
+ *   counted against the available space.
+ *
+ * Row heights are derived from the reading scale rather than fixed, so a larger interface size
+ * gives fewer, taller rows instead of clipping every one of them.
  *
  * The header sits outside the scroll view, which is how a sticky header is spelled here.
  */
@@ -23,9 +31,10 @@ import { useTelemetry } from '@/theme/use-telemetry';
 
 import { columnStyle, visibleColumns, type GridColumn } from './grid-columns';
 
-const HEADER_HEIGHT = 20;
-const ROW_HEIGHT = 22;
 const COLUMN_GAP = 10;
+
+/** Line box for a font size — the leading this design uses for dense rows. */
+const lineHeight = (size: number) => Math.ceil(size * 1.35);
 
 export interface DataGridProps<Row> {
   columns: readonly GridColumn[];
@@ -37,12 +46,16 @@ export interface DataGridProps<Row> {
   /** Measured box of the widget body. */
   width: number;
   height: number;
+  /** Rows carry a second line (see the module comment), so they are taller. */
+  stacked?: boolean;
   /** The column currently sorted, if the table sorts. */
   sortKey?: string;
   onSort?: (key: string) => void;
   /** A line under the table — the reference's processcount footer. */
-  footer?: string | null;
+  footer?: ReactNode | string | null;
   emptyMessage?: string;
+  /** Cap on rows drawn, on top of whatever the height allows. */
+  maxRows?: number;
   testID?: string;
 }
 
@@ -53,20 +66,26 @@ export function DataGrid<Row>({
   cell,
   width,
   height,
+  stacked = false,
   sortKey,
   onSort,
   footer,
   emptyMessage = 'Nothing to show.',
+  maxRows,
   testID,
 }: DataGridProps<Row>) {
-  const { t } = useTelemetry();
+  const { t, size } = useTelemetry();
   const shown = visibleColumns(columns, width);
 
-  const bodyHeight = Math.max(0, height - HEADER_HEIGHT - (footer ? ROW_HEIGHT : 0));
+  const headerHeight = lineHeight(size('micro')) + 6;
+  const footerHeight = lineHeight(size('footer')) + 4;
+  const rowHeight = lineHeight(size('row')) + (stacked ? lineHeight(size('device')) : 0) + 6;
+
+  const bodyHeight = Math.max(0, height - headerHeight - (footer ? footerHeight : 0));
   // Whole rows only: a half-cut row reads as a rendering fault, where a shorter table plainly
   // says there was no room.
-  const capacity = Math.max(0, Math.floor(bodyHeight / ROW_HEIGHT));
-  const visible = rows.slice(0, capacity);
+  const capacity = Math.max(0, Math.floor(bodyHeight / rowHeight));
+  const visible = rows.slice(0, Math.min(capacity, maxRows ?? capacity));
 
   if (rows.length === 0) {
     return (
@@ -81,7 +100,7 @@ export function DataGrid<Row>({
       <XStack
         items="center"
         gap={COLUMN_GAP}
-        height={HEADER_HEIGHT}
+        height={headerHeight}
         borderBottomWidth={1}
         borderColor="$hairline"
         role="row"
@@ -119,7 +138,7 @@ export function DataGrid<Row>({
             key={keyOf(row)}
             items="center"
             gap={COLUMN_GAP}
-            height={ROW_HEIGHT}
+            height={rowHeight}
             borderBottomWidth={1}
             borderColor="$rowBorder"
             role="row"
@@ -147,17 +166,80 @@ export function DataGrid<Row>({
         ))}
       </ScrollView>
 
-      {footer && (
+      {footer != null &&
+        (typeof footer === 'string' ? (
+          <MonoText
+            variant="footer"
+            color="$textDim"
+            numberOfLines={1}
+            height={footerHeight}
+            testID={testID ? `${testID}-footer` : undefined}
+          >
+            {footer}
+          </MonoText>
+        ) : (
+          <YStack height={footerHeight} testID={testID ? `${testID}-footer` : undefined}>
+            {footer}
+          </YStack>
+        ))}
+    </YStack>
+  );
+}
+
+/**
+ * A cell's value with its qualifier underneath — the reference's two-line row.
+ *
+ * The second line is the `device` type role, the same one the widget header's device line uses:
+ * it is the same relationship (this is *what* the thing above is), so it reads at the same weight.
+ * `ellipsize` exists for the one case where the tail identifies the row — mount paths agree at the
+ * start and differ at the end, so cutting the end destroys exactly what names it.
+ */
+export function GridStack({
+  value,
+  meta,
+  align = 'left',
+  color,
+  metaColor,
+  ellipsize = 'tail',
+}: {
+  value: ReactNode | string;
+  meta?: ReactNode | string | null;
+  align?: 'left' | 'right';
+  color?: string;
+  metaColor?: string;
+  ellipsize?: 'head' | 'tail';
+}) {
+  return (
+    <YStack minW={0} gap={1}>
+      {typeof value === 'string' ? (
         <MonoText
-          variant="footer"
-          color="$textDim"
+          variant="row"
+          color="$textStrong"
           numberOfLines={1}
-          height={ROW_HEIGHT}
-          testID={testID ? `${testID}-footer` : undefined}
+          ellipsizeMode={ellipsize}
+          text={align}
+          style={color ? { color } : undefined}
         >
-          {footer}
+          {value}
         </MonoText>
+      ) : (
+        value
       )}
+      {meta != null &&
+        (typeof meta === 'string' ? (
+          <MonoText
+            variant="device"
+            color="$textDim"
+            numberOfLines={1}
+            ellipsizeMode={ellipsize}
+            text={align}
+            style={metaColor ? { color: metaColor } : undefined}
+          >
+            {meta}
+          </MonoText>
+        ) : (
+          meta
+        ))}
     </YStack>
   );
 }

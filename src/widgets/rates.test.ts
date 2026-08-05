@@ -1,4 +1,58 @@
-import { dedupeMounts, formatRate, formatTotal, pickBusiest, shortenMountPath } from './rates';
+import {
+  dedupeMounts,
+  formatElapsed,
+  formatPercent,
+  formatRate,
+  formatTotal,
+  pickBusiest,
+  shortenMountPath,
+} from './rates';
+
+describe('formatElapsed', () => {
+  it('renders H:MM:SS with zero-padded minutes and seconds', () => {
+    expect(formatElapsed(0)).toBe('0:00:00');
+    expect(formatElapsed(65)).toBe('0:01:05');
+    expect(formatElapsed(3661)).toBe('1:01:01');
+  });
+
+  it('keeps counting hours instead of wrapping to a clock or a day count', () => {
+    // 26 hours of CPU time is 26 hours. `2:00:00` would be a different number, and `1d 2h` would
+    // lose the precision the column exists for.
+    expect(formatElapsed(26 * 3600)).toBe('26:00:00');
+    expect(formatElapsed(100 * 3600 + 59 * 60 + 59)).toBe('100:59:59');
+  });
+
+  it('drops fractional seconds rather than rounding up into the next second', () => {
+    expect(formatElapsed(59.9)).toBe('0:00:59');
+  });
+
+  it('dashes anything that is not a duration', () => {
+    expect(formatElapsed(null)).toBe('—');
+    expect(formatElapsed(undefined)).toBe('—');
+    expect(formatElapsed(-1)).toBe('—');
+    expect(formatElapsed(Number.NaN)).toBe('—');
+  });
+});
+
+describe('formatPercent', () => {
+  it('carries the sign, because these sit in cells with no unit of their own', () => {
+    expect(formatPercent(1.75)).toBe('1.8%');
+    expect(formatPercent(0)).toBe('0.0%');
+  });
+
+  it('does not clamp — process CPU passes 100 on a multi-core host', () => {
+    expect(formatPercent(654.37)).toBe('654.4%');
+  });
+
+  it('takes a digit count', () => {
+    expect(formatPercent(42.4, 0)).toBe('42%');
+  });
+
+  it('dashes a missing reading', () => {
+    expect(formatPercent(null)).toBe('—');
+    expect(formatPercent(undefined)).toBe('—');
+  });
+});
 
 describe('formatRate', () => {
   it('scales bytes per second', () => {

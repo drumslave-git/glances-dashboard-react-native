@@ -184,3 +184,21 @@ describe('migrateWidgets', () => {
     expect(migrateWidgets({ widgets: 'nope' }, 2)).toEqual({ widgets: [] });
   });
 });
+
+describe('a global widget is not collateral damage', () => {
+  it('survives the deletion of an endpoint it was mistakenly bound to', () => {
+    // Config screens written before the global scope existed saved an endpoint id on every widget.
+    // The scope is the authority, not what happens to be stored.
+    useWidgetsStore.setState({
+      widgets: [
+        row({ id: 'w1', type: 'cpu', endpointId: 'e1' }),
+        row({ id: 'w2', type: 'alerts', endpointId: 'e1' }),
+        row({ id: 'w3', type: 'alerts', endpointId: null }),
+      ],
+    });
+
+    useWidgetsStore.getState().removeWidgetsForEndpoint('e1');
+
+    expect(useWidgetsStore.getState().widgets.map((widget) => widget.id)).toEqual(['w2', 'w3']);
+  });
+});
