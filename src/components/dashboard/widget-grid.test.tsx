@@ -1,3 +1,4 @@
+import { StyleSheet } from 'react-native';
 import { State } from 'react-native-gesture-handler';
 import {
   fireGestureHandler,
@@ -9,6 +10,8 @@ import { useEndpointsStore } from '@/state/endpoints';
 import { useWidgetsStore } from '@/state/widgets';
 import { fireEvent, renderWithProviders, waitFor } from '@/test-utils/render';
 import type { WidgetInstance } from '@/types/dashboard';
+
+import { heightForRows } from '@/utils/widgetLayout';
 
 import { WidgetGrid } from './widget-grid';
 
@@ -175,5 +178,29 @@ describe('WidgetGrid', () => {
     const { getByTestId } = await renderGrid(makeWidgets(3), false);
 
     expect(getByTestId('widget-menu-w-1')).toBeTruthy();
+  });
+});
+
+describe('WidgetGrid footprints', () => {
+  it('gives each cell a height from its row count', async () => {
+    // The frame inside is `flex: 1`, so a cell without a height collapses every card to its
+    // header — which is exactly what shipped before this was asserted.
+    const widgets = makeWidgets(1);
+    const { getByTestId } = await renderGrid(widgets);
+
+    const cell = getByTestId('widget-cell-w-1');
+    const height = StyleSheet.flatten(cell.props.style)?.height;
+    expect(height).toBeGreaterThan(heightForRows(widgets[0].h) - 1);
+  });
+
+  it('gives a wide widget twice the width of a regular one', async () => {
+    // Asserted as a ratio rather than a percentage: the column count follows the measured grid,
+    // so hard-coding it would test the harness rather than the layout.
+    const [regular, wide] = makeWidgets(2);
+    const { getByTestId } = await renderGrid([regular, { ...wide, w: 2 }]);
+
+    const percent = (id: string) =>
+      Number.parseFloat(String(StyleSheet.flatten(getByTestId(id).props.style)?.width));
+    expect(percent('widget-cell-w-2')).toBeCloseTo(percent('widget-cell-w-1') * 2, 5);
   });
 });

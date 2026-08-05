@@ -226,7 +226,14 @@ export function SeriesPanel({
   );
 }
 
-/** Build a reading without going through the generic field discovery. */
+/**
+ * Build a reading without going through the generic field discovery.
+ *
+ * **`text` never carries the unit.** `HeroValue` and the ring render the value and the unit as two
+ * elements — a big numeral and a small suffix — so folding the unit into the text too renders it
+ * twice ("1.7%%"). Callers wanting a unit *inside* the text, like a byte pair under a ring, pass
+ * `text` explicitly.
+ */
 export function reading(
   name: string,
   label: string,
@@ -237,7 +244,7 @@ export function reading(
     name,
     label,
     value,
-    text: options.text ?? (value == null ? '—' : formatStat(value, options.unit ?? null)),
+    text: options.text ?? (value == null ? '—' : formatStat(value, null)),
     unit: options.unit ?? null,
     percent: options.percent ?? null,
   };

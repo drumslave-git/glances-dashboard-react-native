@@ -7,7 +7,7 @@ import { ScrollView, XStack, YStack } from 'tamagui';
 import { GEOMETRY } from '@/theme/telemetry';
 import type { WidgetInstance } from '@/types/dashboard';
 import { reorderForPointer, stepOrder, type CardRect } from '@/utils/dragReorder';
-import { columnsForWidth, widthPercentForSpan } from '@/utils/widgetLayout';
+import { columnsForWidth, heightForRows, widthPercentForSpan } from '@/utils/widgetLayout';
 
 import { WidgetFrame } from '@/widgets/widget-frame';
 
@@ -214,6 +214,10 @@ function WidgetGridCell({
     <GestureDetector gesture={pan}>
       <YStack
         width={`${widthPercentForSpan(widget.w, columns)}%`}
+        // The cell owns the footprint, not the frame: `h` is in grid rows, and the frame inside
+        // fills whatever it is given. Without this the frame's `flex: 1` has nothing to fill and
+        // every card collapses to its header.
+        height={heightForRows(widget.h) + GEOMETRY.gridGap}
         p={GEOMETRY.gridGap / 2}
         onLayout={(event) => onMeasure(widget.id, event)}
         // The lifted card reads as picked up without leaving a hole in the flow.
