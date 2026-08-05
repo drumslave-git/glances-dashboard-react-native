@@ -149,7 +149,9 @@ export function WidgetTypeScreen() {
                               {definition.label}
                             </Label>
                             <MicroLabel>
-                              {widgetsForMetric(definition.id).length} styles
+                              {widgetsForMetric(definition.id).length === 1
+                                ? '1 style'
+                                : `${widgetsForMetric(definition.id).length} styles`}
                             </MicroLabel>
                           </XStack>
                           <UiText variant="footer" color="$textDim">

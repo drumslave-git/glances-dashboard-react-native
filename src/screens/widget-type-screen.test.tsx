@@ -31,7 +31,8 @@ describe('WidgetTypeScreen — step one, the metric', () => {
   it('says how many renderings each metric has', async () => {
     const { getByTestId } = await renderWithProviders(<WidgetTypeScreen />);
     expect(getByTestId('widget-metric-cpu')).toHaveTextContent(/3 styles/);
-    expect(getByTestId('widget-metric-system')).toHaveTextContent(/1 styles/);
+    // System info has exactly one rendering, and "1 styles" reads like a bug.
+    expect(getByTestId('widget-metric-system')).toHaveTextContent(/1 style(?!s)/);
   });
 
   it('asks for an endpoint first when there is none', async () => {

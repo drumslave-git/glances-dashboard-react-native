@@ -98,6 +98,10 @@ export function TextReadout({
               <MonoText
                 variant="row"
                 numberOfLines={1}
+                shrink={1}
+                // Capped so a long value — an OS string, a CPU model — cannot squeeze the label
+                // it belongs to down to "Sys…". Both may truncate; neither may vanish.
+                maxW="62%"
                 style={row.color ? { color: row.color } : { color: t.text.strong }}
               >
                 {row.value ?? NO_VALUE}

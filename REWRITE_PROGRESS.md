@@ -701,7 +701,7 @@ same moment for a side-by-side.
   covers the whole panel, header included, because it is the panel that is stale (ref §7.4). That
   belongs with the frame rebuild.
 
-### M12 — Widget framework + core metrics — `in progress`
+### M12 — Widget framework + core metrics — `done` (2026-08-05)
 - [x] **The data-only half of the registry** — `src/widgets/catalog.ts`. Metric × variant, the
       thirteen core types with their `requiredPlugins` / `capabilityPlugins` / size tiers / zod
       config schemas, plus `pluginsForEndpoint` and `retentionSecForEndpoint` — the two functions
@@ -723,8 +723,16 @@ same moment for a side-by-side.
 - [ ] **Open:** the summary strip still uses `useGlancesQuery` — it is chrome, and it asks for raw
       payloads that `buildSummaryCells` parses itself. Moving it onto the normalized feed goes with
       the appearance work in M16.
-- [ ] **Open:** not yet run on a real target. The whole widget layer changed, so this needs the
-      desktop build *and* Android before M12 is done.
+- [x] **Verified in the built desktop app** against the live server: ten typed widgets seeded and
+      drawing — streaming CPU and memory charts with grid, axis and marker; the CPU ring; the memory
+      gauge on the ring ladder's bar rung because its panel is short; per-core bars; four text
+      readouts. The v1 → v2 migration ran on the board this build inherited and left it empty at
+      version 2, dropping every generic widget and nothing else.
+- [x] **Verified on the Android emulator** through the *real* add-widget flow rather than a seeded
+      store: the AsyncStorage migration emptied the old board, then picker → CPU → the three
+      renderings → config (no Options, since `cpuGauge` declares none) → Add produced a live Skia
+      ring on the board. The widget header shows the endpoint as a **dot**, which is the compact
+      rung working at phone width. 3352 modules bundled, no JS errors, no fatals.
 
 **Notes (2026-08-05)**
 - **`zod` is now a declared dependency.** It was already present transitively at v3, which is a
@@ -764,6 +772,16 @@ same moment for a side-by-side.
 - **The config screen renders options from the parsed config's *shape***, not from a form written
   per type: a boolean is a toggle, `windowSec` is the window picker. Thirteen bespoke forms would be
   thirteen places to keep in step with thirteen schemas that are already the source of truth.
+- **Three bugs came from running it, none of which the suite could see.** Every card collapsed to
+  its header, because the old `WidgetCard` set its own height from the size preset and the new
+  frame is `flex: 1` with a cell that gave it nothing to fill — the cell owns the footprint now.
+  The chart heroes read "1.7%%", because `formatStat` folds the unit into the text while
+  `HeroValue` draws value and unit as two elements. And a long value could squeeze its own label
+  down to "Sys…", so the value is capped at 62% of the row.
+- **One thing worth copying from this milestone**: the Android check was done through the real
+  add-widget flow — picker, rendering, config, Add — rather than by seeding a store. It exercised
+  four screens and caught the one thing a seeded board cannot, which is whether a widget can be
+  *created* at all.
 
 ### M13 — Rate and table metrics — `not started`
 - [ ] network · networkText · diskio · diskioText · filesystem · filesystemText · sensors ·
