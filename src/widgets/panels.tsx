@@ -133,6 +133,14 @@ export interface SeriesPanelProps {
   timeWindow: TimeWindow;
   /** Per-series colours, keyed by reading name. Falls back to the accent. */
   colors?: Record<string, string>;
+  /**
+   * How to print the derived peak and average.
+   *
+   * Defaults to the same formatting a plain reading gets, which is right for percentages and wrong
+   * for anything with its own scale: a throughput peak printed as `504744` is a byte count, not a
+   * rate, and reads as noise beside a hero that says `493 KB/s`.
+   */
+  formatStatValue?: (value: number) => string;
   testID?: string;
 }
 
@@ -152,6 +160,7 @@ export function SeriesPanel({
   accentColor,
   timeWindow,
   colors,
+  formatStatValue,
   testID,
 }: SeriesPanelProps) {
   const primary = readings.find((reading) => reading.value != null) ?? null;
@@ -187,11 +196,12 @@ export function SeriesPanel({
   const stats = useMemo(() => {
     const computed = seriesStats(layers[0]?.samples ?? []);
     if (!computed) return [];
+    const print = formatStatValue ?? ((value: number) => formatStat(value, primary?.unit ?? null));
     return [
-      { label: 'Peak', value: formatStat(computed.peak, primary?.unit ?? null) },
-      { label: 'Avg', value: formatStat(computed.avg, primary?.unit ?? null) },
+      { label: 'Peak', value: print(computed.peak) },
+      { label: 'Avg', value: print(computed.avg) },
     ];
-  }, [layers, primary?.unit]);
+  }, [formatStatValue, layers, primary?.unit]);
 
   return (
     <YStack flex={1} gap={6} testID={testID ? `${testID}-body` : undefined}>

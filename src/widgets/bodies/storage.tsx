@@ -12,7 +12,7 @@ import type { FsItem, GpuItem, SensorItem } from '@/types/glances';
 import { formatFieldValue, formatLooseNumber } from '@/utils/widgetData';
 
 import { MeterList, TextReadout, type MeterRow, type ReadoutGroup, type ReadoutRow } from '../readout';
-import { dedupeMounts } from '../rates';
+import { dedupeMounts, shortenMountPath } from '../rates';
 import type { WidgetProps } from '../types';
 
 const bytes = (value: number | null | undefined) =>
@@ -50,7 +50,7 @@ export function FilesystemWidget({
   const rows: MeterRow[] = mounts.map((mount) => {
     const tone = thresholdTone(thresholdLevel(status?.limits, 'fs', mount.percent));
     return {
-      label: mount.mntPoint,
+      label: shortenMountPath(mount.mntPoint),
       percent: mount.percent,
       // The figure people read off a disk is how much is left, not the percentage — the bar
       // already says the percentage.

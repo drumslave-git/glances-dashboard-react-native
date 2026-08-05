@@ -82,6 +82,7 @@ export function NetworkChartWidget({
       sizeClass={mode.tier}
       accentColor={accentColor}
       timeWindow={windowFromConfig(config)}
+      formatStatValue={(value) => formatRate(value, unit)}
       {...(testID ? { testID } : {})}
     />
   );
@@ -150,6 +151,7 @@ export function DiskIoChartWidget({
       sizeClass={mode.tier}
       accentColor={accentColor}
       timeWindow={windowFromConfig(config)}
+      formatStatValue={(value) => formatRate(value)}
       {...(testID ? { testID } : {})}
     />
   );

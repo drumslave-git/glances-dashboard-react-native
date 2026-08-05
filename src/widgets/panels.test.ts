@@ -1,4 +1,5 @@
 import { reading } from './panels';
+import { formatRate } from './rates';
 
 describe('reading', () => {
   it('keeps the unit out of the text', () => {
@@ -20,5 +21,14 @@ describe('reading', () => {
   it('drops a decimal above 100, where it is noise', () => {
     expect(reading('x', 'X', 123.45).text).toBe('123');
     expect(reading('x', 'X', 12.34).text).toBe('12.3');
+  });
+});
+
+describe('SeriesPanel stat formatting', () => {
+  it('is what lets a rate widget print its peak as a rate', () => {
+    // Not a render test — the contract is that the caller supplies the printer, because a peak of
+    // 504744 is a byte count and reads as noise beside a hero saying "493 KB/s".
+    const print = (value: number) => formatRate(value);
+    expect(print(504744)).toBe('493 KB/s');
   });
 });

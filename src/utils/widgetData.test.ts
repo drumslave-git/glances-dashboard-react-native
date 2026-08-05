@@ -229,3 +229,16 @@ describe('formatLooseNumber', () => {
     expect(formatLooseNumber(Number.POSITIVE_INFINITY)).toBe('Infinity');
   });
 });
+
+describe('bytes beyond gigabytes', () => {
+  it('scales past GB rather than piling up thousands of them', () => {
+    // A 13 TB array read as "13037.01 GB" is a number nobody parses as thirteen terabytes.
+    expect(formatFieldValue(14_000_519_643_136, 'bytes')).toMatch(/TB$/);
+    expect(formatFieldValue(1.5 * 1024 ** 5, 'bytes')).toBe('1.50 PB');
+  });
+
+  it('leaves the explicit kb/mb/gb specs pinned to their unit', () => {
+    // Those exist precisely so a column can stay in one unit and stay comparable.
+    expect(formatFieldValue(14_000_519_643_136, 'gb')).toMatch(/GB$/);
+  });
+});

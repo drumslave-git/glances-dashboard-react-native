@@ -99,3 +99,24 @@ export function dedupeMounts<T>(
   }
   return [...out, ...byDevice.values()];
 }
+
+/**
+ * A mount path shortened from the **left**.
+ *
+ * Mount paths differ at the end and agree at the start, so head-truncation — which is what a label
+ * that runs out of room does by default — turns `/host_mnt/disks/disk14TB` and
+ * `/host_mnt/disks/disk1TB_1` into two rows that both read `/host_mnt/dis…`. Keeping the tail keeps
+ * the part that identifies the row; the leading `…` says something was dropped.
+ */
+export function shortenMountPath(path: string, maxLength = 22): string {
+  if (path.length <= maxLength) return path;
+  const segments = path.split('/').filter(Boolean);
+  for (let take = 2; take <= segments.length; take += 1) {
+    const candidate = `…/${segments.slice(-take).join('/')}`;
+    if (candidate.length > maxLength) {
+      // One fewer segment than the one that overflowed, but never fewer than the last.
+      return `…/${segments.slice(-Math.max(1, take - 1)).join('/')}`;
+    }
+  }
+  return path;
+}

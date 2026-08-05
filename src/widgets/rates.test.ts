@@ -1,4 +1,4 @@
-import { dedupeMounts, formatRate, formatTotal, pickBusiest } from './rates';
+import { dedupeMounts, formatRate, formatTotal, pickBusiest, shortenMountPath } from './rates';
 
 describe('formatRate', () => {
   it('scales bytes per second', () => {
@@ -94,5 +94,30 @@ describe('dedupeMounts', () => {
 
   it('shows every mount when the user asked for that', () => {
     expect(dedupeMounts(mounts, device, path, true)).toHaveLength(mounts.length);
+  });
+});
+
+describe('shortenMountPath', () => {
+  it('leaves a short path alone', () => {
+    expect(shortenMountPath('/host_mnt')).toBe('/host_mnt');
+  });
+
+  it('keeps the tail, which is the part that identifies the mount', () => {
+    // Head-truncation would render these two identically as "/host_mnt/dis…".
+    const a = shortenMountPath('/host_mnt/disks/disk14TB');
+    const b = shortenMountPath('/host_mnt/disks/disk1TB_1');
+    expect(a).not.toBe(b);
+    expect(a).toContain('disk14TB');
+    expect(b).toContain('disk1TB_1');
+  });
+
+  it('marks that something was dropped', () => {
+    expect(shortenMountPath('/host_mnt/disks/external/disk4TB')).toMatch(/^…\//);
+  });
+
+  it('always keeps at least the last segment, however long it is', () => {
+    expect(shortenMountPath('/a/b/c/averyveryverylongfinalsegmentindeed')).toContain(
+      'averyveryverylongfinalsegmentindeed',
+    );
   });
 });

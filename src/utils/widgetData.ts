@@ -56,10 +56,17 @@ export function formatFieldValue(value: unknown, formatterSpec: string): string 
     if (Number.isNaN(num)) return String(value);
     const bytes = num;
     if (spec === 'bytes') {
+      // Up to petabytes. Stopping at GB — as this did — turns a 13 TB array into "13037.01 GB",
+      // which is a number nobody reads as thirteen terabytes.
       if (bytes < 1024) return `${bytes} B`;
-      if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(2)} KB`;
-      if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
-      return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`;
+      const steps = ['KB', 'MB', 'GB', 'TB', 'PB'];
+      let scaled = bytes / 1024;
+      let step = 0;
+      while (scaled >= 1024 && step < steps.length - 1) {
+        scaled /= 1024;
+        step += 1;
+      }
+      return `${scaled.toFixed(2)} ${steps[step]}`;
     }
     if (spec === 'kb') return `${(bytes / 1024).toFixed(2)} KB`;
     if (spec === 'mb') return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
