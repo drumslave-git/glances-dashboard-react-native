@@ -6,16 +6,20 @@ import { Input, Label as FieldLabel, Paragraph, ScrollView, XStack, YStack } fro
 import { EndpointChip } from '@/components/telemetry/chips';
 import { ToolbarButton } from '@/components/telemetry/surfaces';
 import { Label, MicroLabel, UiText } from '@/components/telemetry/text';
+import { useLatest } from '@/data/feed-store';
 import { useEndpointState } from '@/hooks/useEndpointState';
 import { sortedEndpoints, useEndpointsStore } from '@/state/endpoints';
 import { useWidgetsStore } from '@/state/widgets';
 import { GEOMETRY } from '@/theme/telemetry';
 import { TIME_WINDOW_ORDER, TIME_WINDOWS } from '@/utils/sampleBuffer';
 import {
+  ENDPOINT_SCOPED_SELECTIONS,
   clearEndpointScopedConfig,
+  isEndpointScopedKey,
   isWidgetType,
   parseWidgetConfig,
   widgetDefinition,
+  type EndpointScopedKey,
   type WidgetType,
 } from '@/widgets/catalog';
 
@@ -144,7 +148,7 @@ export function WidgetConfigScreen() {
               </XStack>
             </YStack>
 
-            <WidgetOptions config={config} onChange={setOption} />
+            <WidgetOptions config={config} endpointId={endpointId} onChange={setOption} />
           </YStack>
         </ScrollView>
 
@@ -176,9 +180,11 @@ const OPTION_LABELS: Record<string, string> = {
  */
 function WidgetOptions({
   config,
+  endpointId,
   onChange,
 }: {
   config: Record<string, unknown>;
+  endpointId: string | null;
   onChange: (key: string, value: unknown) => void;
 }) {
   const entries = Object.entries(config);
@@ -210,6 +216,18 @@ function WidgetOptions({
           );
         }
 
+        if (isEndpointScopedKey(key) && Array.isArray(value)) {
+          return (
+            <SelectionPicker
+              key={key}
+              selectionKey={key}
+              selected={value.filter((entry): entry is string => typeof entry === 'string')}
+              endpointId={endpointId}
+              onChange={(next) => onChange(key, next)}
+            />
+          );
+        }
+
         if (typeof value === 'boolean') {
           return (
             <XStack key={key} items="center" gap="$3">
@@ -228,6 +246,67 @@ function WidgetOptions({
 
         return null;
       })}
+    </YStack>
+  );
+}
+
+/**
+ * Choose which interfaces, disks, mounts, sensor types or GPUs a widget reads.
+ *
+ * The options are what the endpoint is reporting **now**, read straight from the feed — so the
+ * picker lists this machine's four interfaces rather than a guess, and lists nothing at all when
+ * the endpoint has not answered yet.
+ *
+ * Selecting none is a real choice, not an empty state: it means "choose for me", which the widget
+ * honours by showing the busiest few (or all, where that is the sensible default). The `Auto` chip
+ * is how you get back to it, and it is highlighted whenever the selection is empty.
+ */
+function SelectionPicker({
+  selectionKey,
+  selected,
+  endpointId,
+  onChange,
+}: {
+  selectionKey: EndpointScopedKey;
+  selected: string[];
+  endpointId: string | null;
+  onChange: (next: string[]) => void;
+}) {
+  const source = ENDPOINT_SCOPED_SELECTIONS[selectionKey];
+  const payload = useLatest<unknown>(endpointId, source.plugin);
+  const options = source.options(payload);
+
+  const toggle = (value: string) =>
+    onChange(selected.includes(value) ? selected.filter((entry) => entry !== value) : [...selected, value]);
+
+  return (
+    <YStack gap={7} testID={`widget-selection-${selectionKey}`}>
+      <MicroLabel>{source.label}</MicroLabel>
+      {options.length === 0 ? (
+        <UiText variant="footer" color="$textDim">
+          {endpointId
+            ? 'Nothing reported yet — the widget will choose for you.'
+            : 'Pick an endpoint first.'}
+        </UiText>
+      ) : (
+        <XStack gap={8} flexWrap="wrap">
+          <ToolbarButton
+            label={source.autoLabel}
+            active={selected.length === 0}
+            onPress={() => onChange([])}
+            testID={`widget-selection-${selectionKey}-auto`}
+          />
+          {options.map((option) => (
+            <ToolbarButton
+              key={option.value}
+              label={option.label}
+              active={selected.includes(option.value)}
+              onPress={() => toggle(option.value)}
+              testID={`widget-selection-${selectionKey}-${option.value}`}
+            />
+          ))}
+        </XStack>
+      )}
     </YStack>
   );
 }

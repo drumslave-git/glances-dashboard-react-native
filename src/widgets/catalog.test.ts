@@ -3,6 +3,8 @@ import {
   WIDGET_DEFINITIONS,
   WIDGET_TYPES,
   WIDGET_VARIANTS,
+  ENDPOINT_SCOPED_CONFIG_KEYS,
+  ENDPOINT_SCOPED_SELECTIONS,
   clearEndpointScopedConfig,
   isWidgetAvailable,
   isWidgetType,
@@ -261,5 +263,55 @@ describe('registry coverage', () => {
   it('gives every catalog type a renderer, and adds none the catalog does not know', () => {
     // The two halves are edited separately, so drift between them is the failure mode this guards.
     expect(Object.keys(WIDGET_RENDERERS).sort()).toEqual([...WIDGET_TYPES].sort());
+  });
+});
+
+describe('endpoint-scoped selections', () => {
+  it('covers every scoped key, so a picker can never be missing for one', () => {
+    expect(Object.keys(ENDPOINT_SCOPED_SELECTIONS).sort()).toEqual(
+      [...ENDPOINT_SCOPED_CONFIG_KEYS].sort(),
+    );
+  });
+
+  it('reads the options a host is currently reporting', () => {
+    expect(ENDPOINT_SCOPED_SELECTIONS.interfaces.options([
+      { interfaceName: 'eth0', alias: null },
+      { interfaceName: 'lo', alias: null },
+    ])).toEqual([
+      { value: 'eth0', label: 'eth0' },
+      { value: 'lo', label: 'lo' },
+    ]);
+  });
+
+  it('prefers a friendly name where the payload carries one', () => {
+    expect(ENDPOINT_SCOPED_SELECTIONS.gpus.options([{ gpu_id: 'x', gpuId: 'nvidia0', name: 'RTX 3090' }])).toEqual([
+      { value: 'nvidia0', label: 'RTX 3090' },
+    ]);
+  });
+
+  it('de-duplicates, which is the whole point for sensor types', () => {
+    // A host reports dozens of sensors across three types; the picker offers the three.
+    const options = ENDPOINT_SCOPED_SELECTIONS.types.options([
+      { type: 'temperature_core' },
+      { type: 'temperature_core' },
+      { type: 'fan_speed' },
+    ]);
+    expect(options.map((option) => option.value)).toEqual(['fan_speed', 'temperature_core']);
+  });
+
+  it('is empty rather than throwing when the endpoint has not answered', () => {
+    for (const source of Object.values(ENDPOINT_SCOPED_SELECTIONS)) {
+      expect(source.options(undefined)).toEqual([]);
+      expect(source.options({ not: 'a list' })).toEqual([]);
+    }
+  });
+
+  it('names a plugin the metric actually requires', () => {
+    // A picker reading a plugin nothing fetches would list nothing, for ever.
+    expect(WIDGET_DEFINITIONS.network.requiredPlugins).toContain(ENDPOINT_SCOPED_SELECTIONS.interfaces.plugin);
+    expect(WIDGET_DEFINITIONS.diskio.requiredPlugins).toContain(ENDPOINT_SCOPED_SELECTIONS.disks.plugin);
+    expect(WIDGET_DEFINITIONS.filesystem.requiredPlugins).toContain(ENDPOINT_SCOPED_SELECTIONS.mounts.plugin);
+    expect(WIDGET_DEFINITIONS.sensors.requiredPlugins).toContain(ENDPOINT_SCOPED_SELECTIONS.types.plugin);
+    expect(WIDGET_DEFINITIONS.gpu.requiredPlugins).toContain(ENDPOINT_SCOPED_SELECTIONS.gpus.plugin);
   });
 });

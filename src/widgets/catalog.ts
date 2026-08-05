@@ -273,11 +273,90 @@ export function requestedWindowSec(config: Record<string, unknown>): number | un
  * They matter when a widget is re-bound to a different endpoint: a selection wins outright over the
  * "busiest few" fallback, so carrying `enp5s0` to a host without one would not degrade, it would
  * draw an empty chart with no explanation. Rebinding clears these and lets each re-default.
- *
- * Nothing in M12 uses them; they arrive with the io widgets in M13. Declared now because the
- * rebinding rule belongs to the model, not to whichever widget happens to need it first.
  */
 export const ENDPOINT_SCOPED_CONFIG_KEYS = ['interfaces', 'disks', 'mounts', 'types', 'gpus'] as const;
+
+export type EndpointScopedKey = (typeof ENDPOINT_SCOPED_CONFIG_KEYS)[number];
+
+export interface SelectionOption {
+  value: string;
+  label: string;
+}
+
+/**
+ * Where a selection key's options come from.
+ *
+ * The options are whatever the endpoint is **reporting right now**, not a fixed list: interfaces
+ * come and go, a container host's mounts are its own, and a machine either has a GPU or does not.
+ * That is also why this lives beside the keys rather than in the config screen — the screen renders
+ * the picker, but what is selectable is a fact about the metric.
+ *
+ * Still no React here: these are pure functions over the normalized payloads.
+ */
+export interface SelectionSource {
+  plugin: PluginName;
+  label: string;
+  /** Empty selection means "choose for me", and this is what the widget then falls back to. */
+  autoLabel: string;
+  options: (payload: unknown) => SelectionOption[];
+}
+
+function asArray(payload: unknown): Record<string, unknown>[] {
+  return Array.isArray(payload) ? (payload as Record<string, unknown>[]) : [];
+}
+
+function stringField(row: Record<string, unknown>, key: string): string | null {
+  const value = row[key];
+  return typeof value === 'string' && value.length > 0 ? value : null;
+}
+
+/** De-duplicated, and ordered so a picker does not reshuffle itself between polls. */
+function optionsFrom(payload: unknown, key: string, labelKey?: string): SelectionOption[] {
+  const seen = new Map<string, string>();
+  for (const row of asArray(payload)) {
+    const value = stringField(row, key);
+    if (value === null || seen.has(value)) continue;
+    seen.set(value, (labelKey ? stringField(row, labelKey) : null) ?? value);
+  }
+  return [...seen].map(([value, label]) => ({ value, label })).sort((a, b) => a.label.localeCompare(b.label));
+}
+
+export const ENDPOINT_SCOPED_SELECTIONS: Record<EndpointScopedKey, SelectionSource> = {
+  interfaces: {
+    plugin: 'network',
+    label: 'Interfaces',
+    autoLabel: 'Busiest',
+    options: (payload) => optionsFrom(payload, 'interfaceName', 'alias'),
+  },
+  disks: {
+    plugin: 'diskio',
+    label: 'Disks',
+    autoLabel: 'Busiest',
+    options: (payload) => optionsFrom(payload, 'diskName'),
+  },
+  mounts: {
+    plugin: 'fs',
+    label: 'Mounts',
+    autoLabel: 'All',
+    options: (payload) => optionsFrom(payload, 'mntPoint'),
+  },
+  types: {
+    plugin: 'sensors',
+    label: 'Sensor types',
+    autoLabel: 'All',
+    options: (payload) => optionsFrom(payload, 'type'),
+  },
+  gpus: {
+    plugin: 'gpu',
+    label: 'GPUs',
+    autoLabel: 'All',
+    options: (payload) => optionsFrom(payload, 'gpuId', 'name'),
+  },
+};
+
+export function isEndpointScopedKey(key: string): key is EndpointScopedKey {
+  return (ENDPOINT_SCOPED_CONFIG_KEYS as readonly string[]).includes(key);
+}
 
 /** A copy of `config` with every host-specific selection dropped, for a widget changing endpoint. */
 export function clearEndpointScopedConfig(config: Record<string, unknown>): Record<string, unknown> {

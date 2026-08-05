@@ -1,5 +1,6 @@
 import { resetEndpointIdCounter, useEndpointsStore } from '@/state/endpoints';
 import { resetWidgetIdCounter, useWidgetsStore } from '@/state/widgets';
+import { feedStore } from '@/data/feed-store';
 import { renderWithProviders } from '@/test-utils/render';
 
 import { WidgetConfigScreen } from './widget-config-screen';
@@ -28,6 +29,7 @@ beforeEach(() => {
   resetWidgetIdCounter();
   useEndpointsStore.setState({ endpoints: [], defaultEndpointId: null });
   useWidgetsStore.setState({ widgets: [] });
+  feedStore.getState().reset();
   useEndpointsStore.getState().addEndpoint({ name: 'NAS', url: '10.0.0.1' });
 });
 
@@ -134,5 +136,60 @@ describe('WidgetConfigScreen — editing', () => {
 
     expect(widgets()[0].endpointId).toBe(second.id);
     expect(widgets()[0].config).not.toHaveProperty('interfaces');
+  });
+});
+
+describe('WidgetConfigScreen — host-specific selections', () => {
+  /** The picker lists what the endpoint is reporting, so the feed is what drives it. */
+  function reportInterfaces() {
+    feedStore.getState().ingest({
+      endpointId: 's-1',
+      ts: Date.now(),
+      plugins: {
+        network: [
+          { interfaceName: 'eth0', alias: null, rxRatePerSec: 10, txRatePerSec: 1, bytesRecvGauge: null, bytesSentGauge: null, speed: null },
+          { interfaceName: 'docker0', alias: null, rxRatePerSec: 0, txRatePerSec: 0, bytesRecvGauge: null, bytesSentGauge: null, speed: null },
+        ],
+      },
+    });
+  }
+
+  it('offers the interfaces this endpoint reports', async () => {
+    mockParams = { id: 'new', type: 'network' };
+    reportInterfaces();
+
+    const { getByTestId } = await renderWithProviders(<WidgetConfigScreen />);
+    expect(getByTestId('widget-selection-interfaces-eth0')).toBeTruthy();
+    expect(getByTestId('widget-selection-interfaces-docker0')).toBeTruthy();
+  });
+
+  it('saves a chosen interface, which then beats the busiest-few fallback', async () => {
+    mockParams = { id: 'new', type: 'network' };
+    reportInterfaces();
+
+    const { getByTestId, user } = await renderWithProviders(<WidgetConfigScreen />);
+    await user.press(getByTestId('widget-selection-interfaces-docker0'));
+    await user.press(getByTestId('widget-save'));
+
+    expect(widgets()[0].config).toMatchObject({ interfaces: ['docker0'] });
+  });
+
+  it('goes back to choosing for you', async () => {
+    mockParams = { id: 'new', type: 'network' };
+    reportInterfaces();
+
+    const { getByTestId, user } = await renderWithProviders(<WidgetConfigScreen />);
+    await user.press(getByTestId('widget-selection-interfaces-eth0'));
+    await user.press(getByTestId('widget-selection-interfaces-auto'));
+    await user.press(getByTestId('widget-save'));
+
+    // Empty is a real choice — "choose for me" — not an unset field.
+    expect(widgets()[0].config).toMatchObject({ interfaces: [] });
+  });
+
+  it('says so when the endpoint has reported nothing yet', async () => {
+    mockParams = { id: 'new', type: 'gpu' };
+    const { getByTestId } = await renderWithProviders(<WidgetConfigScreen />);
+    expect(getByTestId('widget-selection-gpus')).toHaveTextContent(/Nothing reported yet/);
   });
 });
