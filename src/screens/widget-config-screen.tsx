@@ -8,6 +8,7 @@ import { ToolbarButton } from '@/components/telemetry/surfaces';
 import { Label, MicroLabel, UiText } from '@/components/telemetry/text';
 import { useLatest } from '@/data/feed-store';
 import { useEndpointState } from '@/hooks/useEndpointState';
+import { useMetricsPreview } from '@/hooks/useMetricsPreview';
 import { sortedEndpoints, useEndpointsStore } from '@/state/endpoints';
 import { useWidgetsStore } from '@/state/widgets';
 import { GEOMETRY } from '@/theme/telemetry';
@@ -57,6 +58,10 @@ export function WidgetConfigScreen() {
 
   const endpoint = ordered.find((entry) => entry.id === endpointId);
   const endpointState = useEndpointState(endpoint);
+  // Poll this type's plugins while the screen is open, so the selection pickers can list what the
+  // endpoint actually has — even when no placed widget requires them yet. Called before the early
+  // return below, or the hook order would differ between the two branches.
+  useMetricsPreview(endpointId, definition?.requiredPlugins ?? []);
 
   if (!definition) {
     return (
