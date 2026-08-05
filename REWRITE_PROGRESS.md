@@ -4,7 +4,11 @@ Tracks execution of [REWRITE_PLAN.md](REWRITE_PLAN.md). Update this file in the 
 commit as the work it describes. One line per task; add dated notes under each milestone
 when something non-obvious happened.
 
-**Current status:** M10 (data layer) and M11 (endpoint model) complete. The poller now runs against
+**Current status:** M10–M13 complete — the data layer, the endpoint model, and 23 typed widgets
+across 11 metrics, all verified on desktop and Android against a live server. Next is M14: the
+process and container tables, the alerts feed as the first **global** widget, and the `DataGrid`
+those need — onto which M13's filesystem and sensors are then retrofitted. Background: M10 (data
+layer) and M11 (endpoint model) complete. The poller now runs against
 the endpoints store: probing, tiered polling, backoff, and a state machine the endpoint chip renders
 identically in the toolbar, on every widget header and in settings. Next is M12 (widget framework +
 core metrics), which is where the typed widget catalog begins and `useGlancesQuery` finally goes.
@@ -783,10 +787,50 @@ same moment for a side-by-side.
   four screens and caught the one thing a seeded board cannot, which is whether a widget can be
   *created* at all.
 
-### M13 — Rate and table metrics — `not started`
-- [ ] network · networkText · diskio · diskioText · filesystem · filesystemText · sensors ·
-      sensorsText · gpu · gpuText
-- [ ] `DualRateReadout`, `MetricBar`, `RingGauge`, `DataGrid` primitives
+### M13 — Rate and table metrics — `done` (2026-08-05)
+- [x] network · networkText · diskio · diskioText · filesystem · filesystemText · sensors ·
+      sensorsText · gpu · gpuText — the catalog is now 23 renderings across 11 metrics
+- [x] Rate semantics in one tested module (`src/widgets/rates.ts`): a `null` rate is a dash and
+      never a zero, `_gauge` totals carry no `/s`, a selection beats the busiest-few fallback
+      outright, and a containerised host's bind mounts collapse to the shortest path
+- [x] **Host-specific selection pickers** — interfaces, disks, mounts, sensor types and GPUs are
+      choosable at last; the options come from what the endpoint is reporting, declared beside the
+      keys in the catalog (`ENDPOINT_SCOPED_SELECTIONS`) rather than in the screen
+- [x] `useMetricsPreview` finally calls the poller's `setPreview`, so those pickers can list a
+      plugin no placed widget requires yet
+- [x] 653 tests across 39 suites; typecheck and lint clean
+- [x] **Verified on desktop and Android** against the live server — see the notes below
+- [ ] **Deferred to M14 (owner's call):** `DataGrid`. The reference draws `filesystem` and `sensors`
+      as **table** variants; these render as meter lists and grouped rows, carrying the same data
+      and degrading sensibly but not through a real grid. M14's processes and containers need one,
+      so it is built there — where three widgets justify it — and these two are retrofitted onto it.
+      `DualRateReadout`, `MetricBar` and `RingGauge` were not built as separate primitives either:
+      `MeterList` and the lifted `RingPanel` already cover what they were named for.
+
+**Notes (2026-08-05)**
+- **Five bugs came from looking at the board, none of which the suite could see.** Multi-terabyte
+  disks read as thousands of gigabytes (`13037.01 GB` for a 14 TB array) because the `bytes`
+  formatter stopped at GB. The network chart printed its peak and average as raw byte counts beside
+  a hero reading `493 KB/s`, because `SeriesPanel` formatted stats with the generic reading
+  formatter — the caller supplies the printer now. And fixing the first of those exposed a third:
+  three filesystem rows collapsed to the same label, `/host_mnt/dis…`, because mount paths agree at
+  the start and differ at the end, so head-truncation destroys exactly the part that identifies the
+  row.
+- **The selection gap was found by asking what the config screen could actually set.** The five
+  host-specific keys were honoured by the widgets and settable by nothing, so every io widget
+  silently fell back to "the busiest few" — fine on a two-interface host, poor on one with docker
+  bridges.
+- **And closing that gap exposed the next one.** The picker listed nothing for a first GPU widget,
+  because an endpoint only polls what its *placed* widgets require: the list being chosen from is
+  precisely the one not being fetched. The poller had supported a transient preview set since M10
+  and nothing had ever called it.
+- **A GPU temperature has no full scale**, so its meter carries `percent: null` and an empty track.
+  Drawing 24 °C as a 24% bar would be inventing a ceiling. `MeterRow` now tells "no scale" and "not
+  reported" apart from zero, and both read as a dash.
+- **Sensors take per-item thresholds**, not the endpoint's limits map: a fan and a CPU core share no
+  scale, so a global key could not describe either.
+- **On Android the dev-warning toast sits over the Add button** and swallows a tap. Worth knowing
+  before concluding a button is broken — dismiss it first.
 
 ### M14 — Processes, containers, alerts — `not started`
 - [ ] Process table with per-row sparklines and the `processcount` footer
@@ -881,6 +925,9 @@ same moment for a side-by-side.
 | 2026-08-04 | `refreshMs: 0` ("fetch once") is retired in favour of pausing, and the interval is floored at 1 s | Two ways to say "do not poll this" is one too many, and the old one left the endpoint looking live. The server caches its stats for a second regardless |
 | 2026-08-04 | The accent colours a healthy endpoint only; state wins on every other | Telling three green hosts apart is what the accent is for, and it stops mattering the moment one of them is in trouble |
 | 2026-08-04 | A `degraded` endpoint dims its widgets but is **not** covered by a status overlay | One or two missed polls with the last reading on screen is when a dashboard is most useful; an overlay would hide the numbers exactly then |
+| 2026-08-05 | `DataGrid` is built in **M14**, and M13's filesystem and sensors are retrofitted onto it | Confirmed with the owner. Processes, containers and alerts all need a real grid, so building it where three widgets justify it beats hand-rolling a fourth almost-table in M13 |
+| 2026-08-05 | A reading with no full scale (a temperature) gets an **empty track**, not a bar | Drawing 24 °C as a 24% bar invents a ceiling the metric does not have |
+| 2026-08-05 | Where a selection key's options come from lives in the **catalog**, not the config screen | The screen renders the picker, but *what is selectable* is a fact about the metric — and the catalog stays React-free, so it is still the poller's to read |
 | 2026-08-04 | Free drag + resize on web, desktop and tablet; **a phone gets one column and picks footprints from the kebab** | Confirmed with the owner. The stored geometry is identical, so this is a gesture adaptation rather than a feature split — and a corner grip is not a touch target, which is why M0's plan chose presets in the first place |
 | 2026-08-04 | **In-app updates are out of scope**, and the Updates settings tab with them | Confirmed with the owner. It is a delivery feature, not a dashboard one, and it would cost a new native surface on desktop plus a separate Android story. Publishing releases is unaffected |
 | 2026-08-04 | **The transparent window is in scope** | Confirmed with the owner. It is what makes the appearance model's alpha mean anything on desktop. Note the reference's own trade: a transparent window cannot be edge-resized and loses the WM drop shadow, so it is only requested when an alpha is actually below 1 |
