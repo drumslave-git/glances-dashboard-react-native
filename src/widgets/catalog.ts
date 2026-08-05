@@ -28,11 +28,23 @@ export const GROUP_LABELS: Record<WidgetGroup, string> = {
 };
 
 /**
- * Metrics implemented so far. The reference has fourteen; the rest arrive with their renderings in
- * M13 (io, sensors, GPU) and M14 (processes, containers, alerts). Declaring a metric before any
- * widget can draw it would only put a dead entry in the picker.
+ * Metrics implemented so far. The reference has fourteen; processes, containers and alerts arrive
+ * with their renderings in M14. Declaring a metric before any widget can draw it would only put a
+ * dead entry in the picker.
  */
-export const METRIC_IDS = ['cpu', 'percpu', 'memory', 'load', 'system', 'summary'] as const;
+export const METRIC_IDS = [
+  'cpu',
+  'percpu',
+  'memory',
+  'load',
+  'system',
+  'summary',
+  'network',
+  'diskio',
+  'filesystem',
+  'sensors',
+  'gpu',
+] as const;
 export type MetricId = (typeof METRIC_IDS)[number];
 
 export interface MetricDefinition {
@@ -89,6 +101,38 @@ export const METRIC_DEFINITIONS: Record<MetricId, MetricDefinition> = {
     group: 'system',
     description: 'CPU, memory, swap and load for the whole host in one panel.',
   },
+  network: {
+    id: 'network',
+    label: 'Network',
+    group: 'io',
+    description: 'Receive and transmit throughput per interface.',
+  },
+  diskio: {
+    id: 'diskio',
+    label: 'Disk I/O',
+    compactLabel: 'Disk',
+    group: 'io',
+    description: 'Read and write throughput per disk.',
+  },
+  filesystem: {
+    id: 'filesystem',
+    label: 'Filesystem',
+    compactLabel: 'Disks',
+    group: 'io',
+    description: 'Mount points with size, used and free.',
+  },
+  sensors: {
+    id: 'sensors',
+    label: 'Sensors',
+    group: 'system',
+    description: 'Temperatures, fans and battery.',
+  },
+  gpu: {
+    id: 'gpu',
+    label: 'GPU',
+    group: 'system',
+    description: 'Per-GPU utilization, memory and temperature.',
+  },
 };
 
 /**
@@ -121,6 +165,16 @@ export const WIDGET_TYPES = [
   'systemInfo',
   'endpointSummary',
   'endpointSummaryText',
+  'network',
+  'networkText',
+  'diskio',
+  'diskioText',
+  'filesystem',
+  'filesystemText',
+  'sensors',
+  'sensorsText',
+  'gpu',
+  'gpuText',
 ] as const;
 export type WidgetType = (typeof WIDGET_TYPES)[number];
 
@@ -233,6 +287,19 @@ export function clearEndpointScopedConfig(config: Record<string, unknown>): Reco
 }
 
 const emptyConfig = z.object({}).loose();
+
+/**
+ * Selection keys shared by a chart variant and its text twin, so the pair configures alike.
+ *
+ * Empty means "choose for me" — the widget then shows the busiest few rather than nothing, which
+ * is why `ENDPOINT_SCOPED_CONFIG_KEYS` clears these on a rebind instead of carrying names that mean
+ * nothing on the new host.
+ */
+const interfaces = z.array(z.string()).default([]);
+const disks = z.array(z.string()).default([]);
+const mounts = z.array(z.string()).default([]);
+const sensorTypes = z.array(z.string()).default([]);
+const gpus = z.array(z.string()).default([]);
 
 /** A definition minus the fields that are not the type's to declare. */
 type WidgetSpec = Omit<WidgetDefinition, 'group' | 'defaultSize'>;
@@ -400,6 +467,125 @@ const WIDGET_SPECS: Record<WidgetType, WidgetSpec> = {
     capabilityPlugins: ['quicklook'],
     sizes: tiers([1, 4], [1, 4], [2, 4]),
     configSchema: emptyConfig,
+  },
+
+  network: {
+    type: 'network',
+    label: 'Network throughput',
+    metric: 'network',
+    variant: 'chart',
+    description: 'Receive / transmit rate per selected interface.',
+    requiredPlugins: ['network'],
+    capabilityPlugins: ['network'],
+    sizes: tiers([1, 3], [1, 3], [2, 3]),
+    configSchema: z.object({
+      interfaces,
+      unit: z.enum(['bytes', 'bits']).default('bytes'),
+      windowSec,
+    }),
+  },
+  networkText: {
+    type: 'networkText',
+    label: 'Network readings',
+    metric: 'network',
+    variant: 'text',
+    description: 'Current rate and lifetime total per direction, per interface.',
+    requiredPlugins: ['network'],
+    capabilityPlugins: ['network'],
+    sizes: tiers([1, 4], [1, 4], [2, 4]),
+    configSchema: z.object({ interfaces, unit: z.enum(['bytes', 'bits']).default('bytes') }),
+  },
+  diskio: {
+    type: 'diskio',
+    label: 'Disk I/O',
+    metric: 'diskio',
+    variant: 'chart',
+    description: 'Read / write rate per selected disk.',
+    requiredPlugins: ['diskio'],
+    capabilityPlugins: ['diskio'],
+    sizes: tiers([1, 3], [1, 3], [2, 3]),
+    configSchema: z.object({ disks, windowSec }),
+  },
+  diskioText: {
+    type: 'diskioText',
+    label: 'Disk I/O readings',
+    metric: 'diskio',
+    variant: 'text',
+    description: 'Current rate and lifetime total per direction, per disk.',
+    requiredPlugins: ['diskio'],
+    capabilityPlugins: ['diskio'],
+    sizes: tiers([1, 4], [1, 4], [2, 4]),
+    configSchema: z.object({ disks }),
+  },
+  filesystem: {
+    type: 'filesystem',
+    label: 'Filesystem usage',
+    metric: 'filesystem',
+    variant: 'table',
+    description: 'Mount points with size, used, free and a usage bar.',
+    requiredPlugins: ['fs'],
+    capabilityPlugins: ['fs'],
+    sizes: tiers([1, 4], [1, 4], [2, 4]),
+    configSchema: z.object({
+      mounts,
+      // A containerised host reports the same device under dozens of bind-mount paths.
+      showEveryMount: z.boolean().default(false),
+    }),
+  },
+  filesystemText: {
+    type: 'filesystemText',
+    label: 'Filesystem readings',
+    metric: 'filesystem',
+    variant: 'text',
+    description: 'One labelled block per mount, with device, size, used and free.',
+    requiredPlugins: ['fs'],
+    capabilityPlugins: ['fs'],
+    sizes: tiers([1, 4], [1, 4], [2, 4]),
+    configSchema: z.object({ mounts, showEveryMount: z.boolean().default(false) }),
+  },
+  sensors: {
+    type: 'sensors',
+    label: 'Sensors',
+    metric: 'sensors',
+    variant: 'table',
+    description: 'Temperatures, fans and battery with threshold colouring.',
+    requiredPlugins: ['sensors'],
+    capabilityPlugins: ['sensors'],
+    sizes: tiers([1, 4], [1, 4], [2, 4]),
+    configSchema: z.object({ types: sensorTypes }),
+  },
+  sensorsText: {
+    type: 'sensorsText',
+    label: 'Sensor readings',
+    metric: 'sensors',
+    variant: 'text',
+    description: 'Every sensor as a labelled row, without the colouring.',
+    requiredPlugins: ['sensors'],
+    capabilityPlugins: ['sensors'],
+    sizes: tiers([1, 4], [1, 4], [2, 4]),
+    configSchema: z.object({ types: sensorTypes }),
+  },
+  gpu: {
+    type: 'gpu',
+    label: 'GPU',
+    metric: 'gpu',
+    variant: 'bars',
+    description: 'Temperature over utilization / memory / fan rails.',
+    requiredPlugins: ['gpu'],
+    capabilityPlugins: ['gpu'],
+    sizes: tiers([1, 4], [1, 4], [2, 4]),
+    configSchema: z.object({ gpus }),
+  },
+  gpuText: {
+    type: 'gpuText',
+    label: 'GPU readings',
+    metric: 'gpu',
+    variant: 'text',
+    description: 'Utilization, memory, temperature and fan as rows, one block per GPU.',
+    requiredPlugins: ['gpu'],
+    capabilityPlugins: ['gpu'],
+    sizes: tiers([1, 4], [1, 4], [2, 4]),
+    configSchema: z.object({ gpus }),
   },
 };
 

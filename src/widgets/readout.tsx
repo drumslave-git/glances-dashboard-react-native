@@ -116,9 +116,14 @@ export function TextReadout({
 
 export interface MeterRow {
   label: string;
-  /** 0–100. `null` renders an empty track rather than a full one. */
+  /**
+   * 0–100, or `null` for a reading with no full scale to measure against — a temperature has no
+   * ceiling, and drawing 24 °C as a 24% bar would be inventing one. The track then stays empty and
+   * the value carries the meaning.
+   */
   percent: number | null;
-  value?: string;
+  /** `null` means the host does not report this at all, and renders as a dash. */
+  value?: string | null;
   color?: string;
 }
 
@@ -156,10 +161,11 @@ export function MeterList({
           key={row.label}
           label={row.label}
           percent={row.percent ?? 0}
-          {...(row.value !== undefined
+          {...(row.value != null
             ? { value: row.value }
-            : row.percent == null
-              ? { value: NO_VALUE }
+            : row.value === null || row.percent == null
+              ? // Both "reported nothing" and "has no scale" read as a dash rather than as 0%.
+                { value: NO_VALUE }
               : {})}
           rung={rung}
           color={row.color ?? accentColor}

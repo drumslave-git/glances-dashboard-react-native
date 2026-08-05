@@ -85,8 +85,9 @@ describe('widgetsForMetric', () => {
 
 describe('metricsByGroup', () => {
   it('lists groups in catalog order and drops empty ones', () => {
+    // `processes` and `alerts` have no metrics yet (M14), so they must not appear as empty headings.
     const groups = metricsByGroup().map((entry) => entry.group);
-    expect(groups).toEqual(['core', 'system']);
+    expect(groups).toEqual(['core', 'system', 'io']);
   });
 });
 
@@ -240,8 +241,19 @@ describe('catalog coverage', () => {
     expect(Object.keys(WIDGET_DEFINITIONS).sort()).toEqual([...WIDGET_TYPES].sort());
   });
 
-  it('covers the thirteen core renderings M12 promises', () => {
-    expect(WIDGET_TYPES).toHaveLength(13);
+  it('covers the core renderings plus the io, sensor and GPU ones', () => {
+    // 13 from M12, 10 more in M13. The remaining three metrics arrive in M14.
+    expect(WIDGET_TYPES).toHaveLength(23);
+  });
+
+  it('offers a text rendering for every metric that has a graphical one', () => {
+    // "A picture is an argument and a table is not" — every metric with a chart, ring or bars also
+    // answers in plain rows (ref §8).
+    for (const metric of Object.keys(METRIC_DEFINITIONS)) {
+      const renderings = widgetsForMetric(metric as never);
+      if (renderings.length === 1) continue;
+      expect(renderings.some((definition) => definition.variant === 'text')).toBe(true);
+    }
   });
 });
 

@@ -8,8 +8,17 @@
 import type { ComponentType } from 'react';
 
 import { CpuChartWidget, CpuGaugeWidget, CpuTextWidget, PerCpuTextWidget, PerCpuWidget } from './bodies/cpu';
+import { DiskIoChartWidget, DiskIoTextWidget, NetworkChartWidget, NetworkTextWidget } from './bodies/io';
 import { LoadChartWidget, LoadTextWidget } from './bodies/load';
 import { MemoryChartWidget, MemoryGaugeWidget, MemoryTextWidget } from './bodies/memory';
+import {
+  FilesystemTextWidget,
+  FilesystemWidget,
+  GpuTextWidget,
+  GpuWidget,
+  SensorsTextWidget,
+  SensorsWidget,
+} from './bodies/storage';
 import {
   EndpointSummaryTextWidget,
   EndpointSummaryWidget,
@@ -44,6 +53,16 @@ export const WIDGET_RENDERERS: Record<WidgetType, WidgetRenderer> = {
   systemInfo: { component: SystemInfoWidget },
   endpointSummary: { component: EndpointSummaryWidget },
   endpointSummaryText: { component: EndpointSummaryTextWidget },
+  network: { component: NetworkChartWidget },
+  networkText: { component: NetworkTextWidget },
+  diskio: { component: DiskIoChartWidget },
+  diskioText: { component: DiskIoTextWidget },
+  filesystem: { component: FilesystemWidget },
+  filesystemText: { component: FilesystemTextWidget },
+  sensors: { component: SensorsWidget },
+  sensorsText: { component: SensorsTextWidget },
+  gpu: { component: GpuWidget },
+  gpuText: { component: GpuTextWidget },
 };
 
 export function widgetRenderer(type: WidgetType): WidgetRenderer {
