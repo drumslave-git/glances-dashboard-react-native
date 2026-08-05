@@ -701,11 +701,34 @@ same moment for a side-by-side.
   covers the whole panel, header included, because it is the panel that is stale (ref §7.4). That
   belongs with the frame rebuild.
 
-### M12 — Widget framework + core metrics — `not started`
-- [ ] Registry split (data-only catalog importable by the poller / renderer half with components)
+### M12 — Widget framework + core metrics — `in progress`
+- [x] **The data-only half of the registry** — `src/widgets/catalog.ts`. Metric × variant, the
+      thirteen core types with their `requiredPlugins` / `capabilityPlugins` / size tiers / zod
+      config schemas, plus `pluginsForEndpoint` and `retentionSecForEndpoint` — the two functions
+      the poller needs and the reason this file imports no React. 33 tests.
+- [ ] `WidgetInstance` (`type` / `endpointId` / `config` / `x,y,w,h`) + the store migration that
+      drops the generic widgets
+- [ ] The renderer half of the registry (`component`, `configForm`, `headerMeta`)
 - [ ] Widget frame to the reference anatomy; measured tier + short; degrade ladders; error boundary
 - [ ] cpu · cpuGauge · cpuText · percpu · percpuText · memory · memoryGauge · memoryText · load ·
       loadText · systemInfo · endpointSummary · endpointSummaryText
+- [ ] Retire `useGlancesQuery`, which also closes the duplicate-fetch blocker below
+
+**Notes (2026-08-05)**
+- **`zod` is now a declared dependency.** It was already present transitively at v3, which is a
+  fragile thing to build config parsing on; installed explicitly at v4, matching the reference. Pure
+  JS, so it costs nothing in native surface and would still run in Expo Go.
+- **The catalog declares six metrics, not fourteen.** The io, sensor, GPU, process, container and
+  alert metrics arrive with their renderings in M13 and M14 — declaring one before any widget can
+  draw it would only put a dead entry in the picker.
+- **Unknown capabilities mean *available*.** `isWidgetAvailable` returns true when the probe has not
+  reported yet: greying out the whole catalog while waiting is worse than offering a widget that
+  turns out to render "not available on this endpoint".
+- **`parseWidgetConfig` never throws and never returns a partial.** An unreadable config falls back
+  to the schema's own defaults, because a widget with no options is recoverable — the user re-picks
+  them — while a widget that refuses to render is not.
+- **`pluginsForEndpoint` ignores a row whose type is not in the catalog**, which is exactly the
+  shape a not-yet-migrated generic widget has. The poller must not crash on one.
 
 ### M13 — Rate and table metrics — `not started`
 - [ ] network · networkText · diskio · diskioText · filesystem · filesystemText · sensors ·
