@@ -5,22 +5,20 @@ import { runOnJS } from 'react-native-reanimated';
 import { ScrollView, XStack, YStack } from 'tamagui';
 
 import { GEOMETRY } from '@/theme/telemetry';
-import type { WidgetConfig } from '@/types/dashboard';
+import type { WidgetInstance } from '@/types/dashboard';
 import { reorderForPointer, stepOrder, type CardRect } from '@/utils/dragReorder';
-import { columnsForWidth, widthPercentForSize } from '@/utils/widgetLayout';
+import { columnsForWidth, widthPercentForSpan } from '@/utils/widgetLayout';
 
-import { WidgetCard } from './widget-card';
+import { WidgetFrame } from '@/widgets/widget-frame';
 
 /** Hold this long before a drag takes over from the scroll view. */
 const LONG_PRESS_MS = 300;
 
 interface WidgetGridProps {
-  widgets: WidgetConfig[];
+  widgets: WidgetInstance[];
   editMode: boolean;
   onEdit: (widgetId: string) => void;
   onRemove: (widgetId: string) => void;
-  onResize: (widgetId: string) => void;
-  onCycleTimeWindow: (widgetId: string) => void;
   /** Commit a new order after a drag. */
   onReorder: (orderedIds: string[]) => void;
 }
@@ -39,8 +37,6 @@ export function WidgetGrid({
   editMode,
   onEdit,
   onRemove,
-  onResize,
-  onCycleTimeWindow,
   onReorder,
 }: WidgetGridProps) {
   const { width } = useWindowDimensions();
@@ -58,7 +54,7 @@ export function WidgetGrid({
   const ordered = useMemo(() => {
     if (!previewOrder) return widgets;
     const byId = new Map(widgets.map((widget) => [widget.id, widget]));
-    const result: WidgetConfig[] = [];
+    const result: WidgetInstance[] = [];
     for (const id of previewOrder) {
       const widget = byId.get(id);
       if (widget) {
@@ -153,9 +149,7 @@ export function WidgetGrid({
             onDragEnd={endDrag}
             onEdit={onEdit}
             onRemove={onRemove}
-            onResize={onResize}
-            onCycleTimeWindow={onCycleTimeWindow}
-            onMove={moveOne}
+                onMove={moveOne}
             index={index}
             count={ordered.length}
           />
@@ -166,7 +160,7 @@ export function WidgetGrid({
 }
 
 interface WidgetGridCellProps {
-  widget: WidgetConfig;
+  widget: WidgetInstance;
   columns: number;
   editMode: boolean;
   dragging: boolean;
@@ -176,8 +170,6 @@ interface WidgetGridCellProps {
   onDragEnd: () => void;
   onEdit: (widgetId: string) => void;
   onRemove: (widgetId: string) => void;
-  onResize: (widgetId: string) => void;
-  onCycleTimeWindow: (widgetId: string) => void;
   onMove: (widgetId: string, offset: number) => void;
   index: number;
   count: number;
@@ -194,8 +186,6 @@ function WidgetGridCell({
   onDragEnd,
   onEdit,
   onRemove,
-  onResize,
-  onCycleTimeWindow,
   onMove,
   index,
   count,
@@ -223,7 +213,7 @@ function WidgetGridCell({
   return (
     <GestureDetector gesture={pan}>
       <YStack
-        width={`${widthPercentForSize(widget.size, columns)}%`}
+        width={`${widthPercentForSpan(widget.w, columns)}%`}
         p={GEOMETRY.gridGap / 2}
         onLayout={(event) => onMeasure(widget.id, event)}
         // The lifted card reads as picked up without leaving a hole in the flow.
@@ -233,13 +223,11 @@ function WidgetGridCell({
         style={{ zIndex: dragging ? 1 : 0 }}
         testID={`widget-cell-${widget.id}`}
       >
-        <WidgetCard
+        <WidgetFrame
           widget={widget}
           editMode={editMode}
           onEdit={onEdit}
           onRemove={onRemove}
-          onResize={onResize}
-          onCycleTimeWindow={onCycleTimeWindow}
           onMove={onMove}
           index={index}
           count={count}

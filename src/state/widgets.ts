@@ -1,54 +1,91 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 
-import type { WidgetConfig, WidgetSize } from '@/types/dashboard';
-import {
-  createWidget,
-  metricToEndpoint,
-  resolveMetricForKind,
-  setWidgetIdCounterFrom,
-  type CreateWidgetInput,
-} from '@/utils/widgetFactory';
+import type { WidgetInstance } from '@/types/dashboard';
+import { isWidgetType, parseWidgetConfig, widgetDefinition, type WidgetType } from '@/widgets/catalog';
 
 import { asyncStorageJSON, STORAGE_KEYS } from './storage';
 
-/**
- * Fields the config screen can change. `metric` and `kind` drive `endpointPath`,
- * so that is recomputed here rather than trusted from the caller.
- */
-export type WidgetPatch = Partial<
-  Pick<
-    WidgetConfig,
-    | 'serverId'
-    | 'title'
-    | 'metric'
-    | 'fields'
-    | 'fieldColors'
-    | 'fieldFormatters'
-    | 'donutChartOptions'
-    | 'chartLabel'
-    | 'splitPercentageIntoUsedFree'
-    | 'size'
-    | 'timeWindow'
-    | 'processSort'
-  >
->;
-
-interface WidgetsState {
-  widgets: WidgetConfig[];
-  hasHydrated: boolean;
-  addWidget: (input: Omit<CreateWidgetInput, 'order'>) => WidgetConfig;
-  updateWidget: (id: string, patch: WidgetPatch) => void;
-  removeWidget: (id: string) => void;
-  setWidgetSize: (id: string, size: WidgetSize) => void;
-  /** Persist a new order, e.g. after a drag. Ids not present are appended. */
-  reorderWidgets: (orderedIds: string[]) => void;
-  /** Drop widgets whose server no longer exists. */
-  removeWidgetsForServer: (serverId: string) => void;
+export interface AddWidgetInput {
+  type: WidgetType;
+  /** `null` only for a widget whose type is `global`. */
+  endpointId: string | null;
+  title?: string | null;
+  config?: Record<string, unknown>;
+  /** Footprint; defaults to the type's `regular` tier. */
+  w?: number;
+  h?: number;
 }
 
-function withSequentialOrder(widgets: WidgetConfig[]): WidgetConfig[] {
-  return widgets.map((widget, index) => ({ ...widget, order: index }));
+/** What the config screen may change. Geometry moves through `moveWidget` / `resizeWidget`. */
+export type WidgetPatch = Partial<Pick<WidgetInstance, 'endpointId' | 'title' | 'config'>>;
+
+interface WidgetsState {
+  widgets: WidgetInstance[];
+  hasHydrated: boolean;
+  addWidget: (input: AddWidgetInput) => WidgetInstance;
+  updateWidget: (id: string, patch: WidgetPatch) => void;
+  removeWidget: (id: string) => void;
+  setGeometry: (id: string, geometry: Partial<Pick<WidgetInstance, 'x' | 'y' | 'w' | 'h'>>) => void;
+  /** Persist a new order, e.g. after a drag. Ids not present keep their relative position. */
+  reorderWidgets: (orderedIds: string[]) => void;
+  /** Drop widgets bound to a removed endpoint. General widgets survive it. */
+  removeWidgetsForEndpoint: (endpointId: string) => void;
+}
+
+let widgetIdCounter = 1;
+
+function nextWidgetId(): string {
+  return `w-${widgetIdCounter++}`;
+}
+
+function syncWidgetIdCounter(widgets: { id: string }[]): void {
+  const maxId = widgets.reduce((max, widget) => {
+    const match = /^w-(\d+)$/.exec(widget.id);
+    if (!match) return max;
+    const num = Number.parseInt(match[1] ?? '0', 10);
+    return Number.isNaN(num) ? max : Math.max(max, num);
+  }, 0);
+  widgetIdCounter = maxId + 1;
+}
+
+/** Test seam. */
+export function resetWidgetIdCounter(): void {
+  widgetIdCounter = 1;
+}
+
+/**
+ * Re-flow the board into reading order.
+ *
+ * M12's grid is a wrap flow, so `y` is the position in that flow and `x` is unused until M15 gives
+ * the grid real columns. Keeping `y` dense means removing a widget cannot leave a hole that only a
+ * future grid would notice.
+ */
+function withSequentialRows(widgets: WidgetInstance[]): WidgetInstance[] {
+  return widgets.map((widget, index) => ({ ...widget, y: index }));
+}
+
+type PersistedWidgets = { widgets: WidgetInstance[] };
+
+/**
+ * v1 → v2: **every stored widget is dropped.**
+ *
+ * There is no honest mapping from the generic model — `{ kind: 'donut', metric: 'mem', fields: [...] }`
+ * — onto a typed catalog entry. A donut over two hand-picked fields is not a Memory gauge; guessing
+ * would hand the user a board that looks like theirs and reads differently, which is worse than an
+ * empty one they rebuild deliberately. Confirmed with the owner, and "no migration" has been the
+ * plan's position since §1.
+ *
+ * Exported and tested because dropping user data on purpose still has to be *only* what was
+ * intended: a v2 store must pass through untouched.
+ */
+export function migrateWidgets(persisted: unknown, version: number): PersistedWidgets {
+  const state = (persisted ?? {}) as Partial<PersistedWidgets>;
+  if (version >= 2) {
+    const rows = Array.isArray(state.widgets) ? state.widgets : [];
+    return { widgets: rows };
+  }
+  return { widgets: [] };
 }
 
 export const useWidgetsStore = create<WidgetsState>()(
@@ -58,7 +95,21 @@ export const useWidgetsStore = create<WidgetsState>()(
       hasHydrated: false,
 
       addWidget: (input) => {
-        const widget = createWidget({ ...input, order: get().widgets.length });
+        const definition = widgetDefinition(input.type);
+        const widget: WidgetInstance = {
+          id: nextWidgetId(),
+          type: input.type,
+          endpointId: definition.scope === 'global' ? null : input.endpointId,
+          title: input.title ?? null,
+          // Parsed on the way in as well as on the way out, so a widget is never stored with
+          // options its own schema would reject.
+          config: parseWidgetConfig(input.type, input.config ?? {}),
+          x: 0,
+          y: get().widgets.length,
+          w: input.w ?? definition.defaultSize.w,
+          h: input.h ?? definition.defaultSize.h,
+          createdAt: Date.now(),
+        };
         set((state) => ({ widgets: [...state.widgets, widget] }));
         return widget;
       },
@@ -67,27 +118,25 @@ export const useWidgetsStore = create<WidgetsState>()(
         set((state) => ({
           widgets: state.widgets.map((widget) => {
             if (widget.id !== id) return widget;
-            const metric = resolveMetricForKind(widget.kind, patch.metric ?? widget.metric);
-            return {
-              ...widget,
-              ...patch,
-              metric,
-              endpointPath: metricToEndpoint(metric),
-            };
+            const next = { ...widget, ...patch };
+            if (patch.config !== undefined && isWidgetType(widget.type)) {
+              next.config = parseWidgetConfig(widget.type, patch.config);
+            }
+            return next;
           }),
         }));
       },
 
       removeWidget: (id) => {
         set((state) => ({
-          widgets: withSequentialOrder(state.widgets.filter((widget) => widget.id !== id)),
+          widgets: withSequentialRows(state.widgets.filter((widget) => widget.id !== id)),
         }));
       },
 
-      setWidgetSize: (id, size) => {
+      setGeometry: (id, geometry) => {
         set((state) => ({
           widgets: state.widgets.map((widget) =>
-            widget.id === id ? { ...widget, size } : widget,
+            widget.id === id ? { ...widget, ...geometry } : widget,
           ),
         }));
       },
@@ -95,7 +144,7 @@ export const useWidgetsStore = create<WidgetsState>()(
       reorderWidgets: (orderedIds) => {
         set((state) => {
           const byId = new Map(state.widgets.map((widget) => [widget.id, widget]));
-          const ordered: WidgetConfig[] = [];
+          const ordered: WidgetInstance[] = [];
           for (const id of orderedIds) {
             const widget = byId.get(id);
             if (widget) {
@@ -104,14 +153,16 @@ export const useWidgetsStore = create<WidgetsState>()(
             }
           }
           // Anything the caller did not mention keeps its relative position at the end.
-          return { widgets: withSequentialOrder([...ordered, ...byId.values()]) };
+          return { widgets: withSequentialRows([...ordered, ...byId.values()]) };
         });
       },
 
-      removeWidgetsForServer: (serverId) => {
+      removeWidgetsForEndpoint: (endpointId) => {
         set((state) => ({
-          widgets: withSequentialOrder(
-            state.widgets.filter((widget) => widget.serverId !== serverId),
+          widgets: withSequentialRows(
+            // `endpointId === null` is a general widget, which belongs to no host and outlives the
+            // deletion of any of them.
+            state.widgets.filter((widget) => widget.endpointId !== endpointId),
           ),
         }));
       },
@@ -119,17 +170,18 @@ export const useWidgetsStore = create<WidgetsState>()(
     {
       name: STORAGE_KEYS.widgets,
       storage: asyncStorageJSON(),
-      version: 1,
+      version: 2,
+      migrate: migrateWidgets,
       partialize: (state) => ({ widgets: state.widgets }),
       onRehydrateStorage: () => (state) => {
-        if (state) setWidgetIdCounterFrom(state.widgets);
+        if (state) syncWidgetIdCounter(state.widgets);
         useWidgetsStore.setState({ hasHydrated: true });
       },
     },
   ),
 );
 
-/** Widgets in display order. */
-export function selectOrderedWidgets(state: Pick<WidgetsState, 'widgets'>): WidgetConfig[] {
-  return [...state.widgets].sort((a, b) => a.order - b.order);
+/** Widgets in display order: the wrap flow's row, then column. */
+export function selectOrderedWidgets(state: Pick<WidgetsState, 'widgets'>): WidgetInstance[] {
+  return [...state.widgets].sort((a, b) => a.y - b.y || a.x - b.x);
 }

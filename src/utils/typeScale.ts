@@ -26,6 +26,30 @@ export function sizeClassForWidth(width: number): WidgetSizeClass {
   return 'wide';
 }
 
+/**
+ * Below this a panel has no room for a body worth the name, whatever its width (ref §7.4).
+ *
+ * It sits in the dead band between the two-row footprint's tallest stretch and the three-row
+ * minimum. Dead bands are what stop a widget flickering between presentations as it is resized.
+ */
+export const SHORT_BELOW_PX = 200;
+
+/**
+ * The measured size mode: a **width** tier and an independent **height** flag.
+ *
+ * `short` composes with any tier rather than being a fourth tier, because the two axes degrade
+ * different things — width sheds chips and columns, height sheds the body. A chart at
+ * `wide + short` is still wide in every respect except that it has become a pulse strip.
+ */
+export interface SizeMode {
+  tier: WidgetSizeClass;
+  short: boolean;
+}
+
+export function sizeModeFor(width: number, height: number): SizeMode {
+  return { tier: sizeClassForWidth(width), short: height < SHORT_BELOW_PX };
+}
+
 /** User font-size multiplier bounds. Wider than this stops being legible either way. */
 export const READING_SCALE_MIN = 0.85;
 export const READING_SCALE_MAX = 1.6;

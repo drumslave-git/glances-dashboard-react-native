@@ -13,6 +13,7 @@ import {
   retentionSecForEndpoint,
   widgetsForMetric,
 } from './catalog';
+import { WIDGET_RENDERERS } from './registry';
 
 describe('definitions', () => {
   it('derives the group from the metric, so a rendering cannot change category', () => {
@@ -125,16 +126,22 @@ describe('parseWidgetConfig', () => {
     });
   });
 
-  it('falls back to defaults rather than throwing on an unreadable config', () => {
-    // A widget with no options is recoverable — the user re-picks them. One that refuses to render
-    // is not.
-    expect(parseWidgetConfig('cpu', { windowSec: 'yesterday' })).toEqual({
-      split: false,
+  it('falls back per key, so one bad option does not undo the others', () => {
+    // Resetting a whole config because a single field went bad would quietly discard settings the
+    // user made deliberately.
+    expect(parseWidgetConfig('cpu', { split: true, windowSec: 'yesterday' })).toEqual({
+      split: true,
       perCoreOverlay: false,
       windowSec: 300,
     });
-    expect(parseWidgetConfig('cpu', null)).toMatchObject({ windowSec: 300 });
+  });
+
+  it('falls back to defaults rather than throwing on something that is not a config at all', () => {
+    // A widget with the wrong options is recoverable — the user re-picks them. One that refuses to
+    // render is not.
+    expect(parseWidgetConfig('cpu', null)).toMatchObject({ windowSec: 300, split: false });
     expect(parseWidgetConfig('cpu', 42)).toMatchObject({ windowSec: 300 });
+    expect(parseWidgetConfig('cpu', ['nope'])).toMatchObject({ windowSec: 300 });
   });
 
   it('accepts a config left over from a type that had different options', () => {
@@ -176,9 +183,9 @@ describe('clearEndpointScopedConfig', () => {
 
 describe('pluginsForEndpoint', () => {
   const widgets = [
-    { type: 'cpu', endpointId: 'e1', config: {} },
-    { type: 'memoryGauge', endpointId: 'e1', config: {} },
-    { type: 'load', endpointId: 'e2', config: {} },
+    { type: 'cpu', endpointId: 'e1' },
+    { type: 'memoryGauge', endpointId: 'e1' },
+    { type: 'load', endpointId: 'e2' },
   ];
 
   it('unions what this endpoint widgets require, and nothing else', () => {
@@ -192,13 +199,13 @@ describe('pluginsForEndpoint', () => {
 
   it('ignores a row whose type is no longer in the catalog', () => {
     // A generic widget left over from before the migration must not crash the poller.
-    expect(pluginsForEndpoint('e1', [{ type: 'donut', endpointId: 'e1', config: {} }])).toEqual([]);
+    expect(pluginsForEndpoint('e1', [{ type: 'donut', endpointId: 'e1' }])).toEqual([]);
   });
 
   it('de-duplicates across widgets sharing a plugin', () => {
     const two = [
-      { type: 'cpu', endpointId: 'e1', config: {} },
-      { type: 'cpuGauge', endpointId: 'e1', config: {} },
+      { type: 'cpu', endpointId: 'e1' },
+      { type: 'cpuGauge', endpointId: 'e1' },
     ];
     expect(pluginsForEndpoint('e1', two).filter((plugin) => plugin === 'cpu')).toHaveLength(1);
   });
@@ -235,5 +242,12 @@ describe('catalog coverage', () => {
 
   it('covers the thirteen core renderings M12 promises', () => {
     expect(WIDGET_TYPES).toHaveLength(13);
+  });
+});
+
+describe('registry coverage', () => {
+  it('gives every catalog type a renderer, and adds none the catalog does not know', () => {
+    // The two halves are edited separately, so drift between them is the failure mode this guards.
+    expect(Object.keys(WIDGET_RENDERERS).sort()).toEqual([...WIDGET_TYPES].sort());
   });
 });

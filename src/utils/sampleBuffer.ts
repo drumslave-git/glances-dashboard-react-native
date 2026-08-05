@@ -14,15 +14,22 @@ export interface Sample {
 }
 
 /** Selectable chart windows, in milliseconds. */
+/**
+ * The windows a series widget may ask for, in **milliseconds**.
+ *
+ * 30 minutes rather than an hour is the reference's own ceiling, and it is the same number as
+ * `MAX_WINDOW_SEC` — which is what sizes the ring buffers. Offering an hour would let a widget ask
+ * for twice the history its buffer can hold and then draw a chart that quietly begins halfway.
+ */
 export const TIME_WINDOWS = {
   '5m': 5 * 60_000,
   '15m': 15 * 60_000,
-  '1h': 60 * 60_000,
+  '30m': 30 * 60_000,
 } as const;
 
 export type TimeWindow = keyof typeof TIME_WINDOWS;
 
-export const TIME_WINDOW_ORDER: readonly TimeWindow[] = ['5m', '15m', '1h'];
+export const TIME_WINDOW_ORDER: readonly TimeWindow[] = ['5m', '15m', '30m'];
 
 export function isTimeWindow(value: unknown): value is TimeWindow {
   return typeof value === 'string' && value in TIME_WINDOWS;

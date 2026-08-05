@@ -1,157 +1,186 @@
-import { resetWidgetIdCounter } from '@/utils/widgetFactory';
+import type { WidgetInstance } from '@/types/dashboard';
+import { WIDGET_DEFINITIONS } from '@/widgets/catalog';
 
-import { selectOrderedWidgets, useWidgetsStore } from './widgets';
+import {
+  migrateWidgets,
+  resetWidgetIdCounter,
+  selectOrderedWidgets,
+  useWidgetsStore,
+} from './widgets';
 
 beforeEach(() => {
-  resetWidgetIdCounter();
   useWidgetsStore.setState({ widgets: [] });
+  resetWidgetIdCounter();
 });
 
-function add(metric: string, serverId = 's-1') {
-  return useWidgetsStore.getState().addWidget({ serverId, metric });
-}
+const store = () => useWidgetsStore.getState();
+
+/** A fully-formed row, for the cases that seed state rather than build it. */
+const row = (over: Partial<WidgetInstance> & Pick<WidgetInstance, 'id'>): WidgetInstance => ({
+  type: 'cpu',
+  endpointId: 'e1',
+  title: null,
+  config: {},
+  x: 0,
+  y: 0,
+  w: 1,
+  h: 3,
+  createdAt: 0,
+  ...over,
+});
 
 describe('addWidget', () => {
-  it('appends widgets with increasing order', () => {
-    const first = add('cpu');
-    const second = add('mem');
+  it('takes the type default footprint and appends to the flow', () => {
+    const first = store().addWidget({ type: 'cpu', endpointId: 'e1' });
+    const second = store().addWidget({ type: 'memoryGauge', endpointId: 'e1' });
 
-    expect(first.order).toBe(0);
-    expect(second.order).toBe(1);
-    expect(useWidgetsStore.getState().widgets).toHaveLength(2);
+    expect(first).toMatchObject({ type: 'cpu', endpointId: 'e1', y: 0 });
+    expect(first.w).toBe(WIDGET_DEFINITIONS.cpu.defaultSize.w);
+    expect(first.h).toBe(WIDGET_DEFINITIONS.cpu.defaultSize.h);
+    expect(second.y).toBe(1);
   });
 
-  it('derives the endpoint from the metric', () => {
-    expect(add('cpu').endpointPath).toBe('/api/4/cpu');
+  it('accepts an explicit footprint, e.g. the picker wide card', () => {
+    expect(store().addWidget({ type: 'cpu', endpointId: 'e1', w: 2, h: 3 })).toMatchObject({
+      w: 2,
+      h: 3,
+    });
+  });
+
+  it('parses the config on the way in, not only on the way out', () => {
+    // A widget is never stored carrying options its own schema would reject.
+    const widget = store().addWidget({
+      type: 'cpu',
+      endpointId: 'e1',
+      config: { split: true, windowSec: 'nonsense' },
+    });
+    expect(widget.config).toEqual({ split: true, perCoreOverlay: false, windowSec: 300 });
+  });
+
+  it('fills the schema defaults when no config is given', () => {
+    expect(store().addWidget({ type: 'load', endpointId: 'e1' }).config).toEqual({
+      normalize: false,
+      windowSec: 300,
+    });
+  });
+
+  it('defaults the title to null, meaning "use the type label"', () => {
+    expect(store().addWidget({ type: 'cpu', endpointId: 'e1' }).title).toBeNull();
+  });
+
+  it('gives each widget a distinct id', () => {
+    const ids = [
+      store().addWidget({ type: 'cpu', endpointId: 'e1' }).id,
+      store().addWidget({ type: 'load', endpointId: 'e1' }).id,
+    ];
+    expect(new Set(ids).size).toBe(2);
   });
 });
 
 describe('updateWidget', () => {
-  it('recomputes the endpoint when the metric changes', () => {
-    const widget = add('cpu');
-    useWidgetsStore.getState().updateWidget(widget.id, { metric: 'mem' });
-
-    const updated = useWidgetsStore.getState().widgets[0];
-    expect(updated.metric).toBe('mem');
-    expect(updated.endpointPath).toBe('/api/4/mem');
+  it('re-parses a patched config', () => {
+    const widget = store().addWidget({ type: 'cpu', endpointId: 'e1' });
+    store().updateWidget(widget.id, { config: { split: true } });
+    expect(store().widgets[0].config).toEqual({ split: true, perCoreOverlay: false, windowSec: 300 });
   });
 
-  it('keeps process widgets on processlist even if a metric is passed', () => {
-    const widget = useWidgetsStore
-      .getState()
-      .addWidget({ serverId: 's-1', metric: 'cpu', kind: 'processes' });
-
-    useWidgetsStore.getState().updateWidget(widget.id, { metric: 'cpu' });
-
-    const updated = useWidgetsStore.getState().widgets[0];
-    expect(updated.metric).toBe('processlist');
-    expect(updated.endpointPath).toBe('/api/4/processlist');
+  it('rebinds to another endpoint', () => {
+    const widget = store().addWidget({ type: 'cpu', endpointId: 'e1' });
+    store().updateWidget(widget.id, { endpointId: 'e2' });
+    expect(store().widgets[0].endpointId).toBe('e2');
   });
 
-  it('patches presentation fields', () => {
-    const widget = add('cpu');
-    useWidgetsStore.getState().updateWidget(widget.id, {
-      title: 'CPU {{total}}%',
-      fields: ['total'],
-      fieldColors: { total: '#123456' },
-      splitPercentageIntoUsedFree: true,
-    });
-
-    expect(useWidgetsStore.getState().widgets[0]).toMatchObject({
-      title: 'CPU {{total}}%',
-      fields: ['total'],
-      fieldColors: { total: '#123456' },
-      splitPercentageIntoUsedFree: true,
-    });
-  });
-
-  it('can move a widget to another server', () => {
-    const widget = add('cpu');
-    useWidgetsStore.getState().updateWidget(widget.id, { serverId: 's-2' });
-
-    expect(useWidgetsStore.getState().widgets[0].serverId).toBe('s-2');
+  it('leaves other widgets alone', () => {
+    const first = store().addWidget({ type: 'cpu', endpointId: 'e1' });
+    store().addWidget({ type: 'load', endpointId: 'e1' });
+    store().updateWidget(first.id, { title: 'Renamed' });
+    expect(store().widgets[1].title).toBeNull();
   });
 });
 
 describe('removeWidget', () => {
-  it('removes and closes the gap in order', () => {
-    const first = add('cpu');
-    add('mem');
-    add('load');
+  it('keeps the flow dense, so no hole is left behind', () => {
+    const first = store().addWidget({ type: 'cpu', endpointId: 'e1' });
+    store().addWidget({ type: 'load', endpointId: 'e1' });
+    store().addWidget({ type: 'memory', endpointId: 'e1' });
 
-    useWidgetsStore.getState().removeWidget(first.id);
-
-    const widgets = useWidgetsStore.getState().widgets;
-    expect(widgets.map((w) => w.metric)).toEqual(['mem', 'load']);
-    expect(widgets.map((w) => w.order)).toEqual([0, 1]);
+    store().removeWidget(first.id);
+    expect(store().widgets.map((widget) => widget.y)).toEqual([0, 1]);
   });
 });
 
-describe('setWidgetSize', () => {
-  it('changes only the target widget', () => {
-    const first = add('cpu');
-    add('mem');
-
-    useWidgetsStore.getState().setWidgetSize(first.id, 'XL');
-
-    expect(useWidgetsStore.getState().widgets[0].size).toBe('XL');
-    expect(useWidgetsStore.getState().widgets[1].size).toBe('M');
+describe('setGeometry', () => {
+  it('patches only what it is given', () => {
+    const widget = store().addWidget({ type: 'cpu', endpointId: 'e1' });
+    store().setGeometry(widget.id, { w: 2 });
+    expect(store().widgets[0]).toMatchObject({ w: 2, h: widget.h });
   });
 });
 
 describe('reorderWidgets', () => {
   it('applies the given order', () => {
-    const a = add('cpu');
-    const b = add('mem');
-    const c = add('load');
-
-    useWidgetsStore.getState().reorderWidgets([c.id, a.id, b.id]);
-
-    const widgets = selectOrderedWidgets(useWidgetsStore.getState());
-    expect(widgets.map((w) => w.metric)).toEqual(['load', 'cpu', 'mem']);
-    expect(widgets.map((w) => w.order)).toEqual([0, 1, 2]);
+    const a = store().addWidget({ type: 'cpu', endpointId: 'e1' });
+    const b = store().addWidget({ type: 'load', endpointId: 'e1' });
+    store().reorderWidgets([b.id, a.id]);
+    expect(store().widgets.map((widget) => widget.id)).toEqual([b.id, a.id]);
+    expect(store().widgets.map((widget) => widget.y)).toEqual([0, 1]);
   });
 
-  it('appends widgets missing from the given order', () => {
-    const a = add('cpu');
-    const b = add('mem');
-
-    useWidgetsStore.getState().reorderWidgets([b.id]);
-
-    expect(selectOrderedWidgets(useWidgetsStore.getState()).map((w) => w.id)).toEqual([b.id, a.id]);
-  });
-
-  it('ignores unknown ids', () => {
-    const a = add('cpu');
-    useWidgetsStore.getState().reorderWidgets(['nope', a.id]);
-
-    expect(useWidgetsStore.getState().widgets.map((w) => w.id)).toEqual([a.id]);
+  it('keeps unmentioned widgets at the end in their relative order', () => {
+    const a = store().addWidget({ type: 'cpu', endpointId: 'e1' });
+    const b = store().addWidget({ type: 'load', endpointId: 'e1' });
+    const c = store().addWidget({ type: 'memory', endpointId: 'e1' });
+    store().reorderWidgets([c.id]);
+    expect(store().widgets.map((widget) => widget.id)).toEqual([c.id, a.id, b.id]);
   });
 });
 
-describe('removeWidgetsForServer', () => {
-  it('drops every widget bound to that server', () => {
-    add('cpu', 's-1');
-    add('mem', 's-2');
-    add('load', 's-1');
+describe('removeWidgetsForEndpoint', () => {
+  it('drops that endpoint widgets and re-flows', () => {
+    store().addWidget({ type: 'cpu', endpointId: 'e1' });
+    store().addWidget({ type: 'load', endpointId: 'e2' });
+    store().removeWidgetsForEndpoint('e1');
 
-    useWidgetsStore.getState().removeWidgetsForServer('s-1');
+    expect(store().widgets).toHaveLength(1);
+    expect(store().widgets[0]).toMatchObject({ endpointId: 'e2', y: 0 });
+  });
 
-    const widgets = useWidgetsStore.getState().widgets;
-    expect(widgets.map((w) => w.metric)).toEqual(['mem']);
-    expect(widgets[0].order).toBe(0);
+  it('spares a general widget, which belongs to no host', () => {
+    useWidgetsStore.setState({ widgets: [row({ id: 'w-1', type: 'alerts', endpointId: null })] });
+    store().removeWidgetsForEndpoint('e1');
+    expect(store().widgets).toHaveLength(1);
   });
 });
 
 describe('selectOrderedWidgets', () => {
-  it('sorts by order regardless of array position', () => {
-    useWidgetsStore.setState({
-      widgets: [
-        { ...add('cpu'), order: 2 },
-        { ...add('mem'), order: 0 },
-      ],
-    });
+  it('sorts by row then column', () => {
+    const widgets = [row({ id: 'c', x: 1, y: 1 }), row({ id: 'a' }), row({ id: 'b', y: 1 })];
+    expect(selectOrderedWidgets({ widgets }).map((widget) => widget.id)).toEqual(['a', 'b', 'c']);
+  });
+});
 
-    expect(selectOrderedWidgets(useWidgetsStore.getState()).map((w) => w.order)).toEqual([0, 2]);
+describe('migrateWidgets', () => {
+  it('drops every widget stored under the generic model', () => {
+    // There is no honest mapping from `{kind, metric, fields}` onto a typed catalog entry — a donut
+    // over two hand-picked fields is not a Memory gauge. Guessing would hand the user a board that
+    // looks like theirs and reads differently, which is worse than an empty one they rebuild.
+    const v1 = {
+      widgets: [
+        { id: 'w-1', kind: 'donut', metric: 'mem', serverId: 's-1', fields: ['used', 'free'], size: 'M', order: 0 },
+        { id: 'w-2', kind: 'processes', metric: 'processlist', serverId: 's-1', size: 'L', order: 1 },
+      ],
+    };
+    expect(migrateWidgets(v1, 1)).toEqual({ widgets: [] });
+  });
+
+  it('passes a current store through untouched', () => {
+    // Dropping on purpose still has to be *only* what was intended.
+    const v2 = { widgets: [row({ id: 'w-1', createdAt: 5 })] };
+    expect(migrateWidgets(v2, 2)).toEqual(v2);
+  });
+
+  it('survives junk', () => {
+    expect(migrateWidgets(undefined, 1)).toEqual({ widgets: [] });
+    expect(migrateWidgets({ widgets: 'nope' }, 2)).toEqual({ widgets: [] });
   });
 });

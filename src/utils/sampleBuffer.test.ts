@@ -47,7 +47,7 @@ describe('pushSample', () => {
   });
 
   it('holds an hour at a five-second cadence by default', () => {
-    expect(DEFAULT_CAPACITY * 5000).toBeGreaterThanOrEqual(TIME_WINDOWS['1h']);
+    expect(DEFAULT_CAPACITY * 5000).toBeGreaterThanOrEqual(TIME_WINDOWS['30m']);
   });
 
   it('treats a missing buffer as empty', () => {
@@ -135,13 +135,15 @@ describe('timeAxisTicks', () => {
 describe('time windows', () => {
   it('cycles 5m → 15m → 1h → 5m', () => {
     expect(nextTimeWindow('5m')).toBe('15m');
-    expect(nextTimeWindow('15m')).toBe('1h');
-    expect(nextTimeWindow('1h')).toBe('5m');
+    expect(nextTimeWindow('15m')).toBe('30m');
+    expect(nextTimeWindow('30m')).toBe('5m');
   });
 
   it('validates a persisted value', () => {
     expect(isTimeWindow('15m')).toBe(true);
-    expect(isTimeWindow('30m')).toBe(false);
+    expect(isTimeWindow('30m')).toBe(true);
+    // The old ceiling. A persisted '1h' no longer names a window and must not be trusted as one.
+    expect(isTimeWindow('1h')).toBe(false);
     expect(isTimeWindow(undefined)).toBe(false);
   });
 });

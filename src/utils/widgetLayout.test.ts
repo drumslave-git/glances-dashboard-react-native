@@ -5,6 +5,10 @@ import {
   preferredSpanForSize,
   spanForSize,
   widthPercentForSize,
+  GRID_ROW_HEIGHT,
+  heightForRows,
+  spanForWidth,
+  widthPercentForSpan,
 } from './widgetLayout';
 
 describe('columnsForWidth', () => {
@@ -85,5 +89,28 @@ describe('nextSize', () => {
     expect(nextSize('M')).toBe('L');
     expect(nextSize('L')).toBe('XL');
     expect(nextSize('XL')).toBe('S');
+  });
+});
+
+describe('span geometry', () => {
+  it('gives a one-column widget its share of the grid', () => {
+    expect(widthPercentForSpan(1, 2)).toBe(50);
+    expect(widthPercentForSpan(1, 4)).toBe(25);
+  });
+
+  it('lets a wide widget claim two columns', () => {
+    expect(widthPercentForSpan(2, 4)).toBe(50);
+  });
+
+  it('never spans more columns than the grid has', () => {
+    // A wide widget on a phone is simply full width, not an overflow.
+    expect(widthPercentForSpan(2, 1)).toBe(100);
+    expect(spanForWidth(3, 2)).toBe(2);
+  });
+
+  it('turns rows into points', () => {
+    expect(heightForRows(3)).toBe(3 * GRID_ROW_HEIGHT);
+    // A nonsensical footprint still has to render something.
+    expect(heightForRows(0)).toBe(GRID_ROW_HEIGHT);
   });
 });

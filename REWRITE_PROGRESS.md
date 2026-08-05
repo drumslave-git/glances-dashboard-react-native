@@ -706,13 +706,25 @@ same moment for a side-by-side.
       thirteen core types with their `requiredPlugins` / `capabilityPlugins` / size tiers / zod
       config schemas, plus `pluginsForEndpoint` and `retentionSecForEndpoint` — the two functions
       the poller needs and the reason this file imports no React. 33 tests.
-- [ ] `WidgetInstance` (`type` / `endpointId` / `config` / `x,y,w,h`) + the store migration that
-      drops the generic widgets
-- [ ] The renderer half of the registry (`component`, `configForm`, `headerMeta`)
-- [ ] Widget frame to the reference anatomy; measured tier + short; degrade ladders; error boundary
-- [ ] cpu · cpuGauge · cpuText · percpu · percpuText · memory · memoryGauge · memoryText · load ·
-      loadText · systemInfo · endpointSummary · endpointSummaryText
-- [ ] Retire `useGlancesQuery`, which also closes the duplicate-fetch blocker below
+- [x] `WidgetInstance` (`type` / `endpointId` / `config` / `x,y,w,h`) + the v1 → v2 migration that
+      **drops every generic widget** — confirmed with the owner
+- [x] The renderer half of the registry (`registry.tsx`), guarded by a test that the two halves
+      cannot drift apart
+- [x] Widget frame to the reference anatomy; measured tier + short (`sizeModeFor`); per-widget
+      **error boundary**, so one bad payload costs its panel and not the window
+- [x] All thirteen: cpu · cpuGauge · cpuText · percpu · percpuText · memory · memoryGauge ·
+      memoryText · load · loadText · systemInfo · endpointSummary · endpointSummaryText
+- [x] Two-step picker (metric → rendering) and a config screen driven by each type's own schema
+- [x] **The poller's plugin set is now derived from the placed widgets** — `pluginsForEndpoint`
+      wired through `setPluginResolver`, and a widget change refreshes it at once
+- [x] The generic model is deleted: widget-card, widget-content, widgetFactory, the field/chart
+      config sections, `useWidgetHistory`
+- [x] 612 tests across 36 suites; typecheck and lint clean
+- [ ] **Open:** the summary strip still uses `useGlancesQuery` — it is chrome, and it asks for raw
+      payloads that `buildSummaryCells` parses itself. Moving it onto the normalized feed goes with
+      the appearance work in M16.
+- [ ] **Open:** not yet run on a real target. The whole widget layer changed, so this needs the
+      desktop build *and* Android before M12 is done.
 
 **Notes (2026-08-05)**
 - **`zod` is now a declared dependency.** It was already present transitively at v3, which is a
@@ -729,6 +741,29 @@ same moment for a side-by-side.
   them — while a widget that refuses to render is not.
 - **`pluginsForEndpoint` ignores a row whose type is not in the catalog**, which is exactly the
   shape a not-yet-migrated generic widget has. The poller must not crash on one.
+- **`parseWidgetConfig` was resetting a whole config when one field was bad**, and the store test
+  caught it: `{split: true, windowSec: 'nonsense'}` lost the `split` the user had chosen. It now
+  falls back **per key**, which is the reference's own rule for stored appearance (ref §7.6) and
+  applies for the same reason.
+- **The M8 ring and chart were lifted, not rewritten.** `RingPanel` and `SeriesPanel` came out of
+  `widget-content.tsx` as it was retired. Both were already driven by `FieldReading[]` — a data
+  shape, nothing to do with hand-picked fields — so the typed widgets simply build the readings
+  themselves, and the tested ladders (the ring's 72pt floor, the chart's four rungs) carried over
+  intact. Re-deriving a gauge in the new layer would only have produced a worse one.
+- **History now comes from the poller's buffers**, not a parallel sample store (`use-series.ts`
+  replaces `useWidgetHistory`). One consequence is a real improvement: a chart added to a board that
+  has been running ten minutes draws ten minutes immediately, where before its own buffer started
+  empty.
+- **`TIME_WINDOWS` lost `1h` and gained `30m`.** The reference's ceiling is 30 minutes, and that is
+  also `MAX_WINDOW_SEC` — what sizes the ring buffers. Offering an hour let a widget ask for twice
+  the history its buffer could hold and then draw a chart that quietly began halfway.
+- **The unmeasured widget box is 360×180, not zero.** Every ladder budgets rows and chart height
+  from the measured box, so a zero box renders an empty body for a frame — and a panel that fills in
+  a moment later is indistinguishable from one that failed. Caught by a screen test, but it would
+  have been a visible flash on every mount.
+- **The config screen renders options from the parsed config's *shape***, not from a form written
+  per type: a boolean is a toggle, `windowSec` is the window picker. Thirteen bespoke forms would be
+  thirteen places to keep in step with thirteen schemas that are already the source of truth.
 
 ### M13 — Rate and table metrics — `not started`
 - [ ] network · networkText · diskio · diskioText · filesystem · filesystemText · sensors ·

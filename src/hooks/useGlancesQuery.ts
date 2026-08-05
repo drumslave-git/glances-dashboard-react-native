@@ -13,7 +13,13 @@ export interface UseGlancesQueryOptions {
 }
 
 /**
- * The single way this app reads from Glances.
+ * **Superseded.** Metric data comes from the poller (`src/data/poller.ts`) and the ring buffers it
+ * fills; every widget reads the feed store. What is left here is the **summary strip**, which is
+ * chrome rather than telemetry and still asks for raw payloads that `buildSummaryCells` parses
+ * itself. Moving it onto the normalized feed is M16's, alongside the rest of the appearance work.
+ *
+ * Until then two things fetch: the poller, for what the placed widgets need, and this, for the
+ * strip's five sources every 15 s. Both respect a paused endpoint.
  *
  * The query key is [serverId, url, endpointPath], so several widgets pointing at
  * the same metric on the same server share one request instead of each polling.

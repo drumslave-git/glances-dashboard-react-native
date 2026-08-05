@@ -49,6 +49,39 @@ export interface GlancesEndpoint {
   createdAt: number;
 }
 
+/**
+ * A placed widget.
+ *
+ * Replaces the generic `WidgetConfig` (kind × metric × hand-picked fields) with the reference's
+ * model: the **type** says what this is and how it is drawn, and `config` holds only that type's
+ * own options, validated by its schema on read (ref §6).
+ *
+ * Geometry is `{x, y, w, h}` from the start even though M12's grid is still a wrap flow that reads
+ * it as "sort by row, then column, and span `w`". Storing the final shape now means M15's free
+ * drag-and-resize changes how the grid *renders*, not what it persists — one migration instead of
+ * two, and this one already costs the user their board.
+ */
+export interface WidgetInstance {
+  id: string;
+  /** A `WidgetType` from the catalog. Kept as a string so a row of a retired type still parses. */
+  type: string;
+  /**
+   * The host this widget reads from, or `null` for a **general** widget — one whose type reads
+   * from every endpoint at once. A general widget survives the deletion of any single endpoint,
+   * which is why it is not filed under one. The first arrives with the alerts feed in M14.
+   */
+  endpointId: string | null;
+  /** Overrides the type's own label. `null` means use the label. */
+  title: string | null;
+  /** Per-type options. Opaque here; `parseWidgetConfig` is the only thing that interprets it. */
+  config: Record<string, unknown>;
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  createdAt: number;
+}
+
 export interface DonutChartOptions {
   size?: number;
   thickness?: number;

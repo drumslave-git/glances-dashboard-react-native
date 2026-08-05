@@ -1,9 +1,10 @@
 import { usePreferencesStore } from '@/state/preferences';
 import { resetEndpointIdCounter, useEndpointsStore } from '@/state/endpoints';
 import { useUiStore } from '@/state/ui';
-import { useWidgetsStore } from '@/state/widgets';
+import { resetWidgetIdCounter, useWidgetsStore } from '@/state/widgets';
+import { feedStore } from '@/data/feed-store';
 import { renderWithProviders, waitFor } from '@/test-utils/render';
-import { resetWidgetIdCounter } from '@/utils/widgetFactory';
+
 
 import { DashboardScreen } from './dashboard-screen';
 
@@ -42,13 +43,9 @@ afterEach(() => {
   global.fetch = originalFetch;
 });
 
-function addServerAndWidget(fields?: string[]) {
+function addServerAndWidget(type: 'cpuText' | 'cpuGauge' = 'cpuText') {
   const server = useEndpointsStore.getState().addEndpoint({ name: 'NAS', url: '10.0.0.1' });
-  const widget = useWidgetsStore.getState().addWidget({ serverId: server.id, metric: 'cpu' });
-  useWidgetsStore.getState().updateWidget(widget.id, {
-    title: 'CPU',
-    ...(fields ? { fields } : {}),
-  });
+  const widget = useWidgetsStore.getState().addWidget({ type, endpointId: server.id, title: 'CPU' });
   return { server, widget };
 }
 
@@ -150,34 +147,30 @@ describe('DashboardScreen - summary strip', () => {
 });
 
 describe('DashboardScreen - widgets', () => {
-  it('renders a widget with live data', async () => {
-    mockGlances({
-      '/api/4/system': { hostname: 'nas' },
-      '/api/4/cpu': { total: 12.5 },
+  it('renders a widget from the feed, not from its own request', async () => {
+    // Widget bodies read the poller's store now, so seeding it is what drives them — there is no
+    // per-widget query left to mock.
+    mockGlances({ '/api/4/system': { hostname: 'nas' } });
+    const { server, widget } = addServerAndWidget();
+    feedStore.getState().ingest({
+      endpointId: server.id,
+      ts: Date.now(),
+      plugins: { cpu: { total: 12.5, user: 4, system: 2, idle: 93.5 } },
     });
-    const { widget } = addServerAndWidget(['total']);
 
     const { getByTestId } = await renderWithProviders(<DashboardScreen />);
 
-    await waitFor(() =>
-      expect(getByTestId(`widget-content-${widget.id}-hero`)).toHaveTextContent(/12\.5/),
-    );
+    expect(getByTestId(`widget-content-${widget.id}`)).toHaveTextContent(/12\.5/);
   });
 
-  it('resolves tokens in the widget title', async () => {
-    mockGlances({
-      '/api/4/system': { hostname: 'nas' },
-      '/api/4/cpu': { total: 12.5 },
-    });
+  it('falls back to the type own label when the widget has no title', async () => {
+    mockGlances({ '/api/4/system': { hostname: 'nas' }, '/api/4/cpu': { total: 12.5 } });
     const server = useEndpointsStore.getState().addEndpoint({ name: 'NAS', url: '10.0.0.1' });
-    const widget = useWidgetsStore.getState().addWidget({ serverId: server.id, metric: 'cpu' });
-    useWidgetsStore.getState().updateWidget(widget.id, { title: 'CPU {{total}}%' });
+    const widget = useWidgetsStore.getState().addWidget({ type: 'cpuText', endpointId: server.id });
 
     const { getByTestId } = await renderWithProviders(<DashboardScreen />);
 
-    await waitFor(() =>
-      expect(getByTestId(`widget-title-${widget.id}`)).toHaveTextContent('CPU 12.5%'),
-    );
+    expect(getByTestId(`widget-title-${widget.id}`)).toHaveTextContent('CPU readings');
   });
 
   it('shows which endpoint a widget is bound to, on the widget itself', async () => {
@@ -200,17 +193,6 @@ describe('DashboardScreen - widgets', () => {
     await user.press(getByTestId(`widget-menu-sheet-${widget.id}-remove`));
 
     expect(useWidgetsStore.getState().widgets).toHaveLength(0);
-  });
-
-  it('cycles the widget size from the overflow menu', async () => {
-    mockGlances({ '/api/4/system': {}, '/api/4/cpu': { total: 1 } });
-    const { widget } = addServerAndWidget();
-
-    const { getByTestId, user } = await renderWithProviders(<DashboardScreen />);
-    await user.press(getByTestId(`widget-menu-${widget.id}`));
-    await user.press(getByTestId(`widget-menu-sheet-${widget.id}-size`));
-
-    expect(useWidgetsStore.getState().widgets[0].size).toBe('L');
   });
 
   it('opens the config screen from the overflow menu', async () => {

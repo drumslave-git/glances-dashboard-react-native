@@ -64,3 +64,29 @@ export function nextSize(size: WidgetSize): WidgetSize {
   const index = WIDGET_SIZES.indexOf(size);
   return WIDGET_SIZES[(index + 1) % WIDGET_SIZES.length];
 }
+
+/**
+ * Row height, in points — the unit `WidgetInstance.h` counts.
+ *
+ * The reference's grid derives this from the viewport so a windowful of rows always fills it
+ * exactly (ref §7.4); that arrives with the real grid in M15. Until then it is a constant, chosen
+ * so the catalog's declared heights (3 and 4 rows) land close to the M8 presets they replace —
+ * a 3-row chart at 172pt, a 4-row table at 232pt.
+ */
+export const GRID_ROW_HEIGHT = 58;
+
+/** Card height in points for a footprint of `h` rows. */
+export function heightForRows(rows: number): number {
+  return Math.max(1, Math.round(rows)) * GRID_ROW_HEIGHT;
+}
+
+/** Columns a footprint of `w` occupies, never more than the grid has. */
+export function spanForWidth(w: number, columns: number): number {
+  return Math.min(Math.max(1, Math.round(w)), Math.max(1, columns));
+}
+
+/** Width as a percentage of the grid, for flex-basis. */
+export function widthPercentForSpan(w: number, columns: number): number {
+  const safeColumns = Math.max(1, columns);
+  return (spanForWidth(w, safeColumns) / safeColumns) * 100;
+}

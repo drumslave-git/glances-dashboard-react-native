@@ -1,9 +1,9 @@
 import { usePreferencesStore } from '@/state/preferences';
 import { resetEndpointIdCounter, useEndpointsStore } from '@/state/endpoints';
-import { useWidgetsStore } from '@/state/widgets';
+import { resetWidgetIdCounter, useWidgetsStore } from '@/state/widgets';
 import { renderWithProviders } from '@/test-utils/render';
 import { heroFontSize } from '@/utils/typeScale';
-import { resetWidgetIdCounter } from '@/utils/widgetFactory';
+
 
 import { SettingsScreen } from './settings-screen';
 
@@ -66,7 +66,7 @@ describe('SettingsScreen', () => {
 
   it('requires confirmation before deleting, and warns about widgets', async () => {
     const server = addEndpoint('A');
-    useWidgetsStore.getState().addWidget({ serverId: server.id, metric: 'cpu' });
+    useWidgetsStore.getState().addWidget({ type: 'cpuText', endpointId: server.id });
 
     const { getByTestId, getByText, user } = await renderWithProviders(<SettingsScreen />);
     await user.press(getByTestId(`server-delete-${server.id}`));
@@ -77,15 +77,15 @@ describe('SettingsScreen', () => {
 
   it('deletes the server and its widgets once confirmed', async () => {
     const server = addEndpoint('A');
-    useWidgetsStore.getState().addWidget({ serverId: server.id, metric: 'cpu' });
-    useWidgetsStore.getState().addWidget({ serverId: 'other', metric: 'mem' });
+    useWidgetsStore.getState().addWidget({ type: 'cpuText', endpointId: server.id });
+    useWidgetsStore.getState().addWidget({ type: 'memoryText', endpointId: 'other' });
 
     const { getByTestId, user } = await renderWithProviders(<SettingsScreen />);
     await user.press(getByTestId(`server-delete-${server.id}`));
     await user.press(getByTestId(`server-confirm-delete-${server.id}`));
 
     expect(useEndpointsStore.getState().endpoints).toHaveLength(0);
-    expect(useWidgetsStore.getState().widgets.map((w) => w.serverId)).toEqual(['other']);
+    expect(useWidgetsStore.getState().widgets.map((w) => w.endpointId)).toEqual(['other']);
   });
 
   it('navigates to the add-server form', async () => {
@@ -169,7 +169,7 @@ describe('SettingsScreen — appearance', () => {
   it('pauses an endpoint without deleting it or its widgets', async () => {
     // Pausing has to be visibly different from a failure, and must not cost the board its widgets.
     const endpoint = useEndpointsStore.getState().addEndpoint({ name: 'NAS', url: '10.0.0.1' });
-    useWidgetsStore.getState().addWidget({ serverId: endpoint.id, metric: 'cpu' });
+    useWidgetsStore.getState().addWidget({ type: 'cpuText', endpointId: endpoint.id });
 
     const { getByTestId, user } = await renderWithProviders(<SettingsScreen />);
     await user.press(getByTestId(`server-toggle-enabled-${endpoint.id}`));

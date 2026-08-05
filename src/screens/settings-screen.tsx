@@ -163,11 +163,11 @@ export function SettingsScreen() {
   const updateEndpoint = useEndpointsStore((state) => state.updateEndpoint);
   const setEnabled = useEndpointsStore((state) => state.setEnabled);
   const widgets = useWidgetsStore((state) => state.widgets);
-  const removeWidgetsForServer = useWidgetsStore((state) => state.removeWidgetsForServer);
+  const removeWidgetsForEndpoint = useWidgetsStore((state) => state.removeWidgetsForEndpoint);
 
   const handleDelete = (id: string) => {
     // Widgets bound to a removed server would have nothing to read from.
-    removeWidgetsForServer(id);
+    removeWidgetsForEndpoint(id);
     removeEndpoint(id);
   };
 
@@ -200,7 +200,7 @@ export function SettingsScreen() {
                     <ServerRow
                       server={server}
                       isDefault={server.id === defaultEndpointId}
-                      widgetCount={widgets.filter((w) => w.serverId === server.id).length}
+                      widgetCount={widgets.filter((w) => w.endpointId === server.id).length}
                       onEdit={() =>
                         router.push({
                           pathname: '/settings/server/[id]',

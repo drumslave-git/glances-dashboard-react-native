@@ -15,7 +15,9 @@ import {
   ringDiameter,
   roleLetterSpacing,
   roleSize,
+  SHORT_BELOW_PX,
   sizeClassForWidth,
+  sizeModeFor,
   statClusterRung,
   statFontSize,
   statUnitFontSize,
@@ -200,5 +202,19 @@ describe('row fitting', () => {
     expect(fittingRowCount(1000, 30)).toBe(8);
     expect(fittingRowCount(1000, 30, 5)).toBe(5);
     expect(fittingRowCount(100, 0)).toBe(0);
+  });
+});
+
+describe('sizeModeFor', () => {
+  it('reports the width tier and the height flag independently', () => {
+    expect(sizeModeFor(600, 400)).toEqual({ tier: 'wide', short: false });
+    expect(sizeModeFor(600, 150)).toEqual({ tier: 'wide', short: true });
+    expect(sizeModeFor(250, 150)).toEqual({ tier: 'compact', short: true });
+  });
+
+  it('puts the short boundary in the dead band between the 2-row and 3-row footprints', () => {
+    // Dead bands are what stop a widget flickering between presentations as it is resized.
+    expect(sizeModeFor(400, SHORT_BELOW_PX - 1).short).toBe(true);
+    expect(sizeModeFor(400, SHORT_BELOW_PX).short).toBe(false);
   });
 });

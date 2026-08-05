@@ -8,7 +8,7 @@ import type { PanGesture } from 'react-native-gesture-handler';
 import { useEndpointsStore } from '@/state/endpoints';
 import { useWidgetsStore } from '@/state/widgets';
 import { fireEvent, renderWithProviders, waitFor } from '@/test-utils/render';
-import type { WidgetConfig } from '@/types/dashboard';
+import type { WidgetInstance } from '@/types/dashboard';
 
 import { WidgetGrid } from './widget-grid';
 
@@ -30,16 +30,18 @@ afterEach(() => {
   global.fetch = originalFetch;
 });
 
-function makeWidgets(count: number): WidgetConfig[] {
+function makeWidgets(count: number): WidgetInstance[] {
   return Array.from({ length: count }, (_, index) => ({
     id: `w-${index + 1}`,
-    serverId: 's-1',
+    type: 'cpuText',
+    endpointId: 'e1',
     title: `Widget ${index + 1}`,
-    kind: 'text' as const,
-    metric: 'cpu',
-    endpointPath: '/api/4/cpu',
-    size: 'M' as const,
-    order: index,
+    config: {},
+    x: 0,
+    y: index,
+    w: 1,
+    h: 3,
+    createdAt: 0,
   }));
 }
 
@@ -50,7 +52,7 @@ function makeWidgets(count: number): WidgetConfig[] {
  * overlaps them — which wedges the renderer for every later test in the file,
  * so each one is awaited before the next.
  */
-async function layoutAsColumn(getByTestId: (id: string) => unknown, widgets: WidgetConfig[]) {
+async function layoutAsColumn(getByTestId: (id: string) => unknown, widgets: WidgetInstance[]) {
   for (const [index, widget] of widgets.entries()) {
     fireEvent(getByTestId(`widget-cell-${widget.id}`) as never, 'layout', {
       nativeEvent: { layout: { x: 0, y: index * 100, width: 200, height: 100 } },
@@ -59,7 +61,7 @@ async function layoutAsColumn(getByTestId: (id: string) => unknown, widgets: Wid
   }
 }
 
-async function renderGrid(widgets: WidgetConfig[], editMode = true) {
+async function renderGrid(widgets: WidgetInstance[], editMode = true) {
   const onReorder = jest.fn();
   const view = await renderWithProviders(
     <WidgetGrid
@@ -67,8 +69,6 @@ async function renderGrid(widgets: WidgetConfig[], editMode = true) {
       editMode={editMode}
       onEdit={jest.fn()}
       onRemove={jest.fn()}
-      onResize={jest.fn()}
-      onCycleTimeWindow={jest.fn()}
       onReorder={onReorder}
     />,
   );

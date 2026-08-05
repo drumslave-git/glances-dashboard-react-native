@@ -16,8 +16,6 @@ import { usePreferencesStore } from '@/state/preferences';
 import { selectEndpointById, useEndpointsStore } from '@/state/endpoints';
 import { useUiStore } from '@/state/ui';
 import { selectOrderedWidgets, useWidgetsStore } from '@/state/widgets';
-import { nextTimeWindow } from '@/utils/sampleBuffer';
-import { nextSize } from '@/utils/widgetLayout';
 
 /**
  * `useKeepAwake` holds the lock for as long as it is mounted, so gating the
@@ -46,8 +44,6 @@ export function DashboardScreen() {
   const storedWidgets = useWidgetsStore((state) => state.widgets);
   const widgets = useMemo(() => selectOrderedWidgets({ widgets: storedWidgets }), [storedWidgets]);
   const removeWidget = useWidgetsStore((state) => state.removeWidget);
-  const setWidgetSize = useWidgetsStore((state) => state.setWidgetSize);
-  const updateWidget = useWidgetsStore((state) => state.updateWidget);
   const reorderWidgets = useWidgetsStore((state) => state.reorderWidgets);
 
   // Immersive mode hides the strip along with the toolbar: it is chrome, and the
@@ -57,16 +53,6 @@ export function DashboardScreen() {
 
   const handleExitImmersive = useCallback(() => exitImmersive(), [exitImmersive]);
   useImmersiveExit(immersive, handleExitImmersive);
-
-  const handleResize = (widgetId: string) => {
-    const widget = widgets.find((w) => w.id === widgetId);
-    if (widget) setWidgetSize(widgetId, nextSize(widget.size));
-  };
-
-  const handleCycleTimeWindow = (widgetId: string) => {
-    const widget = widgets.find((w) => w.id === widgetId);
-    if (widget) updateWidget(widgetId, { timeWindow: nextTimeWindow(widget.timeWindow ?? '15m') });
-  };
 
   const refreshLabel =
     defaultServer && defaultServer.pollIntervalMs > 0
@@ -79,8 +65,6 @@ export function DashboardScreen() {
       editMode={editMode}
       onEdit={(id) => router.push({ pathname: '/widget/[id]', params: { id } })}
       onRemove={removeWidget}
-      onResize={handleResize}
-      onCycleTimeWindow={handleCycleTimeWindow}
       onReorder={reorderWidgets}
     />
   );

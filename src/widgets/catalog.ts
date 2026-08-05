@@ -448,14 +448,31 @@ export function isWidgetAvailable(type: WidgetType, capabilities: string[] | und
 /**
  * Parse a stored config against its type's schema.
  *
- * Never throws and never returns a partial: an unreadable config falls back to the schema's own
- * defaults, because a widget with no options is recoverable — the user re-picks them — while a
- * widget that refuses to render is not.
+ * Never throws, and **falls back per key**: one unreadable option reverts to its own default while
+ * every other choice survives. Resetting the whole config because a single field went bad would
+ * quietly undo settings the user made deliberately — the reference applies the same rule to stored
+ * appearance, and the reasoning is identical (ref §7.6).
+ *
+ * A widget with the wrong options is recoverable — the user re-picks them — while a widget that
+ * refuses to render is not, so the last resort is still the schema's defaults rather than a throw.
  */
 export function parseWidgetConfig(type: WidgetType, config: unknown): Record<string, unknown> {
   const schema = WIDGET_DEFINITIONS[type].configSchema;
-  const result = schema.safeParse(config ?? {});
+  const input: Record<string, unknown> =
+    config && typeof config === 'object' && !Array.isArray(config)
+      ? { ...(config as Record<string, unknown>) }
+      : {};
+
+  const result = schema.safeParse(input);
   if (result.success) return result.data;
+
+  for (const issue of result.error.issues) {
+    const key = issue.path[0];
+    if (typeof key === 'string') delete input[key];
+  }
+  const retry = schema.safeParse(input);
+  if (retry.success) return retry.data;
+
   const fallback = schema.safeParse({});
   return fallback.success ? fallback.data : {};
 }
@@ -474,7 +491,7 @@ export function pluginsForWidget(type: WidgetType): PluginName[] {
  */
 export function pluginsForEndpoint(
   endpointId: string,
-  widgets: readonly { type: string; endpointId: string | null; [key: string]: unknown }[],
+  widgets: readonly { type: string; endpointId: string | null }[],
 ): PluginName[] {
   const plugins = new Set<PluginName>();
   for (const widget of widgets) {
