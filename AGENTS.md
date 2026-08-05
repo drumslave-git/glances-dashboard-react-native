@@ -61,6 +61,20 @@ then, in a second shell:
 npm run android:emulator
 ```
 
+**If Metro cannot bind 8081** — Windows reserves TCP ranges for Hyper-V/WSL and 8081 is often
+inside one (see the toolchain note below) — run Metro on a free port and tell the script:
+
+```bash
+npx expo start --port 8681
+```
+
+```bash
+npm run android:emulator -- -MetroPort 8681
+```
+
+Only the *host* side moves. `adb reverse tcp:8081 tcp:<MetroPort>` keeps the device end on 8081, so
+the app's own `debug_http_host` never changes.
+
 `scripts/run-android.ps1` does the whole dance: builds and installs the debug APK, sets up
 the adb tunnel, points React Native's dev-server setting at it, and launches the app.
 

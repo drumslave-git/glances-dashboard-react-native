@@ -8,8 +8,22 @@
     a bundle at all. The workaround is to tunnel Metro over adb and point React
     Native's dev server setting at 127.0.0.1.
 
-    Usage:  npm run android:emulator     (start `npx expo start` separately)
+    Usage:  npm run android:emulator                 (start `npx expo start` separately)
+            npm run android:emulator -- -MetroPort 8681
+
+    -MetroPort is for machines where Metro cannot bind 8081. Windows reserves TCP
+    ranges for Hyper-V/WSL — here that included 8081-8580 — and Expo then reports
+    the port "in use" while netstat shows nothing listening. Check with
+    `netsh int ipv4 show excludedportrange protocol=tcp`; the ranges move on reboot.
+
+    Only the *host* side moves: `adb reverse` maps the device's 8081 to whatever
+    port Metro is really on, so the app's own dev-server setting stays 8081 and
+    nothing on the device has to know.
 #>
+
+param(
+    [int]$MetroPort = 8081
+)
 
 $ErrorActionPreference = 'Stop'
 
@@ -68,9 +82,10 @@ try {
     Pop-Location
 }
 
-# Tunnel Metro over adb, bypassing the emulator's broken host routing.
+# Tunnel Metro over adb, bypassing the emulator's broken host routing. The device end is always
+# 8081 so the app's dev-server setting never changes; only the host end follows -MetroPort.
 & $adb reverse --remove-all 2>$null
-& $adb reverse tcp:8081 tcp:8081 | Out-Null
+& $adb reverse tcp:8081 "tcp:$MetroPort" | Out-Null
 
 # Point React Native's dev-server setting at the tunnel. Persists until uninstall.
 $prefs = Join-Path $env:TEMP 'rn-debug-host-prefs.xml'
@@ -86,4 +101,4 @@ Set-Content -Path $prefs -Encoding utf8 -Value @"
 & $adb shell "run-as $pkg cp /data/local/tmp/rn-prefs.xml /data/data/$pkg/shared_prefs/${pkg}_preferences.xml"
 
 & $adb shell monkey -p $pkg -c android.intent.category.LAUNCHER 1 | Out-Null
-Write-Host "Launched $pkg. Make sure 'npx expo start' is running on port 8081."
+Write-Host "Launched $pkg. Make sure Metro is running on host port $MetroPort."

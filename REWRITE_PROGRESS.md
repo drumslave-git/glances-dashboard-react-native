@@ -640,6 +640,14 @@ same moment for a side-by-side.
       on all eight widget headers and in the settings row, blanked the summary strip, replaced every
       body with "Endpoint paused" and stopped all traffic; resuming brought the whole board back
       live. The colour picker leads with the "none" swatch.
+- [x] **Verified on the Android emulator** (Pixel_10, API 36) against the same live server, with
+      Metro on port 8681. The board renders with live data — toolbar roster, summary strip, donut,
+      pie and bar — and the endpoint chip is **lime**, which is the precise proof that matters:
+      `endpointTone` returns an accent *only* for `online`, and `online` is only ever written by a
+      successful probe, so the M10 poller reached the server through React Native's own networking.
+      The chip being lime at all also proves the **AsyncStorage** migration ran, since this device's
+      store predates M11 and carried `accentIndex: 0`. 3273 modules bundled, no JS errors and no
+      fatals; the only warning is Victory's known `SkPath` deprecation.
 
 **Notes (2026-08-04)**
 - **The rename was done now rather than later, deliberately.** M12–M15 write a great deal of new
@@ -821,9 +829,6 @@ same moment for a side-by-side.
   payload. Both now respect `enabled`, so the behaviour is correct, but the traffic is duplicated
   and there are two answers to "is this endpoint up". Resolved when M12 moves the widgets onto the
   poller and `useGlancesQuery` is deleted.
-- **Android has not been run since M9.** M10 and M11 are platform-free TypeScript plus the Tauri
-  transport, and the suite runs under the native preset — but the M9 lesson cuts both ways, and a
-  milestone is not done until it has been looked at on both. Due before M12 closes.
 - Expo Go does not work on the local emulator (details below). The dev build does, so this
   does not block development. Untested on a physical device.
 - **Fabric mount crash seen once during M4 verification, cause unknown (2026-08-03).**
