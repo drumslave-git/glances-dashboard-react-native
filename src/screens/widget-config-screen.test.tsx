@@ -3,6 +3,7 @@ import { resetWidgetIdCounter, useWidgetsStore } from '@/state/widgets';
 import { feedStore } from '@/data/feed-store';
 import { renderWithProviders } from '@/test-utils/render';
 import type { WidgetType } from '@/widgets/catalog';
+import { paletteFor } from '@/components/settings/appearance-fields';
 
 import { WidgetConfigScreen } from './widget-config-screen';
 
@@ -263,5 +264,43 @@ describe('WidgetConfigScreen — a global widget', () => {
 
     expect(getByTestId('widget-option-includeResolved')).toBeTruthy();
     expect(getByTestId('widget-option-severity-critical')).toBeTruthy();
+  });
+});
+
+describe('WidgetConfigScreen — the widget own background', () => {
+  it('inherits the board by default, and stores nothing for it', async () => {
+    const widget = seed('cpu');
+
+    const { getByTestId, user } = await renderWithProviders(<WidgetConfigScreen />);
+    await user.press(getByTestId('widget-save'));
+
+    expect(widgets().find((entry) => entry.id === widget.id)?.appearance).toBeNull();
+  });
+
+  it('overrides it with one of the design own surfaces', async () => {
+    const widget = seed('cpu');
+    const swatch = paletteFor('dark')[2];
+
+    const { getByTestId, user } = await renderWithProviders(<WidgetConfigScreen />);
+    await user.press(getByTestId(`widget-background-${swatch.replace('#', '')}`));
+    await user.press(getByTestId('widget-save'));
+
+    const saved = widgets().find((entry) => entry.id === widget.id);
+    // Both schemes get the same hex: a per-widget override is a mark on one card, and the board
+    // colours every panel inherits are the ones edited per scheme.
+    expect(saved?.appearance?.background?.dark.color).toBe(swatch);
+    expect(saved?.appearance?.background?.light.color).toBe(swatch);
+  });
+
+  it('goes back to inheriting', async () => {
+    const widget = seed('cpu');
+    const swatch = paletteFor('dark')[2];
+
+    const { getByTestId, user } = await renderWithProviders(<WidgetConfigScreen />);
+    await user.press(getByTestId(`widget-background-${swatch.replace('#', '')}`));
+    await user.press(getByTestId('widget-background-inherit'));
+    await user.press(getByTestId('widget-save'));
+
+    expect(widgets().find((entry) => entry.id === widget.id)?.appearance).toBeNull();
   });
 });

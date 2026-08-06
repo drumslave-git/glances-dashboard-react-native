@@ -1,3 +1,4 @@
+import type { WidgetAppearance } from '@/theme/appearance';
 import type { AccentName } from '@/theme/telemetry';
 import type { TimeWindow } from '@/utils/sampleBuffer';
 
@@ -75,6 +76,15 @@ export interface WidgetInstance {
   title: string | null;
   /** Per-type options. Opaque here; `parseWidgetConfig` is the only thing that interprets it. */
   config: Record<string, unknown>;
+  /**
+   * This widget's own look, or `null` to inherit the board's.
+   *
+   * Deliberately **not** part of `config`: that is validated by the type's own zod schema, which
+   * would strip a key it does not know — and a widget's background is a fact about the board, not
+   * about what the widget measures. v1 offers the background alone, which is the one override a
+   * grid actually needs to tell hosts or roles apart (ref §7.6).
+   */
+  appearance?: WidgetAppearance | null;
   x: number;
   y: number;
   w: number;

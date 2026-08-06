@@ -21,7 +21,7 @@
         "resizable": true,
         "fullscreen": false,
         "theme": "Dark",
-        "backgroundColor": "#101113",
+        "transparent": true,
         "zoomHotkeysEnabled": true
       }
     ],

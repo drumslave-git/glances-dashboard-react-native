@@ -1,4 +1,5 @@
 import { usePreferencesStore } from '@/state/preferences';
+import { DEFAULT_APPEARANCE } from '@/theme/appearance';
 import { resetEndpointIdCounter, useEndpointsStore } from '@/state/endpoints';
 import { resetWidgetIdCounter, useWidgetsStore } from '@/state/widgets';
 import { renderWithProviders } from '@/test-utils/render';
@@ -114,11 +115,36 @@ describe('SettingsScreen', () => {
 
 describe('SettingsScreen — appearance', () => {
   beforeEach(() => {
-    usePreferencesStore.setState({ theme: 'dark', readingScale: 1, summaryStripVisible: true });
+    usePreferencesStore.setState({
+      theme: 'dark',
+      summaryStripVisible: true,
+      appearance: DEFAULT_APPEARANCE,
+      appearanceDraft: null,
+    });
+  });
+
+  /** The appearance controls live behind their own tab now — the reference's two, minus Updates. */
+  async function openAppearance() {
+    const view = await renderWithProviders(<SettingsScreen />);
+    await view.user.press(view.getByTestId('settings-tab-appearance'));
+    return view;
+  }
+
+  it('keeps the endpoint list and the appearance controls on separate tabs', async () => {
+    const { getByTestId, queryByTestId, user } = await renderWithProviders(<SettingsScreen />);
+
+    expect(queryByTestId('appearance-section')).toBeNull();
+    expect(getByTestId('add-server')).toBeTruthy();
+
+    await user.press(getByTestId('settings-tab-appearance'));
+
+    expect(getByTestId('appearance-section')).toBeTruthy();
+    // Adding an endpoint is not an appearance action, and the button is the screen's primary one.
+    expect(queryByTestId('add-server')).toBeNull();
   });
 
   it('switches the theme', async () => {
-    const { getByTestId, user } = await renderWithProviders(<SettingsScreen />);
+    const { getByTestId, user } = await openAppearance();
 
     await user.press(getByTestId('theme-light'));
 
@@ -126,22 +152,91 @@ describe('SettingsScreen — appearance', () => {
   });
 
   it('sets the reading-channel scale, and only that channel', async () => {
-    const { getByTestId, user } = await renderWithProviders(<SettingsScreen />);
+    const { getByTestId, user } = await openAppearance();
 
     await user.press(getByTestId('reading-scale-large'));
 
-    expect(usePreferencesStore.getState().readingScale).toBe(1.2);
+    // The draft is what the board reads, so the scale is live before anything is saved.
+    expect(usePreferencesStore.getState().appearanceDraft?.interfaceScale).toBe(1.2);
     // Hero numerals size off the widget box, so nothing here can reach them —
     // see utils/typeScale.ts. This is a contract, not an implementation detail.
     expect(heroFontSize(400)).toBe(40);
   });
 
   it('toggles the summary strip', async () => {
-    const { getByTestId, user } = await renderWithProviders(<SettingsScreen />);
+    const { getByTestId, user } = await openAppearance();
 
     await user.press(getByTestId('toggle-summary-strip'));
 
     expect(usePreferencesStore.getState().summaryStripVisible).toBe(false);
+  });
+
+  it('edits a draft, and Save is what makes it the board', async () => {
+    const { getByTestId, user } = await openAppearance();
+
+    await user.press(getByTestId('appearance-gridGap-24'));
+
+    // Nothing is stored yet; the board is repainting from the draft.
+    expect(usePreferencesStore.getState().appearance.gridGap).toBe(DEFAULT_APPEARANCE.gridGap);
+    expect(usePreferencesStore.getState().appearanceDraft?.gridGap).toBe(24);
+
+    await user.press(getByTestId('appearance-save'));
+
+    expect(usePreferencesStore.getState().appearance.gridGap).toBe(24);
+    expect(usePreferencesStore.getState().appearanceDraft).toBeNull();
+  });
+
+  it('cancels by dropping the draft, with nothing to undo', async () => {
+    const { getByTestId, user } = await openAppearance();
+
+    await user.press(getByTestId('appearance-widgetRadius-16'));
+    await user.press(getByTestId('appearance-cancel'));
+
+    expect(usePreferencesStore.getState().appearanceDraft).toBeNull();
+    expect(usePreferencesStore.getState().appearance.widgetRadius).toBe(
+      DEFAULT_APPEARANCE.widgetRadius,
+    );
+  });
+
+  it('leaving the screen drops an uncommitted draft too', async () => {
+    const { getByTestId, user } = await openAppearance();
+
+    await user.press(getByTestId('appearance-gridGap-24'));
+    await user.press(getByTestId('settings-close'));
+
+    expect(usePreferencesStore.getState().appearanceDraft).toBeNull();
+    expect(usePreferencesStore.getState().appearance.gridGap).toBe(DEFAULT_APPEARANCE.gridGap);
+  });
+
+  it('resets one setting without touching the rest', async () => {
+    const { getByTestId, user } = await openAppearance();
+
+    await user.press(getByTestId('appearance-gridGap-24'));
+    await user.press(getByTestId('appearance-widgetRadius-16'));
+    await user.press(getByTestId('appearance-gridGap-reset'));
+
+    const draft = usePreferencesStore.getState().appearanceDraft;
+    expect(draft?.gridGap).toBe(DEFAULT_APPEARANCE.gridGap);
+    expect(draft?.widgetRadius).toBe(16);
+  });
+
+  it('picks a colour per scheme, and an opacity for both', async () => {
+    const { getByTestId, user } = await openAppearance();
+
+    await user.press(getByTestId('appearance-gridBackground-alpha-50'));
+
+    const draft = usePreferencesStore.getState().appearanceDraft;
+    expect(draft?.gridBackground.dark.alpha).toBe(0.5);
+    // A window is either see-through or it is not — one control moves both schemes.
+    expect(draft?.gridBackground.light.alpha).toBe(0.5);
+  });
+
+  it('hides widget headers', async () => {
+    const { getByTestId, user } = await openAppearance();
+
+    await user.press(getByTestId('toggle-widget-headers'));
+
+    expect(usePreferencesStore.getState().appearanceDraft?.hideWidgetHeaders).toBe(true);
   });
 
   it('recolours an endpoint, and the change sticks', async () => {

@@ -1,4 +1,5 @@
 import { usePreferencesStore } from '@/state/preferences';
+import { DEFAULT_APPEARANCE } from '@/theme/appearance';
 import { resetEndpointIdCounter, useEndpointsStore } from '@/state/endpoints';
 import { useUiStore } from '@/state/ui';
 import { resetWidgetIdCounter, useWidgetsStore } from '@/state/widgets';
@@ -36,7 +37,12 @@ beforeEach(() => {
   // Edit mode and full screen live in a module-level store now, so without this
   // each test would inherit whatever the previous one toggled.
   useUiStore.setState({ editMode: false, fullScreen: false });
-  usePreferencesStore.setState({ theme: 'dark', readingScale: 1, summaryStripVisible: true });
+  usePreferencesStore.setState({
+    theme: 'dark',
+    summaryStripVisible: true,
+    appearance: DEFAULT_APPEARANCE,
+    appearanceDraft: null,
+  });
 });
 
 afterEach(() => {

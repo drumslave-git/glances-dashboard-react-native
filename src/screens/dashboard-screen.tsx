@@ -17,6 +17,8 @@ import {
 } from '@/hooks/useFullScreen';
 import { useSummarySources } from '@/hooks/useGlancesQuery';
 import { usePreferencesStore } from '@/state/preferences';
+import { colorFor } from '@/theme/appearance';
+import { useAppearance, useTelemetry } from '@/theme/use-telemetry';
 import { selectEndpointById, useEndpointsStore } from '@/state/endpoints';
 import { useUiStore } from '@/state/ui';
 import { selectOrderedWidgets, useWidgetsStore } from '@/state/widgets';
@@ -35,6 +37,8 @@ function KeepScreenAwake() {
 
 export function DashboardScreen() {
   const router = useRouter();
+  const { mode } = useTelemetry();
+  const appearance = useAppearance();
 
   const editMode = useUiStore((state) => state.editMode);
   const toggleEditMode = useUiStore((state) => state.toggleEditMode);
@@ -97,7 +101,13 @@ export function DashboardScreen() {
     // surfaces over it, edge to edge, as they do in the design.
     <SafeAreaView style={{ flex: 1 }} edges={['top', 'left', 'right']}>
       {fullScreen && <KeepScreenAwake />}
-      <YStack flex={1} bg="$appBg" position="relative" style={{ zIndex: 0 }}>
+      {/* The grid background is the user's, and it is the one surface the desktop window can be
+          seen through — so it goes through `style`, where an alpha survives. */}
+      <YStack
+        flex={1}
+        position="relative"
+        style={{ zIndex: 0, backgroundColor: colorFor(appearance.gridBackground, mode) }}
+      >
         {/* Out of the flow in full screen, never out of the tree: re-parenting the grid would
             remount every widget and re-measure the board, which is a blank frame and a lost
             second of history each way. */}

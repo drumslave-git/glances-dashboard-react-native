@@ -7,7 +7,9 @@ import {
 import type { PanGesture } from 'react-native-gesture-handler';
 
 import { useEndpointsStore } from '@/state/endpoints';
+import { usePreferencesStore } from '@/state/preferences';
 import { useWidgetsStore } from '@/state/widgets';
+import { DEFAULT_APPEARANCE } from '@/theme/appearance';
 import { fireEvent, renderWithProviders, waitFor } from '@/test-utils/render';
 import type { WidgetInstance } from '@/types/dashboard';
 import type { GridItem } from '@/utils/gridLayout';
@@ -26,6 +28,7 @@ beforeEach(() => {
     .mockResolvedValue({ ok: true, text: async () => JSON.stringify({ total: 1 }) }) as unknown as typeof fetch;
   useEndpointsStore.setState({ endpoints: [], defaultEndpointId: null });
   useWidgetsStore.setState({ widgets: [] });
+  usePreferencesStore.setState({ appearance: DEFAULT_APPEARANCE, appearanceDraft: null });
 });
 
 afterEach(() => {
@@ -234,5 +237,41 @@ describe('WidgetGrid', () => {
   it('keeps the menu available outside edit mode — only the gestures are gated', async () => {
     const { getByTestId } = await renderGrid(makeWidgets(3), false);
     expect(getByTestId('widget-menu-w-1')).toBeTruthy();
+  });
+
+  it('hides widget headers when the appearance says so, leaving the corner mark', async () => {
+    usePreferencesStore.setState({
+      appearance: { ...DEFAULT_APPEARANCE, hideWidgetHeaders: true },
+    });
+
+    const { getByTestId, queryByTestId } = await renderGrid(makeWidgets(1), false);
+
+    expect(queryByTestId('widget-title-w-1')).toBeNull();
+    // The mark is what keeps a headerless panel identifiable — and what brings the header back.
+    expect(getByTestId('widget-corner-w-1')).toBeTruthy();
+  });
+
+  it('brings the header back when the corner mark is pressed', async () => {
+    usePreferencesStore.setState({
+      appearance: { ...DEFAULT_APPEARANCE, hideWidgetHeaders: true },
+    });
+
+    const { getByTestId, user } = await renderGrid(makeWidgets(1), false);
+    await user.press(getByTestId('widget-corner-w-1'));
+
+    expect(getByTestId('widget-title-w-1')).toBeTruthy();
+  });
+
+  it('shows headers in edit mode whatever the setting says', async () => {
+    // The header is what a widget is dragged, sized and configured by: a board you cannot edit
+    // because you hid the controls is a trap, not a preference.
+    usePreferencesStore.setState({
+      appearance: { ...DEFAULT_APPEARANCE, hideWidgetHeaders: true },
+    });
+
+    const { getByTestId, queryByTestId } = await renderGrid(makeWidgets(1), true);
+
+    expect(getByTestId('widget-title-w-1')).toBeTruthy();
+    expect(queryByTestId('widget-corner-w-1')).toBeNull();
   });
 });

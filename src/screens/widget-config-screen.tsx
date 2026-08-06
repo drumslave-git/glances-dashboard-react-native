@@ -11,6 +11,9 @@ import { useEndpointState } from '@/hooks/useEndpointState';
 import { useMetricsPreview } from '@/hooks/useMetricsPreview';
 import { sortedEndpoints, useEndpointsStore } from '@/state/endpoints';
 import { useWidgetsStore } from '@/state/widgets';
+import { paletteFor } from '@/components/settings/appearance-fields';
+import { parseWidgetAppearance, type ThemedColor } from '@/theme/appearance';
+import { useTelemetry } from '@/theme/use-telemetry';
 import { GEOMETRY } from '@/theme/telemetry';
 import { TIME_WINDOW_ORDER, TIME_WINDOWS } from '@/utils/sampleBuffer';
 import {
@@ -56,9 +59,15 @@ export function WidgetConfigScreen() {
   const [config, setConfig] = useState<Record<string, unknown>>(() =>
     definition ? parseWidgetConfig(definition.type, existing?.config ?? {}) : {},
   );
+  // `null` is "inherit the board", which is what almost every widget wants — the override exists
+  // to tell one host, or one role, apart from the rest (ref §7.6).
+  const [background, setBackground] = useState<ThemedColor | null>(
+    () => parseWidgetAppearance(existing?.appearance).background,
+  );
 
   const endpoint = ordered.find((entry) => entry.id === endpointId);
   const endpointState = useEndpointState(endpoint);
+  const { t, mode: themeMode } = useTelemetry();
   // Poll this type's plugins while the screen is open, so the selection pickers can list what the
   // endpoint actually has — even when no placed widget requires them yet. Called before the early
   // return below, or the hook order would differ between the two branches.
@@ -103,6 +112,9 @@ export function WidgetConfigScreen() {
       endpointId: isGlobal ? null : endpointId,
       title: trimmed === '' ? null : trimmed,
       config,
+      // Nothing overridden is stored as `null` rather than as a record of nulls, so "inherit" is
+      // one value everywhere rather than two shapes meaning the same thing.
+      appearance: background ? { background } : null,
     });
     router.dismissAll();
     router.replace('/');
@@ -175,6 +187,52 @@ export function WidgetConfigScreen() {
               endpointId={endpointId}
               onChange={setOption}
             />
+
+            <YStack gap="$2" testID="widget-background">
+              <MicroLabel>Background</MicroLabel>
+              <UiText variant="footer" color="$textDim">
+                Inherits the board unless you pick a colour here — one way to tell a host, or a
+                role, apart on a full grid.
+              </UiText>
+              <XStack gap={8} items="center" flexWrap="wrap">
+                <ToolbarButton
+                  label="Inherit"
+                  active={background === null}
+                  onPress={() => setBackground(null)}
+                  testID="widget-background-inherit"
+                />
+                {paletteFor(themeMode).map((swatch) => {
+                  const selected = background?.[themeMode].color === swatch;
+                  return (
+                    <YStack
+                      key={swatch}
+                      width={26}
+                      height={26}
+                      rounded={4}
+                      items="center"
+                      justify="center"
+                      borderWidth={1}
+                      pressStyle={{ opacity: 0.6 }}
+                      // Both schemes get the same hex here: a per-widget override is a mark on one
+                      // card, and asking for it twice would cost more than the mark is worth. The
+                      // *board* colours, which every panel inherits, are edited per scheme.
+                      onPress={() =>
+                        setBackground({
+                          light: { color: swatch, alpha: 1 },
+                          dark: { color: swatch, alpha: 1 },
+                        })
+                      }
+                      role="button"
+                      aria-label={`Widget background ${swatch}`}
+                      style={{ borderColor: selected ? t.text.primary : t.border.control }}
+                      testID={`widget-background-${swatch.replace('#', '')}`}
+                    >
+                      <YStack width={16} height={16} rounded={3} style={{ backgroundColor: swatch }} />
+                    </YStack>
+                  );
+                })}
+              </XStack>
+            </YStack>
           </YStack>
         </ScrollView>
 

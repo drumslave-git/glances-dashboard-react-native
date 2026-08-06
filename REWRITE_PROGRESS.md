@@ -1021,10 +1021,50 @@ returned from it. It also found the one bug the desktop run did not:
   worth a device run: the commit landed, but at a moment React does not allow. The preview is now
   mirrored in a ref, and the gesture's end reads that rather than reaching through an updater.
 
-### M16 — Appearance and settings — `not started`
-- [ ] Per-scheme colours with alpha, rem sizes, interface scale, draft-based live preview, resets
-- [ ] Per-widget background override; two settings tabs (no Updates); hidden widget headers
-- [ ] The transparent Tauri window — requested only when an alpha is actually below 1
+### M16 — Appearance and settings — `in progress`
+- [x] The appearance model — per-scheme colours with alpha, sizes, interface scale, parsed per key
+      (`src/theme/appearance.ts`), pure and unit tested
+- [x] Draft-based live preview with per-setting resets and a reset-everything
+- [x] Per-widget background override; two settings tabs (no Updates); hidden widget headers
+- [x] The transparent Tauri window
+- [ ] Verified on desktop and Android
+
+**Notes**
+
+- **`rem` becomes points, and the interface scale keeps its old job.** The reference writes every
+  size in `rem` so they track its font scale; React Native has no `rem`, and M8 already ruled that
+  widget geometry must not follow the user's text setting — a 46pt hero multiplied inside a 450pt
+  card is what that rule exists to prevent. So the sizes are points the user sets directly, and
+  `interfaceScale` is the reading channel's multiplier, which is what the reference's `fontScale`
+  actually was: its own §7.4 keeps the *grid* floors in px for the same reason.
+- **The reading scale moved into the appearance model** (preferences v1 → v2). It was always the
+  same number, and having it there means one Cancel undoes an experiment with the text size as
+  readily as one with the colours.
+- **Nothing reads the stored appearance.** `useAppearance()` prefers the draft, so every control
+  repaints the board as it moves and Cancel is a matter of dropping the draft rather than undoing a
+  series of writes. The editor has no preview surface to keep in step — which is the point.
+- **Except that a full-screen route has no board behind it.** The reference pins its appearance
+  panel to the window edge and lets the dashboard *be* the preview; here settings is a route, so the
+  tab brings one card with it — the real `WidgetFrame` of the first placed widget, live data and
+  all, rather than a mock-up that could drift from what the board draws.
+- **The design's panel is a gradient, and an untouched setting keeps it.** `widgetSurface` returns
+  the two-stop gradient while `widgetBackground` is still the default and a flat fill once it is
+  not, so opening the appearance tab cannot silently cost the handoff's panel. The same idea keeps
+  the design's asymmetric widget padding: one number scales all four sides rather than flattening
+  them, so the default is the handoff to the point.
+- **One opacity for both schemes.** The colours are per scheme because a hex that reads on
+  near-black is wrong on paper-white — but a window is either see-through or it is not, and an
+  alpha that differs between schemes is a difference nobody can see two of at once.
+- **Hidden headers keep a corner mark**, which is both what identifies a headerless panel and the
+  way back to its header: press it on touch, hover the card on a pointer. Edit mode ignores the
+  setting outright — the header is what a widget is dragged, sized and configured by, so a board you
+  cannot edit because you hid the controls is a trap rather than a preference.
+- **The desktop window is created transparent and the app paints opaque by default.** Tauri cannot
+  toggle `transparent` after the window exists (neither can Electron), so the flag is always on and
+  a fully opaque grid colour — the default — is what makes the window look solid. The alpha is what
+  makes it visible, and it has to be translucent all the way down: `html`, `body` and the root view
+  drop to `transparent` the moment the grid colour does, or the user's alpha blends onto an opaque
+  page and merely looks pale.
 
 ### M17 — Release parity — `not started`
 - [ ] CORS story per target, README for all four targets, release across Windows / Android / web

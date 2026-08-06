@@ -4,7 +4,6 @@ import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, { LinearTransition, runOnJS } from 'react-native-reanimated';
 import { ScrollView, YStack } from 'tamagui';
 
-import { GEOMETRY } from '@/theme/telemetry';
 import type { WidgetInstance } from '@/types/dashboard';
 import {
   cellDelta,
@@ -19,6 +18,7 @@ import {
   spanDelta,
   type GridItem,
 } from '@/utils/gridLayout';
+import { useAppearance } from '@/theme/use-telemetry';
 import { footprintOf, footprintSize, isWidgetType, type Footprint } from '@/widgets/catalog';
 
 import { WidgetFrame } from '@/widgets/widget-frame';
@@ -71,7 +71,9 @@ interface WidgetGridProps {
  * find it gone. Only a deliberate edit persists, which is also when the reference saves.
  */
 export function WidgetGrid({ widgets, editMode, onEdit, onRemove, onLayoutChange }: WidgetGridProps) {
-  const gap = GEOMETRY.gridGap;
+  // One value for the gap between cells *and* the surround, so the two cannot drift apart — which
+  // is the whole reason the appearance model offers one number rather than two (ref §7.6).
+  const gap = useAppearance().gridGap;
 
   // The scroll viewport, not the content: the row height divides the height a windowful has.
   const [box, setBox] = useState({ width: 0, height: 0 });

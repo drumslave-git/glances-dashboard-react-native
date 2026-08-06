@@ -11,7 +11,7 @@
  * from container queries.
  */
 import { memo, useState } from 'react';
-import type { LayoutChangeEvent } from 'react-native';
+import { Platform, type LayoutChangeEvent } from 'react-native';
 import { XStack, YStack } from 'tamagui';
 
 import { AccentTick, EndpointChip } from '@/components/telemetry/chips';
@@ -21,7 +21,13 @@ import { useEndpointStatus } from '@/data/feed-store';
 import { useEndpointState } from '@/hooks/useEndpointState';
 import { selectEndpointById, useEndpointsStore } from '@/state/endpoints';
 import { GEOMETRY } from '@/theme/telemetry';
-import { useTelemetry } from '@/theme/use-telemetry';
+import {
+  DEFAULT_APPEARANCE,
+  colorFor,
+  parseWidgetAppearance,
+  widgetSurface,
+} from '@/theme/appearance';
+import { useAppearance, useTelemetry } from '@/theme/use-telemetry';
 import type { WidgetInstance } from '@/types/dashboard';
 import { endpointIsStale, endpointOverlay } from '@/utils/endpointStatus';
 import { headerRung, sizeModeFor } from '@/utils/typeScale';
@@ -64,12 +70,17 @@ function WidgetFrameInner({
   onRemove,
   onFootprint,
 }: WidgetFrameProps) {
-  const { t, accentFor } = useTelemetry();
+  const { t, mode: themeMode, accentFor } = useTelemetry();
+  const appearance = useAppearance();
   const endpoint = useEndpointsStore((state) => selectEndpointById(state, widget.endpointId));
   const status = useEndpointStatus(widget.endpointId);
   const endpointState = useEndpointState(endpoint);
 
   const [menuOpen, setMenuOpen] = useState(false);
+  // Two ways back to a hidden header, because two kinds of machine run this: a pointer over the
+  // panel, and a press on the corner mark that replaces the header.
+  const [hovered, setHovered] = useState(false);
+  const [pinned, setPinned] = useState(false);
   // A regular-class box until the first layout lands. Starting at zero would render an empty body
   // for a frame — every ladder budgets rows and chart height from this — and an empty panel that
   // fills in a moment later is indistinguishable from one that failed. The same reason M8's
@@ -95,9 +106,27 @@ function WidgetFrameInner({
   // where the question is what a healthy reading looks like, not which machine this is.
   const accent = accentFor(endpoint?.color ?? 'lime');
 
+  /**
+   * The design's panel padding is asymmetric — more at the top than the bottom, more at the sides
+   * than either. The appearance offers **one** number, so the user's value scales the four rather
+   * than flattening them: at the default this is the handoff's panel to the point, and at any other
+   * value it is the same panel, differently spaced.
+   */
+  const padScale = appearance.widgetPadding / DEFAULT_APPEARANCE.widgetPadding;
+  const padding = {
+    top: Math.round(GEOMETRY.widgetPadding.top * padScale),
+    right: Math.round(GEOMETRY.widgetPadding.right * padScale),
+    bottom: Math.round(GEOMETRY.widgetPadding.bottom * padScale),
+    left: Math.round(GEOMETRY.widgetPadding.left * padScale),
+  };
+
+  // Edit mode ignores hidden headers: the header is what a widget is configured and sized by, and
+  // a board you cannot edit because you hid the controls is not a preference, it is a trap.
+  const headerShown = !appearance.hideWidgetHeaders || editMode || hovered || pinned;
+
   const bodyHeight = Math.max(
     0,
-    box.height - GEOMETRY.widgetPadding.top - GEOMETRY.widgetPadding.bottom - HEADER_HEIGHT,
+    box.height - padding.top - padding.bottom - (headerShown ? HEADER_HEIGHT : 0),
   );
 
   // The footprints are here on every platform, not only where there is no corner grip: a grip is a
@@ -122,30 +151,68 @@ function WidgetFrameInner({
     { key: 'remove', label: 'Remove widget', destructive: true, onPress: () => onRemove(widget.id) },
   ];
 
+  const hoverProps: Record<string, unknown> =
+    Platform.OS === 'web' && appearance.hideWidgetHeaders
+      ? { onMouseEnter: () => setHovered(true), onMouseLeave: () => setHovered(false) }
+      : {};
+
   const overlay = widget.endpointId ? endpointOverlay(endpointState) : null;
   const stale = widget.endpointId ? endpointIsStale(endpointState) : false;
 
   return (
     <GradientSurface
-      colors={t.bg.widget}
-      rounded={GEOMETRY.radius.widget}
-      borderWidth={1}
-      borderColor={editMode ? '$borderRaised' : '$borderColor'}
+      // One widget may override the background; everything else is the board's own appearance.
+      colors={widgetSurface(appearance, themeMode, parseWidgetAppearance(widget.appearance).background)}
+      rounded={appearance.widgetRadius}
+      borderWidth={appearance.widgetBorder.width}
       flex={1}
       minH={0}
-      pt={GEOMETRY.widgetPadding.top}
-      pb={GEOMETRY.widgetPadding.bottom}
-      pr={GEOMETRY.widgetPadding.right}
-      pl={GEOMETRY.widgetPadding.left}
+      pt={padding.top}
+      pb={padding.bottom}
+      pr={padding.right}
+      pl={padding.left}
       onLayout={onLayout}
+      // Hover is the pointer's way back to a hidden header. Spread rather than passed, because
+      // Tamagui types the mouse handlers as web-only and the native build must not see them.
+      {...hoverProps}
+      // An arbitrary colour cannot go through Tamagui's `borderColor` token prop.
+      style={{
+        borderColor: editMode
+          ? t.border.widgetRaised
+          : colorFor(appearance.widgetBorder.color, themeMode),
+      }}
       testID={`widget-${widget.id}`}
     >
+      {!headerShown && (
+        // The corner mark: what keeps a headerless panel identifiable, and the touch route back to
+        // the header — the same mark in the same place, so there is one thing to learn.
+        <YStack
+          position="absolute"
+          t={padding.top}
+          l={padding.left}
+          onPress={() => setPinned(true)}
+          role="button"
+          aria-label={`Show header for ${title}`}
+          style={{ zIndex: 1 }}
+          testID={`widget-corner-${widget.id}`}
+        >
+          <AccentTick color={endpoint?.color ?? null} state={endpointState} />
+        </YStack>
+      )}
+
+      {headerShown && (
       <XStack items="center" gap={9} height={HEADER_HEIGHT} flexWrap="nowrap">
-        <AccentTick
-          color={endpoint?.color ?? null}
-          state={endpointState}
-          testID={`widget-accent-${widget.id}`}
-        />
+        <YStack
+          onPress={appearance.hideWidgetHeaders && !editMode ? () => setPinned(false) : undefined}
+          role={appearance.hideWidgetHeaders && !editMode ? 'button' : undefined}
+          aria-label={appearance.hideWidgetHeaders && !editMode ? `Hide header for ${title}` : undefined}
+        >
+          <AccentTick
+            color={endpoint?.color ?? null}
+            state={endpointState}
+            testID={`widget-accent-${widget.id}`}
+          />
+        </YStack>
         <Label numberOfLines={1} shrink={1} minW={0} testID={`widget-title-${widget.id}`}>
           {/* The metric's short name at compact, where the full label would truncate to nothing. */}
           {mode.tier === 'compact' && definition ? (definition.label ?? title) : title}
@@ -171,6 +238,7 @@ function WidgetFrameInner({
           testID={`widget-menu-${widget.id}`}
         />
       </XStack>
+      )}
 
       <YStack flex={1} minH={0} opacity={stale ? 0.55 : 1}>
         <WidgetBody

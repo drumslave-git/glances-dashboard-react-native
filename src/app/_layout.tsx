@@ -10,8 +10,8 @@ import { TamaguiProvider, Theme } from 'tamagui';
 import { startPolling } from '@/data/start-polling';
 import { useTelemetryFonts } from '@/theme/fonts';
 import { tamaguiConfig } from '@/theme/tamagui.config';
-import { tokensFor } from '@/theme/telemetry';
-import { useThemeMode } from '@/theme/use-telemetry';
+import { colorFor } from '@/theme/appearance';
+import { useAppearance, useThemeMode } from '@/theme/use-telemetry';
 
 /**
  * Polling cadence is set per query from each server's pollIntervalMs, so the client
@@ -29,16 +29,27 @@ const queryClient = new QueryClient({
 
 export default function RootLayout() {
   const mode = useThemeMode();
-  const tokens = tokensFor(mode);
+  const appearance = useAppearance();
+  const canvas = colorFor(appearance.gridBackground, mode);
+  /**
+   * A translucent grid has to be translucent *all the way down*.
+   *
+   * The desktop window is created transparent, so the only thing between the board and the desktop
+   * is what the page paints. If the shell keeps an opaque colour the user's alpha blends onto that
+   * instead and simply looks pale — which is the same reason the reference forces `html, body,
+   * #root` transparent over its CssBaseline.
+   */
+  const seeThrough = appearance.gridBackground[mode].alpha < 1;
+  const shell = seeThrough ? 'transparent' : canvas;
 
   // The web shell's `<html>`/`<body>` background is a hard-coded near-black so a
   // cold start does not flash white. Once the theme is known it has to follow,
   // or a light-mode board sits inside a dark frame wherever the page overscrolls.
   useEffect(() => {
     if (Platform.OS !== 'web' || typeof document === 'undefined') return;
-    document.documentElement.style.backgroundColor = tokens.bg.app;
-    document.body.style.backgroundColor = tokens.bg.app;
-  }, [tokens.bg.app]);
+    document.documentElement.style.backgroundColor = shell;
+    document.body.style.backgroundColor = shell;
+  }, [shell]);
   // The poller outlives every screen — it holds the ring buffers a chart draws from and the
   // backoff state a failing endpoint accumulates — so it is started once here and torn down only
   // when the app itself goes. `startPolling` is idempotent for the same reason.
@@ -50,7 +61,7 @@ export default function RootLayout() {
   const fontsLoaded = useTelemetryFonts();
 
   return (
-    <GestureHandlerRootView style={{ flex: 1, backgroundColor: tokens.bg.app }}>
+    <GestureHandlerRootView style={{ flex: 1, backgroundColor: shell }}>
       <TamaguiProvider config={tamaguiConfig} defaultTheme={mode}>
         <Theme name={mode}>
           <QueryClientProvider client={queryClient}>
@@ -60,7 +71,7 @@ export default function RootLayout() {
                 <Stack
                   screenOptions={{
                     headerShown: false,
-                    contentStyle: { backgroundColor: tokens.bg.app },
+                    contentStyle: { backgroundColor: shell },
                   }}
                 />
               )}

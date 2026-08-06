@@ -1,7 +1,7 @@
 import { useEndpointStatus } from '@/data/feed-store';
 import { selectEndpointById, useEndpointsStore } from '@/state/endpoints';
-import { GEOMETRY } from '@/theme/telemetry';
-import { useTelemetry } from '@/theme/use-telemetry';
+import { widgetSurface } from '@/theme/appearance';
+import { useAppearance, useTelemetry } from '@/theme/use-telemetry';
 import { sizeModeFor } from '@/utils/typeScale';
 import { parseWidgetConfig, type WidgetType } from '@/widgets/catalog';
 import { widgetRenderer } from '@/widgets/registry';
@@ -35,7 +35,8 @@ export function WidgetPreview({
   height: number;
   testID?: string;
 }) {
-  const { accentFor } = useTelemetry();
+  const { accentFor, mode: themeMode } = useTelemetry();
+  const appearance = useAppearance();
   const endpoint = useEndpointsStore((state) => selectEndpointById(state, endpointId));
   const status = useEndpointStatus(endpointId);
 
@@ -48,10 +49,12 @@ export function WidgetPreview({
       width={width}
       height={height}
       overflow="hidden"
-      bg="$widgetBg"
-      rounded={GEOMETRY.radius.widget}
-      px={GEOMETRY.widgetPadding.left}
-      py={GEOMETRY.widgetPadding.bottom}
+      // Painted by the board's own appearance: a preview of a widget that does not look like the
+      // widgets already placed is not a preview.
+      rounded={appearance.widgetRadius}
+      px={appearance.widgetPadding}
+      py={Math.round(appearance.widgetPadding * 0.65)}
+      style={{ backgroundColor: widgetSurface(appearance, themeMode)[1] }}
       testID={testID}
     >
       {/* A rendering that throws on this host's payload must cost the picker one card, not the

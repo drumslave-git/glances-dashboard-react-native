@@ -4,10 +4,12 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Paragraph, ScrollView, Separator, SizableText, XStack, YStack } from 'tamagui';
 
 import { ToolbarButton } from '@/components/telemetry/surfaces';
-import { Label } from '@/components/telemetry/text';
+import { Label, UiText } from '@/components/telemetry/text';
 import { GEOMETRY, type AccentName } from '@/theme/telemetry';
 
 import { AccentPicker, AppearanceSection } from '@/components/settings/appearance-section';
+import { usePreferencesStore } from '@/state/preferences';
+import { WidgetFrame } from '@/widgets/widget-frame';
 import { AccentTick } from '@/components/telemetry/chips';
 import { useEndpointStatus } from '@/data/feed-store';
 import { useEndpointState } from '@/hooks/useEndpointState';
@@ -154,8 +156,47 @@ function ServerRow({
   );
 }
 
+/** The two tabs the reference has, minus Updates — in-app updates are out of scope (plan §6). */
+type SettingsTab = 'endpoints' | 'appearance';
+
+/**
+ * One real widget, painted by the appearance being edited.
+ *
+ * The reference pins its appearance panel to the window edge and lets the dashboard behind it be
+ * the preview. A full-screen route cannot do that, so the tab brings one card *with* it — the
+ * actual `WidgetFrame` of the first widget on the board, live data and all, rather than a mock-up
+ * that could drift from what the board really draws.
+ */
+function AppearancePreview() {
+  const widgets = useWidgetsStore((state) => state.widgets);
+  const first = [...widgets].sort((a, b) => a.y - b.y || a.x - b.x)[0];
+
+  if (!first) {
+    return (
+      <UiText variant="footer" color="$textDim" testID="appearance-preview-empty">
+        Add a widget to see these settings on a real one.
+      </UiText>
+    );
+  }
+
+  return (
+    <YStack height={190} testID="appearance-preview">
+      <WidgetFrame
+        widget={first}
+        editMode={false}
+        footprint={null}
+        onEdit={() => undefined}
+        onRemove={() => undefined}
+        onFootprint={() => undefined}
+      />
+    </YStack>
+  );
+}
+
 export function SettingsScreen() {
   const router = useRouter();
+  const [tab, setTab] = useState<SettingsTab>('endpoints');
+  const cancelAppearance = usePreferencesStore((state) => state.cancelAppearance);
   const servers = useEndpointsStore((state) => state.endpoints);
   const defaultEndpointId = useEndpointsStore((state) => state.defaultEndpointId);
   const setDefaultEndpoint = useEndpointsStore((state) => state.setDefaultEndpoint);
@@ -171,21 +212,48 @@ export function SettingsScreen() {
     removeEndpoint(id);
   };
 
+  // Leaving with an experiment still in the draft would strand it: the board would repaint from a
+  // value nothing on screen is offering to save any more.
+  const close = () => {
+    cancelAppearance();
+    router.back();
+  };
+
   return (
     <SafeAreaView style={{ flex: 1 }} edges={['top', 'left', 'right']}>
       <YStack flex={1} bg="$appBg" p={GEOMETRY.gridPadding} gap="$3">
         <XStack items="center" gap="$3">
           <Label flex={1} variant="readout">
-            Endpoints
+            Settings
           </Label>
-          <ToolbarButton label="Done" onPress={() => router.back()} testID="settings-close" />
+          <ToolbarButton label="Done" onPress={close} testID="settings-close" />
         </XStack>
 
+        <XStack gap={8}>
+          <ToolbarButton
+            label="Endpoints"
+            active={tab === 'endpoints'}
+            onPress={() => setTab('endpoints')}
+            testID="settings-tab-endpoints"
+          />
+          <ToolbarButton
+            label="Appearance"
+            active={tab === 'appearance'}
+            onPress={() => setTab('appearance')}
+            testID="settings-tab-appearance"
+          />
+        </XStack>
+
+        {tab === 'appearance' ? (
+          <ScrollView flex={1} showsVerticalScrollIndicator={false}>
+            <YStack gap="$3">
+              <AppearancePreview />
+              <AppearanceSection />
+            </YStack>
+          </ScrollView>
+        ) : (
         <ScrollView flex={1} showsVerticalScrollIndicator={false}>
           <YStack gap="$3">
-            <AppearanceSection />
-            <Separator />
-
             {servers.length === 0 ? (
               <YStack py="$6" justify="center" items="center" gap="$3">
                 <Paragraph text="center" opacity={0.7} testID="endpoints-empty">
@@ -218,14 +286,17 @@ export function SettingsScreen() {
             )}
           </YStack>
         </ScrollView>
+        )}
 
-        <ToolbarButton
-          label="Add endpoint"
-          glyph="+"
-          variant="primary"
-          onPress={() => router.push({ pathname: '/settings/server/[id]', params: { id: 'new' } })}
-          testID="add-server"
-        />
+        {tab === 'endpoints' && (
+          <ToolbarButton
+            label="Add endpoint"
+            glyph="+"
+            variant="primary"
+            onPress={() => router.push({ pathname: '/settings/server/[id]', params: { id: 'new' } })}
+            testID="add-server"
+          />
+        )}
       </YStack>
     </SafeAreaView>
   );

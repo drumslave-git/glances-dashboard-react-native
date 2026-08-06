@@ -23,7 +23,9 @@ export interface AddWidgetInput {
 }
 
 /** What the config screen may change. Geometry moves through `applyLayout`. */
-export type WidgetPatch = Partial<Pick<WidgetInstance, 'endpointId' | 'title' | 'config'>>;
+export type WidgetPatch = Partial<
+  Pick<WidgetInstance, 'endpointId' | 'title' | 'config' | 'appearance'>
+>;
 
 interface WidgetsState {
   widgets: WidgetInstance[];
@@ -111,6 +113,8 @@ export const useWidgetsStore = create<WidgetsState>()(
           // Parsed on the way in as well as on the way out, so a widget is never stored with
           // options its own schema would reject.
           config: parseWidgetConfig(input.type, input.config ?? {}),
+          // `null` is "inherit the board", which is what a new widget always wants.
+          appearance: null,
           x: 0,
           y: bottomRow(get().widgets),
           w: input.w ?? definition.defaultSize.w,

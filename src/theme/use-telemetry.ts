@@ -1,7 +1,8 @@
 import { useMemo } from 'react';
 import { useColorScheme } from 'react-native';
 
-import { usePreferencesStore } from '@/state/preferences';
+import { selectAppearance, usePreferencesStore } from '@/state/preferences';
+import type { Appearance } from '@/theme/appearance';
 import {
   accent as accentValues,
   tokensFor,
@@ -47,9 +48,20 @@ export function useThemeMode(): ThemeMode {
   return preference;
 }
 
+/**
+ * What the board is painted with, **draft first**.
+ *
+ * Nothing reads `preferences.appearance` directly. The editor writes a draft and every surface in
+ * the app re-resolves from it, which is what makes the dashboard behind the settings screen the
+ * live preview — and Cancel a matter of dropping the draft rather than undoing writes.
+ */
+export function useAppearance(): Appearance {
+  return usePreferencesStore(selectAppearance);
+}
+
 export function useTelemetry(): Telemetry {
   const mode = useThemeMode();
-  const scale = usePreferencesStore((state) => state.readingScale);
+  const scale = useAppearance().interfaceScale;
 
   return useMemo(
     () => ({
