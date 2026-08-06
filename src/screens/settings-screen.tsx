@@ -1,5 +1,5 @@
 import { useRouter } from 'expo-router';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Paragraph, ScrollView, Separator, SizableText, XStack, YStack } from 'tamagui';
 
@@ -212,12 +212,17 @@ export function SettingsScreen() {
     removeEndpoint(id);
   };
 
-  // Leaving with an experiment still in the draft would strand it: the board would repaint from a
-  // value nothing on screen is offering to save any more.
-  const close = () => {
-    cancelAppearance();
-    router.back();
-  };
+  /**
+   * Leaving with an experiment still in the draft would strand it — the board would go on
+   * repainting from a value nothing on screen is offering to save any more.
+   *
+   * On unmount rather than in the Done handler, because Done is not the only way out: the Android
+   * back gesture and a swipe-back both leave without pressing anything. Committing clears the draft
+   * itself, so a saved appearance is not affected.
+   */
+  useEffect(() => () => cancelAppearance(), [cancelAppearance]);
+
+  const close = () => router.back();
 
   return (
     <SafeAreaView style={{ flex: 1 }} edges={['top', 'left', 'right']}>

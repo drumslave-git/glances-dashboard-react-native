@@ -4,12 +4,13 @@ Tracks execution of [REWRITE_PLAN.md](REWRITE_PLAN.md). Update this file in the 
 commit as the work it describes. One line per task; add dated notes under each milestone
 when something non-obvious happened.
 
-**Current status:** M10–M15 complete — the data layer, the endpoint model, the full catalog of
+**Current status:** M10–M16 complete — the data layer, the endpoint model, the full catalog of
 **26 widget renderings** across 14 metrics, and now the shell around them: a free drag-and-resize
 grid over `{x, y, w, h}` with density-driven columns, an add-widget picker whose cards draw the
-real widget live, and a full screen that hands the window to the board. All verified on the built
-Windows app and on Android against a live server. What remains is appearance (M16) and the release
-sweep (M17). Background: M10 (data
+real widget live, and a full screen that hands the window to the board. On top of that, the
+appearance layer the user owns: per-scheme translucent colours, spacing and corners, hidden headers,
+a per-widget background, and a desktop window the board can be seen through. All verified on the built Windows app and on Android
+against a live server. What remains is the release sweep (M17). Background: M10 (data
 layer) and M11 (endpoint model) complete. The poller now runs against
 the endpoints store: probing, tiered polling, backoff, and a state machine the endpoint chip renders
 identically in the toolbar, on every widget header and in settings. Next is M12 (widget framework +
@@ -1021,13 +1022,14 @@ returned from it. It also found the one bug the desktop run did not:
   worth a device run: the commit landed, but at a moment React does not allow. The preview is now
   mirrored in a ref, and the gesture's end reads that rather than reaching through an updater.
 
-### M16 — Appearance and settings — `in progress`
+### M16 — Appearance and settings — `done` (2026-08-06)
 - [x] The appearance model — per-scheme colours with alpha, sizes, interface scale, parsed per key
       (`src/theme/appearance.ts`), pure and unit tested
 - [x] Draft-based live preview with per-setting resets and a reset-everything
 - [x] Per-widget background override; two settings tabs (no Updates); hidden widget headers
 - [x] The transparent Tauri window
-- [ ] Verified on desktop and Android
+- [x] 733 tests across 40 suites; typecheck and lint clean
+- [x] Verified in the built Windows app and on the Android emulator against the live server
 
 **Notes**
 
@@ -1065,6 +1067,27 @@ returned from it. It also found the one bug the desktop run did not:
   makes it visible, and it has to be translucent all the way down: `html`, `body` and the root view
   drop to `transparent` the moment the grid colour does, or the user's alpha blends onto an opaque
   page and merely looks pale.
+- **The draft is dropped on unmount, not in the Done handler.** Done is not the only way out — the
+  Android back gesture and a swipe-back both leave without pressing anything, and a stranded draft
+  would go on repainting the board from a value nothing is offering to save.
+
+**Verified in the built Windows app and on the Android emulator (2026-08-06), against the live
+server.** Desktop: the two tabs, the appearance tab's live card, a draft previewing on the board
+behind, Save and Cancel, per-key resets, grid spacing and corner radius applied to the real grid,
+hidden headers with their corner marks, one widget given its own background, and — with the grid
+alpha at 50% — **the desktop showing through the window**, proving the transparent window end to
+end. Android: the same two tabs and the whole editor at phone width, the migrated v1 preferences,
+hidden headers, and the corner mark bringing a header back by press. Two things running it found:
+
+1. **The corner mark's press is unreachable with a mouse — by design, and it took a while to see
+   why.** Moving the pointer onto the mark *is* the hover that reveals the header, so the mark
+   unmounts before the click lands. That is the intended behaviour on a pointer (hover is the
+   route), and the press is the touch route, which is where it was then verified. What the
+   investigation did find was a real bug on the way: a Tamagui stack with `onPress` does not take a
+   press reliably on web, which is the M4 trap again — both marks are `Pressable` now.
+2. **A headerless body printed its first line under the corner mark.** The mark sits in the panel's
+   corner, which is exactly where the body's first row starts; the body is now inset by the mark's
+   width when the header is away.
 
 ### M17 — Release parity — `not started`
 - [ ] CORS story per target, README for all four targets, release across Windows / Android / web
@@ -1158,6 +1181,13 @@ returned from it. It also found the one bug the desktop run did not:
 | 2026-08-06 | Web and desktop drive drag and resize from **DOM pointer listeners**, not gesture-handler | Its web delegate measures the `display: contents` wrapper it inserts, so `isPointerInBounds` is 0 × 0 and no `Pan` can ever start. Touch keeps the gesture, which is what Android runs |
 | 2026-08-06 | The **picker places the widget**; the config screen only edits | It leaves one creation path instead of two, and gives the size cards somewhere to live — you press Add on the footprint you were looking at |
 | 2026-08-06 | Sparklines render with a **disposable GPU context** on web | A browser keeps ~16 live WebGL contexts and drops the oldest without a word; one canvas per table row is enough to take a chart's context away and leave it white |
+| 2026-08-06 | The appearance model's sizes are **points**, not the reference's `rem`; `interfaceScale` keeps the reading channel | React Native has no `rem`, and M8 already ruled that widget geometry must not follow the user's text setting. The reference's own §7.4 keeps its grid floors in px for the same reason |
+| 2026-08-06 | The reading scale **moves into the appearance model** (preferences v1 → v2) | It was always the same number, and one Cancel should undo an experiment with the text size as readily as one with the colours |
+| 2026-08-06 | Nothing reads the stored appearance — everything goes through `useAppearance()`, which prefers the **draft** | The board behind the editor is the preview, so there is no preview surface to keep in step and Cancel is a matter of dropping the draft rather than undoing writes |
+| 2026-08-06 | The appearance tab carries **one real widget** as its preview | A full-screen route has no dashboard behind it, and a mock-up card could drift from what the board actually draws |
+| 2026-08-06 | An **untouched** widget background keeps the design's gradient; any other value paints flat | Opening the appearance tab must not silently cost the handoff's panel. The same rule scales the design's asymmetric padding from one number rather than flattening it |
+| 2026-08-06 | Colours are per scheme; **opacity is not** | A hex that reads on near-black is wrong on paper-white, but a window is either see-through or it is not, and an alpha that differs between schemes is a difference nobody can see two of at once |
+| 2026-08-06 | The desktop window is **always** created transparent | Neither Tauri nor Electron can toggle it later; an opaque grid colour — the default — is what makes the window look solid, and the alpha is what makes the transparency visible |
 | 2026-08-04 | **The transparent window is in scope** | Confirmed with the owner. It is what makes the appearance model's alpha mean anything on desktop. Note the reference's own trade: a transparent window cannot be edge-resized and loses the WM drop shadow, so it is only requested when an alpha is actually below 1 |
 | 2026-08-04 | This app **replaces** the Electron one — same product name, same install path, no rename | Confirmed with the owner. They are not meant to coexist, so the install collision is not a case to design around |
 

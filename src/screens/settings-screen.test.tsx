@@ -2,7 +2,7 @@ import { usePreferencesStore } from '@/state/preferences';
 import { DEFAULT_APPEARANCE } from '@/theme/appearance';
 import { resetEndpointIdCounter, useEndpointsStore } from '@/state/endpoints';
 import { resetWidgetIdCounter, useWidgetsStore } from '@/state/widgets';
-import { renderWithProviders } from '@/test-utils/render';
+import { renderWithProviders, waitFor } from '@/test-utils/render';
 import { heroFontSize } from '@/utils/typeScale';
 
 
@@ -199,12 +199,18 @@ describe('SettingsScreen — appearance', () => {
   });
 
   it('leaving the screen drops an uncommitted draft too', async () => {
-    const { getByTestId, user } = await openAppearance();
+    // On unmount, not on Done: the Android back gesture and a swipe-back both leave the screen
+    // without pressing anything, and a stranded draft would go on repainting the board.
+    const { getByTestId, user, unmount } = await openAppearance();
 
     await user.press(getByTestId('appearance-gridGap-24'));
-    await user.press(getByTestId('settings-close'));
+    expect(usePreferencesStore.getState().appearanceDraft).not.toBeNull();
 
-    expect(usePreferencesStore.getState().appearanceDraft).toBeNull();
+    unmount();
+
+    // React 19 runs a passive effect's cleanup after the commit, so the assertion waits for it
+    // rather than assuming `unmount()` was synchronous.
+    await waitFor(() => expect(usePreferencesStore.getState().appearanceDraft).toBeNull());
     expect(usePreferencesStore.getState().appearance.gridGap).toBe(DEFAULT_APPEARANCE.gridGap);
   });
 

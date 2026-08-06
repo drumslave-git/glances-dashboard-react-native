@@ -11,7 +11,7 @@
  * from container queries.
  */
 import { memo, useState } from 'react';
-import { Platform, type LayoutChangeEvent } from 'react-native';
+import { Platform, Pressable, type LayoutChangeEvent } from 'react-native';
 import { XStack, YStack } from 'tamagui';
 
 import { AccentTick, EndpointChip } from '@/components/telemetry/chips';
@@ -47,6 +47,9 @@ import { WidgetMenu, type WidgetMenuItem } from '@/components/dashboard/widget-m
 
 /** Header and padding, subtracted from the card to size the body. */
 const HEADER_HEIGHT = 26;
+
+/** How far a headerless body steps aside for the corner mark: the tick, plus the header's gap. */
+const CORNER_MARK_INSET = 9;
 
 /** What a card is assumed to be before it has been measured — one column at ordinary stretch. */
 const UNMEASURED_BOX = { width: 360, height: 180 };
@@ -186,33 +189,35 @@ function WidgetFrameInner({
       {!headerShown && (
         // The corner mark: what keeps a headerless panel identifiable, and the touch route back to
         // the header — the same mark in the same place, so there is one thing to learn.
-        <YStack
-          position="absolute"
-          t={padding.top}
-          l={padding.left}
+        //
+        // A `Pressable`, not a Tamagui stack with `onPress`: a plain stack does not reliably take a
+        // press on web, which is the platform where this mark is most likely to be aimed at.
+        <Pressable
           onPress={() => setPinned(true)}
-          role="button"
           aria-label={`Show header for ${title}`}
-          style={{ zIndex: 1 }}
+          style={{ position: 'absolute', top: padding.top, left: padding.left, zIndex: 1 }}
           testID={`widget-corner-${widget.id}`}
         >
           <AccentTick color={endpoint?.color ?? null} state={endpointState} />
-        </YStack>
+        </Pressable>
       )}
 
       {headerShown && (
       <XStack items="center" gap={9} height={HEADER_HEIGHT} flexWrap="nowrap">
-        <YStack
+        {/* The same mark, still doing the same thing: pressing it puts the header away again. */}
+        <Pressable
           onPress={appearance.hideWidgetHeaders && !editMode ? () => setPinned(false) : undefined}
-          role={appearance.hideWidgetHeaders && !editMode ? 'button' : undefined}
-          aria-label={appearance.hideWidgetHeaders && !editMode ? `Hide header for ${title}` : undefined}
+          disabled={!appearance.hideWidgetHeaders || editMode}
+          aria-label={
+            appearance.hideWidgetHeaders && !editMode ? `Hide header for ${title}` : undefined
+          }
         >
           <AccentTick
             color={endpoint?.color ?? null}
             state={endpointState}
             testID={`widget-accent-${widget.id}`}
           />
-        </YStack>
+        </Pressable>
         <Label numberOfLines={1} shrink={1} minW={0} testID={`widget-title-${widget.id}`}>
           {/* The metric's short name at compact, where the full label would truncate to nothing. */}
           {mode.tier === 'compact' && definition ? (definition.label ?? title) : title}
@@ -240,7 +245,9 @@ function WidgetFrameInner({
       </XStack>
       )}
 
-      <YStack flex={1} minH={0} opacity={stale ? 0.55 : 1}>
+      {/* The corner mark sits in the panel's corner, which is where the body's first line starts —
+          so a headerless body is nudged clear of it rather than printed under it. */}
+      <YStack flex={1} minH={0} pl={headerShown ? 0 : CORNER_MARK_INSET} opacity={stale ? 0.55 : 1}>
         <WidgetBody
           // Re-binding a widget to another host **remounts the body** (ref §7.1). A chart holds a
           // series it has been accumulating from one endpoint's buffer; without this it would keep
