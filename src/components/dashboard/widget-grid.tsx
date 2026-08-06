@@ -92,6 +92,10 @@ export function WidgetGrid({ widgets, editMode, onEdit, onRemove, onLayoutChange
 
   // The layout shown mid-gesture. Null means "just use the normalized one".
   const [preview, setPreview] = useState<GridItem[] | null>(null);
+  // Mirrored in a ref so the gesture's end can read the last preview without going through a
+  // `setState` updater — those run during the *render* phase, and committing the layout from one
+  // means writing to the widgets store while React is rendering this component.
+  const previewRef = useRef<GridItem[] | null>(null);
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const [resizingId, setResizingId] = useState<string | null>(null);
   // Last snapped target, so a drag that has not crossed a cell boundary does no React work.
@@ -99,6 +103,12 @@ export function WidgetGrid({ widgets, editMode, onEdit, onRemove, onLayoutChange
 
   const layout = preview ?? base;
   const byId = useMemo(() => new Map(layout.map((item) => [item.id, item])), [layout]);
+
+  /** The one writer of the mid-gesture layout, so the state and its mirror cannot disagree. */
+  const showPreview = useCallback((next: GridItem[]) => {
+    previewRef.current = next;
+    setPreview(next);
+  }, []);
 
   const beginDrag = useCallback(
     (widgetId: string) => {
@@ -117,9 +127,9 @@ export function WidgetGrid({ widgets, editMode, onEdit, onRemove, onLayoutChange
       const target = { x: origin.x + dx, y: Math.max(0, origin.y + dy) };
       if (lastTarget.current && lastTarget.current.x === target.x && lastTarget.current.y === target.y) return;
       lastTarget.current = target;
-      setPreview(moveItem(base, widgetId, target.x, target.y, columns));
+      showPreview(moveItem(base, widgetId, target.x, target.y, columns));
     },
-    [base, colWidth, columns, gap, rowHeight],
+    [base, colWidth, columns, gap, rowHeight, showPreview],
   );
 
   const resizeTo = useCallback(
@@ -130,19 +140,19 @@ export function WidgetGrid({ widgets, editMode, onEdit, onRemove, onLayoutChange
       const target = { w: origin.w + dw, h: origin.h + dh };
       if (lastTarget.current && lastTarget.current.x === target.w && lastTarget.current.y === target.h) return;
       lastTarget.current = { x: target.w, y: target.h };
-      setPreview(resizeItem(base, widgetId, target.w, target.h, columns));
+      showPreview(resizeItem(base, widgetId, target.w, target.h, columns));
     },
-    [base, colWidth, columns, gap, rowHeight],
+    [base, colWidth, columns, gap, rowHeight, showPreview],
   );
 
   const endGesture = useCallback(() => {
+    const committed = previewRef.current;
+    previewRef.current = null;
     setDraggingId(null);
     setResizingId(null);
     lastTarget.current = null;
-    setPreview((current) => {
-      if (current) onLayoutChange(current);
-      return null;
-    });
+    setPreview(null);
+    if (committed) onLayoutChange(committed);
   }, [onLayoutChange]);
 
   // The kebab's footprints are the same edit as the corner grip, which is why they commit the

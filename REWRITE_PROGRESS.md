@@ -4,11 +4,12 @@ Tracks execution of [REWRITE_PLAN.md](REWRITE_PLAN.md). Update this file in the 
 commit as the work it describes. One line per task; add dated notes under each milestone
 when something non-obvious happened.
 
-**Current status:** M10–M14 complete — the data layer, the endpoint model, and the full catalog of
-**26 widget renderings** across 14 metrics, all verified on desktop and Android against a live
-server. The widget layer now matches the reference in what it can draw; what remains is the shell
-around it. Next is M15: free drag and resize, the two-step add-widget picker with live previews,
-endpoint rebind, and full screen. Background: M10 (data
+**Current status:** M10–M15 complete — the data layer, the endpoint model, the full catalog of
+**26 widget renderings** across 14 metrics, and now the shell around them: a free drag-and-resize
+grid over `{x, y, w, h}` with density-driven columns, an add-widget picker whose cards draw the
+real widget live, and a full screen that hands the window to the board. All verified on the built
+Windows app and on Android against a live server. What remains is appearance (M16) and the release
+sweep (M17). Background: M10 (data
 layer) and M11 (endpoint model) complete. The poller now runs against
 the endpoints store: probing, tiered polling, backoff, and a state machine the endpoint chip renders
 identically in the toolbar, on every widget header and in settings. Next is M12 (widget framework +
@@ -909,7 +910,7 @@ which this port shares with the reference exactly (`HEAVY_TIER_MIN_MS = 3000`). 
 acknowledges the same behaviour in its own sort comment, and its mitigation is the tie-break, which
 is ported. The trend column keeps the history visible through a zero sample.
 
-### M15 — Grid and shell — `in progress`
+### M15 — Grid and shell — `done` (2026-08-06)
 - [x] Free drag + resize over `{x, y, w, h}` with vertical gravity — `src/utils/gridLayout.ts`,
       pure and unit tested; density-driven columns and viewport-filling rows; a phone gets one
       column and picks footprints from the kebab instead of a resize grip
@@ -917,6 +918,7 @@ is ported. The trend column keeps the history visible through a zero sample.
       `src/hooks/useFullScreen.ts`
 - [x] Two-step add-widget picker with **live** previews, size cards, transient preview plugin set
 - [x] Widget config with endpoint rebind (clears endpoint-scoped keys, remounts the body)
+- [x] 686 tests across 38 suites; typecheck and lint clean
 
 **Notes**
 
@@ -1005,6 +1007,19 @@ things the suite could not:
 looks like a bug the first time: full screen on an ultrawide took the grid from 4 columns to 11 and
 left the six placed widgets exactly the size they were. That is the density grid working as
 designed — the reference behaves identically — and it is why the column floor is 290pt.
+
+**Verified on the Android emulator against the same server (2026-08-06).** One column, live data,
+and the phone adaptations doing what they were designed to: edit mode offers **no corner grip** (a
+grip is a mouse target), the ⋮ menu offers Wide 2×3 / Regular *Current* / Short 1×2 and resizes from
+it, a long-press drag swapped two cards, full screen took the whole screen and the back button
+returned from it. It also found the one bug the desktop run did not:
+
+- **The layout was being committed from inside a `setState` updater**, which React runs during the
+  *render* phase — so the widgets store was written while `WidgetGrid` was rendering, and Android's
+  dev build said so out loud: *"Cannot update a component (DashboardScreen) while rendering a
+  different component (WidgetGrid)"*. It worked on desktop, which is what makes this class of bug
+  worth a device run: the commit landed, but at a moment React does not allow. The preview is now
+  mirrored in a ref, and the gesture's end reads that rather than reaching through an updater.
 
 ### M16 — Appearance and settings — `not started`
 - [ ] Per-scheme colours with alpha, rem sizes, interface scale, draft-based live preview, resets
