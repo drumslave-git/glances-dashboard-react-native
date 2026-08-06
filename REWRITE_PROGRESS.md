@@ -915,7 +915,7 @@ is ported. The trend column keeps the history visible through a zero sample.
       column and picks footprints from the kebab instead of a resize grip
 - [x] Full screen with the auto-hiding bar; keyboard shortcuts on web and desktop —
       `src/hooks/useFullScreen.ts`
-- [ ] Two-step add-widget picker with **live** previews, size cards, transient preview plugin set
+- [x] Two-step add-widget picker with **live** previews, size cards, transient preview plugin set
 - [x] Widget config with endpoint rebind (clears endpoint-scoped keys, remounts the body)
 
 **Notes**
@@ -957,6 +957,17 @@ is ported. The trend column keeps the history visible through a zero sample.
   browser chrome and the taskbar with it, and a `fullscreenchange` we did not ask for is treated as
   the user saying "out". F11 is bound for the same reason — the window manager will often have acted
   on it already, and toggling our own state is what keeps the two in step.
+- **The picker's cards mount the real widget.** A rendering is not a thing a sentence describes —
+  two renderings of one metric differ in what they do with *this host's* numbers — so each variant
+  card and each size card draws the actual body against the actual endpoint, using the transient
+  preview plugin set the poller has supported since M10. The screen makes **one** preview request
+  for the union of the metric's plugins: the poller keeps a single preview slot, so cards asking
+  individually would evict each other's.
+- **The picker places the widget; the config screen only edits.** The old flow handed a type and an
+  endpoint to the config screen and let *it* create the widget, which left two creation paths and
+  nowhere for a size card to live. Now "Add widget" places what the cards previewed, and "Add and
+  configure" places it and opens the same screen the ⋮ menu opens — so a cancelled configure leaves
+  a widget rather than losing one.
 - Deleted with this milestone: `utils/dragReorder.ts` (the M5 pointer-to-index reorder),
   `utils/widgetLayout.ts` (the S/M/L/XL presets), `hooks/useImmersiveMode.ts`,
   `components/dashboard/dashboard-header.tsx` (dead since M8), and the widgets store's

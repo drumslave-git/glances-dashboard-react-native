@@ -36,21 +36,21 @@ import {
  */
 export function WidgetConfigScreen() {
   const router = useRouter();
-  const params = useLocalSearchParams<{ id: string; type?: string; endpointId?: string }>();
-  const isNew = !params.id || params.id === 'new';
+  const params = useLocalSearchParams<{ id: string }>();
 
   const endpoints = useEndpointsStore((state) => state.endpoints);
   const widgets = useWidgetsStore((state) => state.widgets);
-  const addWidget = useWidgetsStore((state) => state.addWidget);
   const updateWidget = useWidgetsStore((state) => state.updateWidget);
 
-  const existing = isNew ? undefined : widgets.find((widget) => widget.id === params.id);
-  const type = existing?.type ?? params.type;
+  // Editing only. The picker places the widget itself, at the footprint its size cards previewed —
+  // so there is no half-made widget to carry through this screen, and no second creation path.
+  const existing = widgets.find((widget) => widget.id === params.id);
+  const type = existing?.type;
   const definition = type && isWidgetType(type) ? widgetDefinition(type) : null;
 
   const ordered = sortedEndpoints(endpoints);
   const [endpointId, setEndpointId] = useState<string | null>(
-    existing?.endpointId ?? params.endpointId ?? ordered[0]?.id ?? null,
+    existing?.endpointId ?? ordered[0]?.id ?? null,
   );
   const [title, setTitle] = useState(existing?.title ?? '');
   const [config, setConfig] = useState<Record<string, unknown>>(() =>
@@ -70,7 +70,9 @@ export function WidgetConfigScreen() {
         <YStack flex={1} bg="$appBg" p={GEOMETRY.gridPadding} gap="$3">
           <Label variant="readout">Widget</Label>
           <UiText variant="metric" color="$textDim" testID="widget-config-unknown">
-            This widget type is not available in this build.
+            {existing
+              ? 'This widget type is not available in this build.'
+              : 'This widget is no longer on the dashboard.'}
           </UiText>
           <ToolbarButton label="Back" onPress={() => router.back()} testID="widget-config-cancel" />
         </YStack>
@@ -95,18 +97,13 @@ export function WidgetConfigScreen() {
   const isGlobal = definition.scope === 'global';
 
   const save = () => {
-    if (!isGlobal && !endpointId) return;
+    if (!existing || (!isGlobal && !endpointId)) return;
     const trimmed = title.trim();
-    const patch = {
+    updateWidget(existing.id, {
       endpointId: isGlobal ? null : endpointId,
       title: trimmed === '' ? null : trimmed,
       config,
-    };
-    if (existing) {
-      updateWidget(existing.id, patch);
-    } else {
-      addWidget({ type: definition.type as WidgetType, ...patch });
-    }
+    });
     router.dismissAll();
     router.replace('/');
   };
@@ -116,7 +113,7 @@ export function WidgetConfigScreen() {
       <YStack flex={1} bg="$appBg" p={GEOMETRY.gridPadding} gap="$3">
         <XStack items="center" gap="$3">
           <Label flex={1} variant="readout">
-            {existing ? 'Edit widget' : definition.label}
+            Edit widget
           </Label>
           <ToolbarButton label="Cancel" onPress={() => router.back()} testID="widget-config-cancel" />
         </XStack>
@@ -182,7 +179,7 @@ export function WidgetConfigScreen() {
         </ScrollView>
 
         <ToolbarButton
-          label={existing ? 'Save' : 'Add widget'}
+          label="Save"
           variant="primary"
           onPress={save}
           testID="widget-save"

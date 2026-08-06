@@ -2,13 +2,14 @@ import { resetEndpointIdCounter, useEndpointsStore } from '@/state/endpoints';
 import { resetWidgetIdCounter, useWidgetsStore } from '@/state/widgets';
 import { feedStore } from '@/data/feed-store';
 import { renderWithProviders } from '@/test-utils/render';
+import type { WidgetType } from '@/widgets/catalog';
 
 import { WidgetConfigScreen } from './widget-config-screen';
 
 const mockBack = jest.fn();
 const mockReplace = jest.fn();
 const mockDismissAll = jest.fn();
-let mockParams: { id: string; type?: string; endpointId?: string } = { id: 'new', type: 'cpu' };
+let mockParams: { id: string } = { id: 'w-1' };
 
 jest.mock('expo-router', () => ({
   useRouter: () => ({
@@ -24,7 +25,7 @@ beforeEach(() => {
   mockBack.mockClear();
   mockReplace.mockClear();
   mockDismissAll.mockClear();
-  mockParams = { id: 'new', type: 'cpu' };
+  mockParams = { id: 'w-1' };
   resetEndpointIdCounter();
   resetWidgetIdCounter();
   useEndpointsStore.setState({ endpoints: [], defaultEndpointId: null });
@@ -35,13 +36,29 @@ beforeEach(() => {
 
 const widgets = () => useWidgetsStore.getState().widgets;
 
-describe('WidgetConfigScreen — creating', () => {
-  it('describes the type being added', async () => {
+/**
+ * Place a widget and point the screen at it.
+ *
+ * The screen edits, and only edits: the picker places the widget itself, at the footprint its size
+ * cards previewed, so there is no creation path left here to test.
+ */
+function seed(type: WidgetType) {
+  const widget = useWidgetsStore.getState().addWidget({ type, endpointId: 's-1' });
+  mockParams = { id: widget.id };
+  return widget;
+}
+
+describe('WidgetConfigScreen — the type’s own options', () => {
+  beforeEach(() => {
+    seed('cpu');
+  });
+
+  it('describes the type being edited', async () => {
     const { getByTestId } = await renderWithProviders(<WidgetConfigScreen />);
     expect(getByTestId('widget-config-description')).toHaveTextContent(/Streaming total CPU/);
   });
 
-  it('adds the widget with the type schema defaults', async () => {
+  it('saves the type schema defaults untouched', async () => {
     const { getByTestId, user } = await renderWithProviders(<WidgetConfigScreen />);
     await user.press(getByTestId('widget-save'));
 
@@ -90,16 +107,41 @@ describe('WidgetConfigScreen — creating', () => {
   });
 
   it('shows no options at all for a type that declares none', async () => {
-    mockParams = { id: 'new', type: 'systemInfo' };
+    seed('systemInfo');
     const { queryByTestId } = await renderWithProviders(<WidgetConfigScreen />);
     expect(queryByTestId('widget-options')).toBeNull();
   });
 
   it('says so rather than rendering a form for a type this build lacks', async () => {
     // `donut` was a kind in the retired generic model — a stored row could still name one.
-    mockParams = { id: 'new', type: 'donut' };
+    useWidgetsStore.setState({
+      widgets: [
+        {
+          id: 'w-9',
+          type: 'donut',
+          endpointId: 's-1',
+          title: null,
+          config: {},
+          x: 0,
+          y: 0,
+          w: 1,
+          h: 3,
+          createdAt: 0,
+        },
+      ],
+    });
+    mockParams = { id: 'w-9' };
+
     const { getByTestId } = await renderWithProviders(<WidgetConfigScreen />);
-    expect(getByTestId('widget-config-unknown')).toBeTruthy();
+    expect(getByTestId('widget-config-unknown')).toHaveTextContent(/not available in this build/);
+  });
+
+  it('says so when the widget has been removed from under it', async () => {
+    useWidgetsStore.setState({ widgets: [] });
+    mockParams = { id: 'w-404' };
+
+    const { getByTestId } = await renderWithProviders(<WidgetConfigScreen />);
+    expect(getByTestId('widget-config-unknown')).toHaveTextContent(/no longer on the dashboard/);
   });
 });
 
@@ -155,7 +197,7 @@ describe('WidgetConfigScreen — host-specific selections', () => {
   }
 
   it('offers the interfaces this endpoint reports', async () => {
-    mockParams = { id: 'new', type: 'network' };
+    seed('network');
     reportInterfaces();
 
     const { getByTestId } = await renderWithProviders(<WidgetConfigScreen />);
@@ -164,7 +206,7 @@ describe('WidgetConfigScreen — host-specific selections', () => {
   });
 
   it('saves a chosen interface, which then beats the busiest-few fallback', async () => {
-    mockParams = { id: 'new', type: 'network' };
+    seed('network');
     reportInterfaces();
 
     const { getByTestId, user } = await renderWithProviders(<WidgetConfigScreen />);
@@ -175,7 +217,7 @@ describe('WidgetConfigScreen — host-specific selections', () => {
   });
 
   it('goes back to choosing for you', async () => {
-    mockParams = { id: 'new', type: 'network' };
+    seed('network');
     reportInterfaces();
 
     const { getByTestId, user } = await renderWithProviders(<WidgetConfigScreen />);
@@ -188,7 +230,7 @@ describe('WidgetConfigScreen — host-specific selections', () => {
   });
 
   it('says so when the endpoint has reported nothing yet', async () => {
-    mockParams = { id: 'new', type: 'gpu' };
+    seed('gpu');
     const { getByTestId } = await renderWithProviders(<WidgetConfigScreen />);
     expect(getByTestId('widget-selection-gpus')).toHaveTextContent(/Nothing reported yet/);
   });
@@ -196,7 +238,7 @@ describe('WidgetConfigScreen — host-specific selections', () => {
 
 describe('WidgetConfigScreen — a global widget', () => {
   beforeEach(() => {
-    mockParams = { id: 'new', type: 'alerts' };
+    seed('alerts');
   });
 
   it('offers no endpoint to bind to, and says why', async () => {
