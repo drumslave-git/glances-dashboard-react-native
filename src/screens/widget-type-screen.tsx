@@ -15,11 +15,7 @@ import { sortedEndpoints, useEndpointsStore } from '@/state/endpoints';
 import { useWidgetsStore } from '@/state/widgets';
 import { GEOMETRY } from '@/theme/telemetry';
 import type { PluginName } from '@/types/glances';
-import {
-  MIN_ROW_HEIGHT_PX,
-  PREVIEW_COL_WIDTH_PX,
-  footprintPx,
-} from '@/utils/gridLayout';
+import { MIN_ROW_HEIGHT_PX, PREVIEW_COL_WIDTH_PX, footprintPx } from '@/utils/gridLayout';
 import {
   FOOTPRINTS,
   FOOTPRINT_LABELS,
@@ -115,6 +111,12 @@ export function WidgetTypeScreen() {
   };
 
   const previewWidth = Math.max(0, width);
+  /**
+   * A card is one column wide, because that is the footprint Add places by default — previewing it
+   * at the full width of a desktop list would draw the *wide* rendering of something about to be
+   * placed as a regular one.
+   */
+  const cardWidth = previewWidth === 0 ? 0 : Math.min(previewWidth, PREVIEW_COL_WIDTH_PX + 18);
 
   return (
     <SafeAreaView style={{ flex: 1 }} edges={['top', 'left', 'right']}>
@@ -157,13 +159,15 @@ export function WidgetTypeScreen() {
                 </YStack>
               )}
 
-              {metric
-                ? variants.map((definition) => {
+              {metric ? (
+                <XStack gap={GEOMETRY.gridGap} flexWrap="wrap">
+                  {variants.map((definition) => {
                     const available = isWidgetAvailable(definition.type, status?.capabilities);
                     const chosen = type === definition.type;
                     return (
                       <YStack
                         key={definition.type}
+                        width={cardWidth}
                         gap={7}
                         p={9}
                         rounded={GEOMETRY.radius.widget}
@@ -179,14 +183,16 @@ export function WidgetTypeScreen() {
                         aria-label={definition.label}
                         testID={`widget-variant-${definition.type}`}
                       >
-                        {available && previewWidth > 0 && (
+                        {available && cardWidth > 0 && (
                           <WidgetPreview
                             type={definition.type}
-                            endpointId={
-                              definition.scope === 'global' ? null : endpointId
-                            }
-                            width={previewWidth - 18}
-                            height={footprintPx(VARIANT_PREVIEW_ROWS, MIN_ROW_HEIGHT_PX, GEOMETRY.gridGap)}
+                            endpointId={definition.scope === 'global' ? null : endpointId}
+                            width={cardWidth - 18}
+                            height={footprintPx(
+                              VARIANT_PREVIEW_ROWS,
+                              MIN_ROW_HEIGHT_PX,
+                              GEOMETRY.gridGap,
+                            )}
                             testID={`widget-variant-preview-${definition.type}`}
                           />
                         )}
@@ -205,91 +211,96 @@ export function WidgetTypeScreen() {
                         </UiText>
                       </YStack>
                     );
-                  })
-                : metricsByGroup().map((group) => (
-                    <YStack key={group.group} gap="$2">
-                      <MicroLabel>{GROUP_LABELS[group.group]}</MicroLabel>
-                      {group.metrics.map((definition) => (
-                        <YStack
-                          key={definition.id}
-                          gap={5}
-                          p={14}
-                          rounded={GEOMETRY.radius.widget}
-                          borderWidth={1}
-                          borderColor="$borderColor"
-                          bg="$widgetBg"
-                          pressStyle={{ borderColor: '$borderRaised' }}
-                          onPress={() => chooseMetric(definition.id)}
-                          role="button"
-                          aria-label={definition.label}
-                          testID={`widget-metric-${definition.id}`}
-                        >
-                          <XStack items="center" gap={8}>
-                            <Label variant="metric" flex={1}>
-                              {definition.label}
-                            </Label>
-                            <MicroLabel>
-                              {widgetsForMetric(definition.id).length === 1
-                                ? '1 style'
-                                : `${widgetsForMetric(definition.id).length} styles`}
-                            </MicroLabel>
-                          </XStack>
-                          <UiText variant="footer" color="$textDim">
-                            {definition.description}
-                          </UiText>
-                        </YStack>
-                      ))}
-                    </YStack>
-                  ))}
+                  })}
+                </XStack>
+              ) : (
+                metricsByGroup().map((group) => (
+                  <YStack key={group.group} gap="$2">
+                    <MicroLabel>{GROUP_LABELS[group.group]}</MicroLabel>
+                    {group.metrics.map((definition) => (
+                      <YStack
+                        key={definition.id}
+                        gap={5}
+                        p={14}
+                        rounded={GEOMETRY.radius.widget}
+                        borderWidth={1}
+                        borderColor="$borderColor"
+                        bg="$widgetBg"
+                        pressStyle={{ borderColor: '$borderRaised' }}
+                        onPress={() => chooseMetric(definition.id)}
+                        role="button"
+                        aria-label={definition.label}
+                        testID={`widget-metric-${definition.id}`}
+                      >
+                        <XStack items="center" gap={8}>
+                          <Label variant="metric" flex={1}>
+                            {definition.label}
+                          </Label>
+                          <MicroLabel>
+                            {widgetsForMetric(definition.id).length === 1
+                              ? '1 style'
+                              : `${widgetsForMetric(definition.id).length} styles`}
+                          </MicroLabel>
+                        </XStack>
+                        <UiText variant="footer" color="$textDim">
+                          {definition.description}
+                        </UiText>
+                      </YStack>
+                    ))}
+                  </YStack>
+                ))
+              )}
 
               {selected && previewWidth > 0 && (
                 <YStack gap="$2" testID="widget-size-cards">
                   <MicroLabel>Size</MicroLabel>
-                  {/* The same widget at each footprint, previewed at the width a placed column
+                  <XStack gap={GEOMETRY.gridGap} flexWrap="wrap" items="flex-start">
+                    {/* The same widget at each footprint, previewed at the width a placed column
                       usually has — so what a card shows is what Add will place. */}
-                  {FOOTPRINTS.map((entry) => {
-                    const size = footprintSize(selected.type, entry);
-                    const cardWidth = Math.min(
-                      previewWidth,
-                      footprintPx(size.w, PREVIEW_COL_WIDTH_PX, GEOMETRY.gridGap),
-                    );
-                    const cardHeight = Math.min(
-                      SIZE_CARD_MAX_HEIGHT,
-                      footprintPx(size.h, MIN_ROW_HEIGHT_PX, GEOMETRY.gridGap),
-                    );
-                    return (
-                      <YStack
-                        key={entry}
-                        gap={7}
-                        p={9}
-                        rounded={GEOMETRY.radius.widget}
-                        borderWidth={1}
-                        borderColor={footprint === entry ? '$accent' : '$borderColor'}
-                        bg="$widgetBg"
-                        pressStyle={{ borderColor: '$borderRaised' }}
-                        onPress={() => setFootprint(entry)}
-                        role="button"
-                        aria-label={`${FOOTPRINT_LABELS[entry]} footprint`}
-                        testID={`widget-size-${entry}`}
-                      >
-                        <WidgetPreview
-                          type={selected.type}
-                          endpointId={previewEndpointId}
-                          width={cardWidth - 18}
-                          height={cardHeight}
-                        />
-                        <XStack items="baseline" gap={8}>
-                          <Label variant="metric">{FOOTPRINT_LABELS[entry]}</Label>
-                          <MonoText variant="footer" color="$textFaint">
-                            {size.w}×{size.h}
-                          </MonoText>
-                        </XStack>
-                        <UiText variant="footer" color="$textDim">
-                          {FOOTPRINT_NOTES[entry]}
-                        </UiText>
-                      </YStack>
-                    );
-                  })}
+                    {FOOTPRINTS.map((entry) => {
+                      const size = footprintSize(selected.type, entry);
+                      const cardWidth = Math.min(
+                        previewWidth,
+                        footprintPx(size.w, PREVIEW_COL_WIDTH_PX, GEOMETRY.gridGap),
+                      );
+                      const cardHeight = Math.min(
+                        SIZE_CARD_MAX_HEIGHT,
+                        footprintPx(size.h, MIN_ROW_HEIGHT_PX, GEOMETRY.gridGap),
+                      );
+                      return (
+                        <YStack
+                          key={entry}
+                          gap={7}
+                          p={9}
+                          rounded={GEOMETRY.radius.widget}
+                          borderWidth={1}
+                          borderColor={footprint === entry ? '$accent' : '$borderColor'}
+                          bg="$widgetBg"
+                          pressStyle={{ borderColor: '$borderRaised' }}
+                          onPress={() => setFootprint(entry)}
+                          role="button"
+                          aria-label={`${FOOTPRINT_LABELS[entry]} footprint`}
+                          testID={`widget-size-${entry}`}
+                        >
+                          <WidgetPreview
+                            type={selected.type}
+                            endpointId={previewEndpointId}
+                            width={cardWidth - 18}
+                            height={cardHeight}
+                          />
+                          <XStack items="baseline" gap={8}>
+                            <Label variant="metric">{FOOTPRINT_LABELS[entry]}</Label>
+                            <MonoText variant="footer" color="$textFaint">
+                              {size.w}×{size.h}
+                            </MonoText>
+                          </XStack>
+                          <UiText variant="footer" color="$textDim">
+                            {FOOTPRINT_NOTES[entry]}
+                          </UiText>
+                        </YStack>
+                      );
+                    })}
+                  </XStack>
                 </YStack>
               )}
             </YStack>

@@ -10,6 +10,7 @@ import {
   vec,
 } from '@shopify/react-native-skia';
 import { useEffect, useMemo } from 'react';
+import { Platform } from 'react-native';
 import {
   Easing,
   useReducedMotion,
@@ -54,6 +55,20 @@ export interface SeriesCanvasProps {
   paddingLeft?: number;
   /** Draw both layers from a shared centre baseline — the network widget. */
   mirrored?: boolean;
+  /**
+   * Hand the GPU context back after each draw, at the cost of a blit (web only).
+   *
+   * **A browser will only keep about sixteen live WebGL contexts**, and it drops the *oldest* to
+   * make room for a new one — silently, leaving a blank white canvas behind. A process table draws
+   * one canvas per row, so a board with a table and two charts passes that limit and the first
+   * chart placed goes white while everything else looks perfect.
+   *
+   * So the many small canvases render through Skia's static renderer — offscreen surface, blit to a
+   * 2D context, context released — and the few large ones keep a persistent context. The cost is
+   * per *draw*, which is why this belongs to sparklines (one draw per poll) and not to a chart with
+   * a draw-in animation.
+   */
+  disposableContext?: boolean;
   testID?: string;
 }
 
@@ -71,6 +86,7 @@ export function SeriesCanvas({
   rung,
   paddingLeft = 0,
   mirrored = false,
+  disposableContext = false,
   testID,
 }: SeriesCanvasProps) {
   const reducedMotion = useReducedMotion();
@@ -150,7 +166,15 @@ export function SeriesCanvas({
   const centreY = height / 2;
 
   return (
-    <Canvas style={{ width, height }} testID={testID}>
+    <Canvas
+      style={{ width, height }}
+      // Web-only, and spread rather than passed so the native view never sees a prop it would
+      // forward to a shadow node that has no such field.
+      {...(disposableContext && Platform.OS === 'web'
+        ? { __destroyWebGLContextAfterRender: true }
+        : {})}
+      testID={testID}
+    >
       {/* Gridlines. Solid at the domain ends, dashed 2/5 at the quarters. */}
       {!mirrored &&
         rules.map((rule) => (

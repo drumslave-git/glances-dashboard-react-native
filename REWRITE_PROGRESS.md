@@ -974,6 +974,38 @@ is ported. The trend column keeps the history visible through a zero sample.
   `reorderWidgets` / `setGeometry` — `applyLayout` replaces both, because every drag moves more
   than the widget under the finger.
 
+**Verified in the built Windows app against the live server (2026-08-06).** Driven over CDP: the
+board lays itself out on four columns with rows filling the window, a card drags to another column
+and the layout persists, the corner grip resizes 2×4 → 3×6 with everything below reflowing, full
+screen takes the *window* (`requestFullscreen`) and the bar returns when the pointer touches the top
+edge, Escape leaves both, Ctrl+N opens the picker, and the picker's cards draw live memory trend,
+gauge and readings side by side before Add places the previewed footprint. Running it found three
+things the suite could not:
+
+1. **The first chart on the board rendered as a white rectangle** whenever a process table was also
+   placed — and only then. A browser keeps about **sixteen live WebGL contexts** and silently drops
+   the *oldest* to make room; a table draws one canvas per row, so a board with a table and two
+   charts crosses the limit and the chart placed first loses its GPU context. Sparklines now render
+   through Skia's static renderer (`disposableContext` → `__destroyWebGLContextAfterRender`), which
+   blits and hands the context straight back. Only the small, once-per-poll canvases pay the blit;
+   the charts keep persistent contexts. **Not an M15 regression** — it wanted a table and two charts
+   on one board, which is the first thing the free grid makes easy to build.
+2. **No gesture-handler `Pan` can start on web.** `GestureDetector` wraps its child in a
+   `display: contents` div and hands *that* element to the web delegate, whose `isPointerInBounds`
+   measures a box of 0 × 0 — so every `pointerdown` is discarded before a handler runs. Confirmed at
+   the DOM: the wrapper measures zero, and RNGH never sets its `touch-action` on the element. So the
+   pointer platforms get `usePointerDrag`, twenty lines of DOM listeners; touch keeps the gesture,
+   which is what Android has been running since M5. **This was true before M15** — M5's drag was
+   verified on the emulator, and M6 quietly added ←/→ move buttons rather than diagnosing it.
+3. **React props are not enough for the drag either.** `onPointerDown` on a Tamagui view does land
+   on the DOM node, but the moves stop the instant the pointer crosses out of the card — which is
+   most of a drag. The listener goes on the element and the move and up go on the *window*.
+
+**A wider window does not enlarge the widgets, it adds columns.** Worth writing down because it
+looks like a bug the first time: full screen on an ultrawide took the grid from 4 columns to 11 and
+left the six placed widgets exactly the size they were. That is the density grid working as
+designed — the reference behaves identically — and it is why the column floor is 290pt.
+
 ### M16 — Appearance and settings — `not started`
 - [ ] Per-scheme colours with alpha, rem sizes, interface scale, draft-based live preview, resets
 - [ ] Per-widget background override; two settings tabs (no Updates); hidden widget headers
@@ -1066,6 +1098,11 @@ is ported. The trend column keeps the history visible through a zero sample.
 | 2026-08-05 | Where a selection key's options come from lives in the **catalog**, not the config screen | The screen renders the picker, but *what is selectable* is a fact about the metric — and the catalog stays React-free, so it is still the poller's to read |
 | 2026-08-04 | Free drag + resize on web, desktop and tablet; **a phone gets one column and picks footprints from the kebab** | Confirmed with the owner. The stored geometry is identical, so this is a gesture adaptation rather than a feature split — and a corner grip is not a touch target, which is why M0's plan chose presets in the first place |
 | 2026-08-04 | **In-app updates are out of scope**, and the Updates settings tab with them | Confirmed with the owner. It is a delivery feature, not a dashboard one, and it would cost a new native surface on desktop plus a separate Android story. Publishing releases is unaffected |
+| 2026-08-06 | The grid's algebra is a **pure module** (`utils/gridLayout.ts`), not a component's internals | It is the largest unknown in the plan (§5) and it runs on three platforms; every collision rule is a test rather than something to re-discover by dragging |
+| 2026-08-06 | A layout normalized for a narrow window is **rendered but not saved** | Otherwise opening the board on a phone flattens a four-column arrangement to one, and rotating back finds it gone. Only a deliberate edit persists |
+| 2026-08-06 | Web and desktop drive drag and resize from **DOM pointer listeners**, not gesture-handler | Its web delegate measures the `display: contents` wrapper it inserts, so `isPointerInBounds` is 0 × 0 and no `Pan` can ever start. Touch keeps the gesture, which is what Android runs |
+| 2026-08-06 | The **picker places the widget**; the config screen only edits | It leaves one creation path instead of two, and gives the size cards somewhere to live — you press Add on the footprint you were looking at |
+| 2026-08-06 | Sparklines render with a **disposable GPU context** on web | A browser keeps ~16 live WebGL contexts and drops the oldest without a word; one canvas per table row is enough to take a chart's context away and leave it white |
 | 2026-08-04 | **The transparent window is in scope** | Confirmed with the owner. It is what makes the appearance model's alpha mean anything on desktop. Note the reference's own trade: a transparent window cannot be edge-resized and loses the WM drop shadow, so it is only requested when an alpha is actually below 1 |
 | 2026-08-04 | This app **replaces** the Electron one — same product name, same install path, no rename | Confirmed with the owner. They are not meant to coexist, so the install collision is not a case to design around |
 

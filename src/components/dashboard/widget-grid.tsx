@@ -23,8 +23,18 @@ import { footprintOf, footprintSize, isWidgetType, type Footprint } from '@/widg
 
 import { WidgetFrame } from '@/widgets/widget-frame';
 
-/** Hold this long before a drag takes over from the scroll view. */
+import { usePointerDrag } from './use-pointer-drag';
+
+/**
+ * Hold this long before a drag takes over from the scroll view — on **touch**.
+ *
+ * A finger has to say which it meant, because the same downward stroke scrolls the board. A mouse
+ * has already said it by entering edit mode, and a long press it cannot discover is a card that
+ * simply does not move: the pointer platforms take a small distance threshold instead, which is
+ * what the reference passes to its grid.
+ */
 const LONG_PRESS_MS = 300;
+const DRAG_THRESHOLD_PX = 3;
 
 /** The corner grip's side, in points. Big enough for a mouse; a phone gets the kebab instead. */
 const GRIP_SIZE = 22;
@@ -259,6 +269,31 @@ function GridCell({
     [editMode, onGestureEnd, onResizeBegin, onResizeMove, resizable, widget.id],
   );
 
+  // The same two drags, for the platforms where a gesture-handler `Pan` cannot start (see
+  // `usePointerDrag`). Empty objects off web, so there is one tree rather than two.
+  const panPointer = usePointerDrag({
+    enabled: editMode,
+    threshold: DRAG_THRESHOLD_PX,
+    onBegin: useCallback(() => onDragBegin(widget.id), [onDragBegin, widget.id]),
+    onMove: useCallback(
+      (dx: number, dy: number) => onDragMove(widget.id, dx, dy),
+      [onDragMove, widget.id],
+    ),
+    onEnd: onGestureEnd,
+  });
+
+  const resizePointer = usePointerDrag({
+    enabled: editMode && resizable,
+    // The grip is a deliberate target, so it drags from the first pixel.
+    threshold: 0,
+    onBegin: useCallback(() => onResizeBegin(widget.id), [onResizeBegin, widget.id]),
+    onMove: useCallback(
+      (dx: number, dy: number) => onResizeMove(widget.id, dx, dy),
+      [onResizeMove, widget.id],
+    ),
+    onEnd: onGestureEnd,
+  });
+
   const footprint = isWidgetType(widget.type)
     ? footprintOf(widget.type, { w: widget.w, h: widget.h })
     : null;
@@ -272,7 +307,7 @@ function GridCell({
       testID={`widget-cell-${widget.id}`}
     >
       <GestureDetector gesture={pan}>
-        <YStack flex={1} opacity={dragging ? 0.9 : 1}>
+        <YStack flex={1} opacity={dragging ? 0.9 : 1} {...panPointer}>
           <WidgetFrame
             widget={widget}
             editMode={editMode}
@@ -299,6 +334,7 @@ function GridCell({
             role="button"
             aria-label={`Resize ${widget.title ?? widget.type}`}
             testID={`widget-grip-${widget.id}`}
+            {...resizePointer}
           >
             {/* Two hairlines meeting at the corner — the design's language for a grip, and the
                 only thing on a widget that is chrome for editing rather than a readout. */}

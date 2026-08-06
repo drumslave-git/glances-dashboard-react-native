@@ -56,6 +56,11 @@ export function Sparkline({
           domain={seriesDomain(samples, { percentage })}
           tokens={t}
           rung="sparkline"
+          // A table draws one of these per row, and a browser keeps only about sixteen live GPU
+          // contexts before it silently drops the oldest — which is what turned the first chart on
+          // the board white. These are small and redraw once a poll, so giving the context back
+          // after each draw costs a blit and buys the charts their contexts back.
+          disposableContext
         />
       </Suspense>
     </YStack>
