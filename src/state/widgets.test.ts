@@ -30,14 +30,17 @@ const row = (over: Partial<WidgetInstance> & Pick<WidgetInstance, 'id'>): Widget
 });
 
 describe('addWidget', () => {
-  it('takes the type default footprint and appends to the flow', () => {
+  it('takes the type default footprint and lands below everything placed', () => {
     const first = store().addWidget({ type: 'cpu', endpointId: 'e1' });
     const second = store().addWidget({ type: 'memoryGauge', endpointId: 'e1' });
 
-    expect(first).toMatchObject({ type: 'cpu', endpointId: 'e1', y: 0 });
+    expect(first).toMatchObject({ type: 'cpu', endpointId: 'e1', x: 0, y: 0 });
     expect(first.w).toBe(WIDGET_DEFINITIONS.cpu.defaultSize.w);
     expect(first.h).toBe(WIDGET_DEFINITIONS.cpu.defaultSize.h);
-    expect(second.y).toBe(1);
+    // Below the first widget's *bottom*, not one row below its top — the grid's gravity then
+    // lifts it into the first slot that fits, which is how "the first free slot" is reached
+    // without the store knowing how many columns this window has.
+    expect(second.y).toBe(first.h);
   });
 
   it('accepts an explicit footprint, e.g. the picker wide card', () => {
@@ -99,50 +102,49 @@ describe('updateWidget', () => {
 });
 
 describe('removeWidget', () => {
-  it('keeps the flow dense, so no hole is left behind', () => {
+  it('leaves the survivors where the user put them', () => {
+    // Closing the hole is the grid's job — it has gravity and it knows the column count. Doing it
+    // here would mean deleting a widget on a phone re-laid-out the desktop board.
     const first = store().addWidget({ type: 'cpu', endpointId: 'e1' });
-    store().addWidget({ type: 'load', endpointId: 'e1' });
-    store().addWidget({ type: 'memory', endpointId: 'e1' });
+    const second = store().addWidget({ type: 'load', endpointId: 'e1' });
 
     store().removeWidget(first.id);
-    expect(store().widgets.map((widget) => widget.y)).toEqual([0, 1]);
+    expect(store().widgets).toHaveLength(1);
+    expect(store().widgets[0].y).toBe(second.y);
   });
 });
 
-describe('setGeometry', () => {
-  it('patches only what it is given', () => {
-    const widget = store().addWidget({ type: 'cpu', endpointId: 'e1' });
-    store().setGeometry(widget.id, { w: 2 });
-    expect(store().widgets[0]).toMatchObject({ w: 2, h: widget.h });
-  });
-});
-
-describe('reorderWidgets', () => {
-  it('applies the given order', () => {
+describe('applyLayout', () => {
+  it('writes the geometry of every widget it names', () => {
     const a = store().addWidget({ type: 'cpu', endpointId: 'e1' });
     const b = store().addWidget({ type: 'load', endpointId: 'e1' });
-    store().reorderWidgets([b.id, a.id]);
-    expect(store().widgets.map((widget) => widget.id)).toEqual([b.id, a.id]);
-    expect(store().widgets.map((widget) => widget.y)).toEqual([0, 1]);
+
+    store().applyLayout([
+      { id: b.id, x: 0, y: 0, w: 2, h: 4 },
+      { id: a.id, x: 0, y: 4, w: 1, h: 3 },
+    ]);
+
+    expect(store().widgets.find((widget) => widget.id === b.id)).toMatchObject({ x: 0, y: 0, w: 2, h: 4 });
+    expect(store().widgets.find((widget) => widget.id === a.id)).toMatchObject({ y: 4 });
   });
 
-  it('keeps unmentioned widgets at the end in their relative order', () => {
+  it('leaves a widget the layout does not mention alone', () => {
     const a = store().addWidget({ type: 'cpu', endpointId: 'e1' });
-    const b = store().addWidget({ type: 'load', endpointId: 'e1' });
-    const c = store().addWidget({ type: 'memory', endpointId: 'e1' });
-    store().reorderWidgets([c.id]);
-    expect(store().widgets.map((widget) => widget.id)).toEqual([c.id, a.id, b.id]);
+    const before = store().widgets[0];
+    store().applyLayout([{ id: 'w-999', x: 3, y: 3, w: 1, h: 3 }]);
+    expect(store().widgets[0]).toBe(before);
+    expect(store().widgets[0].id).toBe(a.id);
   });
 });
 
 describe('removeWidgetsForEndpoint', () => {
-  it('drops that endpoint widgets and re-flows', () => {
+  it('drops that endpoint’s widgets', () => {
     store().addWidget({ type: 'cpu', endpointId: 'e1' });
     store().addWidget({ type: 'load', endpointId: 'e2' });
     store().removeWidgetsForEndpoint('e1');
 
     expect(store().widgets).toHaveLength(1);
-    expect(store().widgets[0]).toMatchObject({ endpointId: 'e2', y: 0 });
+    expect(store().widgets[0]).toMatchObject({ endpointId: 'e2' });
   });
 
   it('spares a general widget, which belongs to no host', () => {

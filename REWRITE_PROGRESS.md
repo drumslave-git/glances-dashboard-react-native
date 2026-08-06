@@ -909,12 +909,59 @@ which this port shares with the reference exactly (`HEAVY_TIER_MIN_MS = 3000`). 
 acknowledges the same behaviour in its own sort comment, and its mitigation is the tie-break, which
 is ported. The trend column keeps the history visible through a zero sample.
 
-### M15 — Grid and shell — `not started`
-- [ ] Free drag + resize, density-driven columns, viewport-filling rows; a phone gets one column
-      and picks footprints from the kebab instead of a resize grip
+### M15 — Grid and shell — `in progress`
+- [x] Free drag + resize over `{x, y, w, h}` with vertical gravity — `src/utils/gridLayout.ts`,
+      pure and unit tested; density-driven columns and viewport-filling rows; a phone gets one
+      column and picks footprints from the kebab instead of a resize grip
+- [x] Full screen with the auto-hiding bar; keyboard shortcuts on web and desktop —
+      `src/hooks/useFullScreen.ts`
 - [ ] Two-step add-widget picker with **live** previews, size cards, transient preview plugin set
-- [ ] Widget config with endpoint rebind (clears endpoint-scoped keys, remounts the body)
-- [ ] Full screen with the auto-hiding bar; keyboard shortcuts on web and desktop
+- [x] Widget config with endpoint rebind (clears endpoint-scoped keys, remounts the body)
+
+**Notes**
+
+- **There is no react-grid-layout for React Native, so the algebra is ported rather than the
+  library.** `gridLayout.ts` holds both halves: the track arithmetic (how many columns clear the
+  290pt floor, how tall a row is when a windowful fills the viewport exactly) and the layout algebra
+  (move, resize, vertical gravity, collision resolution). All of it is pure functions over
+  `{id, x, y, w, h}`, which is what makes the grid's behaviour testable without a gesture.
+- **A collider is lifted into the space a dragged widget vacates, not shoved further down.** This is
+  RGL's rule and it is not decoration: pushing colliders down means two widgets swapping places
+  deepens the board by a row every time, and the hole they leave is at the top. It also explains a
+  behaviour that looks like a bug and is not — dragging a widget down by *less* than its own height
+  does nothing, because the neighbour has nowhere to lift into and gravity then returns the dragged
+  card to where it started.
+- **The normalized layout is not written back.** The grid clamps the stored layout to the columns
+  this window has and compacts it for rendering, but only a deliberate edit persists. Otherwise
+  opening the board on a phone would flatten a four-column arrangement to one, and rotating back
+  would find it gone. The reference has the same rule, arrived at from the other direction — it
+  saves on `onLayoutChange`, which RGL only fires for an interaction.
+- **The dragged card snaps between cells and slides there**, rather than following the finger
+  continuously. Following would mean writing a Reanimated shared value from a gesture callback,
+  which `react-hooks/immutability` refuses outside an effect — and `LinearTransition` turns out to
+  be the better answer anyway, because it animates the *neighbours* flowing out of the way as well
+  as the card being dragged.
+- **The grid draws nothing until it has been measured.** The column count and row height are facts
+  about the box, and rendering a guess would flash the wrong layout — and mount every widget body at
+  the wrong size — on every open. The cost is that a test which never fires `layout` sees an empty
+  board, which is what `renderDashboard()` in the dashboard screen's suite exists to do.
+- **One gap value, not two.** The design's 15pt surround and 11pt gutter are now both
+  `GEOMETRY.gridGap`: the reference makes spacing a single appearance setting precisely so the two
+  cannot drift, and M16 has one value to drive rather than two.
+- **Full screen keeps the grid in the tree.** The toolbar leaves the flow and returns as an overlay,
+  revealed by the pointer reaching the top edge (with separate open/close thresholds, so it cannot
+  flicker under the cursor) or, where there is no pointer, by a tap strip that leaves full screen
+  outright. Re-parenting the grid — which is what the old immersive mode did — remounts every widget
+  and re-measures the board, so the previous implementation blanked the screen for a frame each way.
+- **On web and in the Tauri window, full screen is the real thing**: `requestFullscreen` takes the
+  browser chrome and the taskbar with it, and a `fullscreenchange` we did not ask for is treated as
+  the user saying "out". F11 is bound for the same reason — the window manager will often have acted
+  on it already, and toggling our own state is what keeps the two in step.
+- Deleted with this milestone: `utils/dragReorder.ts` (the M5 pointer-to-index reorder),
+  `utils/widgetLayout.ts` (the S/M/L/XL presets), `hooks/useImmersiveMode.ts`,
+  `components/dashboard/dashboard-header.tsx` (dead since M8), and the widgets store's
+  `reorderWidgets` / `setGeometry` — `applyLayout` replaces both, because every drag moves more
+  than the widget under the finger.
 
 ### M16 — Appearance and settings — `not started`
 - [ ] Per-scheme colours with alpha, rem sizes, interface scale, draft-based live preview, resets

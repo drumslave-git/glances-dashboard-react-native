@@ -3,7 +3,7 @@ import { resetEndpointIdCounter, useEndpointsStore } from '@/state/endpoints';
 import { useUiStore } from '@/state/ui';
 import { resetWidgetIdCounter, useWidgetsStore } from '@/state/widgets';
 import { feedStore } from '@/data/feed-store';
-import { renderWithProviders, waitFor } from '@/test-utils/render';
+import { fireEvent, renderWithProviders, waitFor } from '@/test-utils/render';
 
 
 import { DashboardScreen } from './dashboard-screen';
@@ -33,9 +33,9 @@ beforeEach(() => {
   resetWidgetIdCounter();
   useEndpointsStore.setState({ endpoints: [], defaultEndpointId: null });
   useWidgetsStore.setState({ widgets: [] });
-  // Edit and immersive mode live in a module-level store now, so without this
+  // Edit mode and full screen live in a module-level store now, so without this
   // each test would inherit whatever the previous one toggled.
-  useUiStore.setState({ editMode: false, immersive: false });
+  useUiStore.setState({ editMode: false, fullScreen: false });
   usePreferencesStore.setState({ theme: 'dark', readingScale: 1, summaryStripVisible: true });
 });
 
@@ -49,9 +49,26 @@ function addServerAndWidget(type: 'cpuText' | 'cpuGauge' = 'cpuText') {
   return { server, widget };
 }
 
+/**
+ * Render the dashboard and hand the grid a viewport.
+ *
+ * The grid draws nothing until it has been measured: the column count and the row height are facts
+ * about the box it was given, and rendering a guess would flash the wrong layout on every mount. A
+ * test that never fires `layout` therefore sees an empty board.
+ */
+async function renderDashboard() {
+  const view = await renderWithProviders(<DashboardScreen />);
+  const grid = view.queryByTestId('widget-grid');
+  if (grid) {
+    fireEvent(grid, 'layout', { nativeEvent: { layout: { x: 0, y: 0, width: 700, height: 800 } } });
+    await waitFor(() => undefined);
+  }
+  return view;
+}
+
 describe('DashboardScreen - empty states', () => {
   it('asks for a server when none exist', async () => {
-    const { getByTestId } = await renderWithProviders(<DashboardScreen />);
+    const { getByTestId } = await renderDashboard();
 
     expect(getByTestId('dashboard-no-endpoints')).toBeTruthy();
   });
@@ -60,7 +77,7 @@ describe('DashboardScreen - empty states', () => {
     mockGlances({ '/api/4/system': { hostname: 'nas' } });
     useEndpointsStore.getState().addEndpoint({ name: 'NAS', url: '10.0.0.1' });
 
-    const { getByTestId } = await renderWithProviders(<DashboardScreen />);
+    const { getByTestId } = await renderDashboard();
 
     expect(getByTestId('dashboard-no-widgets')).toBeTruthy();
   });
@@ -69,7 +86,7 @@ describe('DashboardScreen - empty states', () => {
     mockGlances({ '/api/4/system': { hostname: 'nas' } });
     useEndpointsStore.getState().addEndpoint({ name: 'NAS', url: '10.0.0.1' });
 
-    const { getByTestId, user } = await renderWithProviders(<DashboardScreen />);
+    const { getByTestId, user } = await renderDashboard();
     await user.press(getByTestId('dashboard-add-first-widget'));
 
     expect(mockPush).toHaveBeenCalledWith('/widget/pick');
@@ -82,19 +99,19 @@ describe('DashboardScreen - toolbar', () => {
     const a = useEndpointsStore.getState().addEndpoint({ name: 'NAS', url: '10.0.0.1' });
     const b = useEndpointsStore.getState().addEndpoint({ name: 'Builder', url: '10.0.0.2' });
 
-    const { getByTestId } = await renderWithProviders(<DashboardScreen />);
+    const { getByTestId } = await renderDashboard();
 
     expect(getByTestId(`toolbar-endpoint-${a.id}`)).toHaveTextContent('NAS');
     expect(getByTestId(`toolbar-endpoint-${b.id}`)).toHaveTextContent('Builder');
   });
 
   it('carries only static configuration, never live data', async () => {
-    // The toolbar auto-hides in immersive mode, so nothing that has to stay
+    // The toolbar leaves the flow in full screen, so nothing that has to stay
     // readable may live here. The polling cadence is configuration, not telemetry.
     mockGlances({ '/api/4/system': { hostname: 'nas' } });
     useEndpointsStore.getState().addEndpoint({ name: 'NAS', url: '10.0.0.1', pollIntervalMs: 2500 });
 
-    const { getByTestId } = await renderWithProviders(<DashboardScreen />);
+    const { getByTestId } = await renderDashboard();
 
     expect(getByTestId('toolbar-refresh')).toHaveTextContent('2.5s refresh');
   });
@@ -106,7 +123,7 @@ describe('DashboardScreen - toolbar', () => {
     mockGlances({ '/api/4/system': { hostname: 'nas' } });
     useEndpointsStore.getState().addEndpoint({ name: 'NAS', url: '10.0.0.1', pollIntervalMs: 100 });
 
-    const { getByTestId } = await renderWithProviders(<DashboardScreen />);
+    const { getByTestId } = await renderDashboard();
 
     expect(getByTestId('toolbar-refresh')).toHaveTextContent('1s refresh');
   });
@@ -123,7 +140,7 @@ describe('DashboardScreen - summary strip', () => {
     });
     useEndpointsStore.getState().addEndpoint({ name: 'NAS', url: '10.0.0.1' });
 
-    const { getByTestId } = await renderWithProviders(<DashboardScreen />);
+    const { getByTestId } = await renderDashboard();
 
     await waitFor(() =>
       expect(getByTestId('dashboard-summary-host')).toHaveTextContent(/tcloud-01/),
@@ -140,7 +157,7 @@ describe('DashboardScreen - summary strip', () => {
     useEndpointsStore.getState().addEndpoint({ name: 'NAS', url: '10.0.0.1' });
     usePreferencesStore.setState({ summaryStripVisible: false });
 
-    const { queryByTestId } = await renderWithProviders(<DashboardScreen />);
+    const { queryByTestId } = await renderDashboard();
 
     expect(queryByTestId('dashboard-summary')).toBeNull();
   });
@@ -158,7 +175,7 @@ describe('DashboardScreen - widgets', () => {
       plugins: { cpu: { total: 12.5, user: 4, system: 2, idle: 93.5 } },
     });
 
-    const { getByTestId } = await renderWithProviders(<DashboardScreen />);
+    const { getByTestId } = await renderDashboard();
 
     expect(getByTestId(`widget-content-${widget.id}`)).toHaveTextContent(/12\.5/);
   });
@@ -168,7 +185,7 @@ describe('DashboardScreen - widgets', () => {
     const server = useEndpointsStore.getState().addEndpoint({ name: 'NAS', url: '10.0.0.1' });
     const widget = useWidgetsStore.getState().addWidget({ type: 'cpuText', endpointId: server.id });
 
-    const { getByTestId } = await renderWithProviders(<DashboardScreen />);
+    const { getByTestId } = await renderDashboard();
 
     expect(getByTestId(`widget-title-${widget.id}`)).toHaveTextContent('CPU readings');
   });
@@ -177,7 +194,7 @@ describe('DashboardScreen - widgets', () => {
     mockGlances({ '/api/4/system': {}, '/api/4/cpu': { total: 1 } });
     const { widget } = addServerAndWidget();
 
-    const { getByTestId } = await renderWithProviders(<DashboardScreen />);
+    const { getByTestId } = await renderDashboard();
 
     // The toolbar hides in immersive mode, so provenance has to live here.
     expect(getByTestId(`widget-endpoint-${widget.id}`)).toHaveTextContent('NAS');
@@ -188,7 +205,7 @@ describe('DashboardScreen - widgets', () => {
     mockGlances({ '/api/4/system': {}, '/api/4/cpu': { total: 1 } });
     const { widget } = addServerAndWidget();
 
-    const { getByTestId, user } = await renderWithProviders(<DashboardScreen />);
+    const { getByTestId, user } = await renderDashboard();
     await user.press(getByTestId(`widget-menu-${widget.id}`));
     await user.press(getByTestId(`widget-menu-sheet-${widget.id}-remove`));
 
@@ -199,7 +216,7 @@ describe('DashboardScreen - widgets', () => {
     mockGlances({ '/api/4/system': {}, '/api/4/cpu': { total: 1 } });
     const { widget } = addServerAndWidget();
 
-    const { getByTestId, user } = await renderWithProviders(<DashboardScreen />);
+    const { getByTestId, user } = await renderDashboard();
     await user.press(getByTestId(`widget-menu-${widget.id}`));
     await user.press(getByTestId(`widget-menu-sheet-${widget.id}-edit`));
 
@@ -210,13 +227,13 @@ describe('DashboardScreen - widgets', () => {
   });
 });
 
-describe('DashboardScreen - immersive mode', () => {
-  it('hides the header and edit chrome, and shows the widgets', async () => {
+describe('DashboardScreen - full screen', () => {
+  it('takes the toolbar and the strip out of the flow, and keeps the widgets', async () => {
     mockGlances({ '/api/4/system': {}, '/api/4/cpu': { total: 1 } });
     const { widget } = addServerAndWidget();
 
-    const { getByTestId, queryByTestId, user } = await renderWithProviders(<DashboardScreen />);
-    await user.press(getByTestId('toolbar-immersive'));
+    const { getByTestId, queryByTestId, user } = await renderDashboard();
+    await user.press(getByTestId('toolbar-full-screen'));
 
     expect(queryByTestId('dashboard-toolbar')).toBeNull();
     expect(queryByTestId('dashboard-summary')).toBeNull();
@@ -224,29 +241,41 @@ describe('DashboardScreen - immersive mode', () => {
     expect(getByTestId(`widget-${widget.id}`)).toBeTruthy();
   });
 
+  it('does not remount the grid on the way in — the board is measured once', async () => {
+    // The grid draws nothing until it has been measured, so a re-parented grid would blank the
+    // board for a frame and take every widget's mounted state with it.
+    mockGlances({ '/api/4/system': {}, '/api/4/cpu': { total: 1 } });
+    const { widget } = addServerAndWidget();
+
+    const { getByTestId, user } = await renderDashboard();
+    await user.press(getByTestId('toolbar-full-screen'));
+
+    expect(getByTestId(`widget-cell-${widget.id}`)).toBeTruthy();
+  });
+
   it('leaves edit mode behind on the way in', async () => {
     mockGlances({ '/api/4/system': {}, '/api/4/cpu': { total: 1 } });
     addServerAndWidget();
 
-    const { getByTestId, user } = await renderWithProviders(<DashboardScreen />);
+    const { getByTestId, user } = await renderDashboard();
     await user.press(getByTestId('toolbar-edit-layout'));
-    await user.press(getByTestId('toolbar-immersive'));
+    await user.press(getByTestId('toolbar-full-screen'));
 
-    expect(useUiStore.getState()).toMatchObject({ immersive: true, editMode: false });
+    expect(useUiStore.getState()).toMatchObject({ fullScreen: true, editMode: false });
   });
 
-  it('exits on a tap', async () => {
+  it('leaves by the reveal strip, which is the only chrome full screen keeps', async () => {
     mockGlances({ '/api/4/system': {}, '/api/4/cpu': { total: 1 } });
     addServerAndWidget();
 
-    const { getByTestId, user } = await renderWithProviders(<DashboardScreen />);
-    await user.press(getByTestId('toolbar-immersive'));
-    await user.press(getByTestId('dashboard-immersive-exit'));
+    const { getByTestId, user } = await renderDashboard();
+    await user.press(getByTestId('toolbar-full-screen'));
+    await user.press(getByTestId('dashboard-reveal-bar'));
 
-    expect(useUiStore.getState().immersive).toBe(false);
+    expect(useUiStore.getState().fullScreen).toBe(false);
     expect(getByTestId('dashboard-toolbar')).toBeTruthy();
   });
 
-  // The back and Esc routes out are covered against the hook itself, in
-  // src/hooks/useImmersiveMode.test.tsx.
+  // The back button, Escape, F11 and the browser's own fullscreen are covered against the hooks
+  // themselves, in src/hooks/useFullScreen.test.tsx.
 });

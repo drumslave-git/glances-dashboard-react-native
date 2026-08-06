@@ -10,8 +10,7 @@ import { useEndpointsStore } from '@/state/endpoints';
 import { useWidgetsStore } from '@/state/widgets';
 import { fireEvent, renderWithProviders, waitFor } from '@/test-utils/render';
 import type { WidgetInstance } from '@/types/dashboard';
-
-import { heightForRows } from '@/utils/widgetLayout';
+import type { GridItem } from '@/utils/gridLayout';
 
 import { WidgetGrid } from './widget-grid';
 
@@ -33,6 +32,7 @@ afterEach(() => {
   global.fetch = originalFetch;
 });
 
+/** A column of widgets at `cpuText`'s own regular footprint — one column, four rows. */
 function makeWidgets(count: number): WidgetInstance[] {
   return Array.from({ length: count }, (_, index) => ({
     id: `w-${index + 1}`,
@@ -41,43 +41,44 @@ function makeWidgets(count: number): WidgetInstance[] {
     title: `Widget ${index + 1}`,
     config: {},
     x: 0,
-    y: index,
+    y: index * 4,
     w: 1,
-    h: 3,
+    h: 4,
     createdAt: 0,
   }));
 }
 
-/**
- * One card per row, 100pt tall, matching what the flow layout would produce.
- *
- * Each `fireEvent` opens its own act scope, and firing several back to back
- * overlaps them — which wedges the renderer for every later test in the file,
- * so each one is awaited before the next.
- */
-async function layoutAsColumn(getByTestId: (id: string) => unknown, widgets: WidgetInstance[]) {
-  for (const [index, widget] of widgets.entries()) {
-    fireEvent(getByTestId(`widget-cell-${widget.id}`) as never, 'layout', {
-      nativeEvent: { layout: { x: 0, y: index * 100, width: 200, height: 100 } },
-    });
-    await waitFor(() => undefined);
-  }
-}
+/** A grid wide enough for two columns (2 × 290 + 3 × 11 = 613) and tall enough for several rows. */
+const GRID_BOX = { x: 0, y: 0, width: 700, height: 800 };
 
-async function renderGrid(widgets: WidgetInstance[], editMode = true) {
-  const onReorder = jest.fn();
+async function renderGrid(widgets: WidgetInstance[], editMode = true, box = GRID_BOX) {
+  const onLayoutChange = jest.fn();
   const view = await renderWithProviders(
     <WidgetGrid
       widgets={widgets}
       editMode={editMode}
       onEdit={jest.fn()}
       onRemove={jest.fn()}
-      onReorder={onReorder}
+      onLayoutChange={onLayoutChange}
     />,
   );
-  await layoutAsColumn(view.getByTestId, widgets);
-  return { ...view, onReorder };
+  // Nothing renders until the grid has been measured — the column count is a fact about the box.
+  fireEvent(view.getByTestId('widget-grid'), 'layout', { nativeEvent: { layout: box } });
+  await waitFor(() => undefined);
+  return { ...view, onLayoutChange };
 }
+
+/** The committed layout, keyed by widget id. */
+const committed = (onLayoutChange: jest.Mock): Map<string, GridItem> =>
+  new Map((onLayoutChange.mock.calls.at(-1)?.[0] as GridItem[]).map((item) => [item.id, item]));
+
+const rectOf = (element: { props: { style?: unknown } }) =>
+  StyleSheet.flatten(element.props.style as never) as {
+    left: number;
+    top: number;
+    width: number;
+    height: number;
+  };
 
 describe('WidgetGrid', () => {
   it('renders a cell per widget', async () => {
@@ -89,38 +90,78 @@ describe('WidgetGrid', () => {
     }
   });
 
-  it('commits a new order when a card is dragged down onto another', async () => {
-    const widgets = makeWidgets(3);
-    const { onReorder } = await renderGrid(widgets);
+  it('places cells at their grid coordinates, gap included', async () => {
+    const { getByTestId } = await renderGrid([
+      { ...makeWidgets(1)[0], x: 0, y: 0 },
+      { ...makeWidgets(2)[1], x: 1, y: 0 },
+    ]);
 
-    // Drag the first card down by two rows, onto the third.
+    const first = rectOf(getByTestId('widget-cell-w-1'));
+    const second = rectOf(getByTestId('widget-cell-w-2'));
+
+    expect(first.left).toBeLessThan(second.left);
+    expect(first.top).toBe(second.top);
+    // Columns stretch to fill the measured width exactly, so the second one ends at the far edge.
+    expect(second.left + second.width).toBeCloseTo(GRID_BOX.width - 11, 5);
+  });
+
+  it('gives a two-column widget twice the width of a one-column one, plus the gap between', async () => {
+    const [regular, wide] = makeWidgets(2);
+    const { getByTestId } = await renderGrid([regular, { ...wide, w: 2 }]);
+
+    const one = rectOf(getByTestId('widget-cell-w-1')).width;
+    const two = rectOf(getByTestId('widget-cell-w-2')).width;
+    expect(two).toBeCloseTo(one * 2 + 11, 5);
+  });
+
+  it('narrows the whole board to one column when the window cannot hold two', async () => {
+    const [regular, wide] = makeWidgets(2);
+    const { getByTestId } = await renderGrid([regular, { ...wide, w: 2 }], true, {
+      ...GRID_BOX,
+      width: 393,
+    });
+
+    const one = rectOf(getByTestId('widget-cell-w-1'));
+    const two = rectOf(getByTestId('widget-cell-w-2'));
+    expect(one.width).toBeCloseTo(two.width, 5);
+    // …and the clamped board is not written back: normalizing for a narrow window is a rendering
+    // decision, not an edit the user made.
+    expect(useWidgetsStore.getState().widgets).toHaveLength(0);
+  });
+
+  it('commits a layout when a card is dragged down onto another', async () => {
+    const { onLayoutChange } = await renderGrid(makeWidgets(3));
+
+    // A swap needs the card carried a full footprint down: until then the neighbour has nowhere
+    // to lift into, and gravity pulls the dragged card straight back where it came from.
     fireGestureHandler<PanGesture>(getByGestureTestId('widget-drag-w-1'), [
       { state: State.BEGAN, translationX: 0, translationY: 0 },
       { state: State.ACTIVE, translationX: 0, translationY: 0 },
-      { state: State.ACTIVE, translationX: 0, translationY: 200 },
-      { state: State.END, translationX: 0, translationY: 200 },
+      { state: State.ACTIVE, translationX: 0, translationY: 360 },
+      { state: State.END, translationX: 0, translationY: 360 },
     ]);
 
-    await waitFor(() => expect(onReorder).toHaveBeenCalledWith(['w-2', 'w-3', 'w-1']));
+    await waitFor(() => expect(onLayoutChange).toHaveBeenCalled());
+    const layout = committed(onLayoutChange);
+    expect(layout.get('w-1')!.y).toBeGreaterThan(layout.get('w-2')!.y);
   });
 
-  it('commits a new order when a card is dragged up', async () => {
-    const widgets = makeWidgets(3);
-    const { onReorder } = await renderGrid(widgets);
+  it('drags across columns', async () => {
+    const { onLayoutChange } = await renderGrid(makeWidgets(2));
 
-    fireGestureHandler<PanGesture>(getByGestureTestId('widget-drag-w-3'), [
+    fireGestureHandler<PanGesture>(getByGestureTestId('widget-drag-w-2'), [
       { state: State.BEGAN, translationX: 0, translationY: 0 },
       { state: State.ACTIVE, translationX: 0, translationY: 0 },
-      { state: State.ACTIVE, translationX: 0, translationY: -200 },
-      { state: State.END, translationX: 0, translationY: -200 },
+      { state: State.ACTIVE, translationX: 320, translationY: -100 },
+      { state: State.END, translationX: 320, translationY: -100 },
     ]);
 
-    await waitFor(() => expect(onReorder).toHaveBeenCalledWith(['w-3', 'w-1', 'w-2']));
+    await waitFor(() => expect(onLayoutChange).toHaveBeenCalled());
+    expect(committed(onLayoutChange).get('w-2')).toMatchObject({ x: 1, y: 0 });
   });
 
-  it('commits the unchanged order when a drag goes nowhere', async () => {
-    const widgets = makeWidgets(3);
-    const { onReorder } = await renderGrid(widgets);
+  it('commits nothing when a drag goes nowhere', async () => {
+    const { onLayoutChange } = await renderGrid(makeWidgets(3));
 
     fireGestureHandler<PanGesture>(getByGestureTestId('widget-drag-w-2'), [
       { state: State.BEGAN, translationX: 0, translationY: 0 },
@@ -129,78 +170,69 @@ describe('WidgetGrid', () => {
       { state: State.END, translationX: 0, translationY: 5 },
     ]);
 
-    await waitFor(() => expect(onReorder).toHaveBeenCalledWith(['w-1', 'w-2', 'w-3']));
+    await waitFor(() => undefined);
+    expect(onLayoutChange).not.toHaveBeenCalled();
   });
 
-  it('does not reorder outside edit mode', async () => {
-    const widgets = makeWidgets(3);
-    const { onReorder } = await renderGrid(widgets, false);
+  it('does not drag outside edit mode', async () => {
+    const { onLayoutChange } = await renderGrid(makeWidgets(3), false);
 
     fireGestureHandler<PanGesture>(getByGestureTestId('widget-drag-w-1'), [
       { state: State.BEGAN, translationX: 0, translationY: 0 },
       { state: State.ACTIVE, translationX: 0, translationY: 0 },
-      { state: State.ACTIVE, translationX: 0, translationY: 200 },
-      { state: State.END, translationX: 0, translationY: 200 },
+      { state: State.ACTIVE, translationX: 0, translationY: 300 },
+      { state: State.END, translationX: 0, translationY: 300 },
     ]);
 
     await waitFor(() => undefined);
-    expect(onReorder).not.toHaveBeenCalled();
+    expect(onLayoutChange).not.toHaveBeenCalled();
   });
 
-  it('offers moving through the ⋮ menu on every platform', async () => {
-    const { getByTestId, onReorder, user } = await renderGrid(makeWidgets(3));
+  it('resizes from the corner grip', async () => {
+    const { onLayoutChange } = await renderGrid(makeWidgets(1));
+
+    fireGestureHandler<PanGesture>(getByGestureTestId('widget-resize-w-1'), [
+      { state: State.BEGAN, translationX: 0, translationY: 0 },
+      { state: State.ACTIVE, translationX: 0, translationY: 0 },
+      { state: State.ACTIVE, translationX: 320, translationY: 160 },
+      { state: State.END, translationX: 320, translationY: 160 },
+    ]);
+
+    await waitFor(() => expect(onLayoutChange).toHaveBeenCalled());
+    const resized = committed(onLayoutChange).get('w-1')!;
+    expect(resized.w).toBe(2);
+    expect(resized.h).toBeGreaterThan(3);
+  });
+
+  it('offers no corner grip on a one-column board — that is what the ⋮ footprints are for', async () => {
+    const { queryByTestId } = await renderGrid(makeWidgets(1), true, { ...GRID_BOX, width: 393 });
+    expect(queryByTestId('widget-grip-w-1')).toBeNull();
+  });
+
+  it('offers no corner grip outside edit mode', async () => {
+    const { queryByTestId } = await renderGrid(makeWidgets(1), false);
+    expect(queryByTestId('widget-grip-w-1')).toBeNull();
+  });
+
+  it('resizes to a named footprint from the ⋮ menu', async () => {
+    const { getByTestId, onLayoutChange, user } = await renderGrid(makeWidgets(2));
 
     await user.press(getByTestId('widget-menu-w-1'));
-    await user.press(getByTestId('widget-menu-sheet-w-1-move-later'));
+    await user.press(getByTestId('widget-menu-sheet-w-1-size-wide'));
 
-    expect(onReorder).toHaveBeenCalledWith(['w-2', 'w-1', 'w-3']);
+    expect(onLayoutChange).toHaveBeenCalled();
+    expect(committed(onLayoutChange).get('w-1')).toMatchObject({ w: 2 });
   });
 
-  it('moves a widget earlier from the menu', async () => {
-    const { getByTestId, onReorder, user } = await renderGrid(makeWidgets(3));
-
-    await user.press(getByTestId('widget-menu-w-3'));
-    await user.press(getByTestId('widget-menu-sheet-w-3-move-earlier'));
-
-    expect(onReorder).toHaveBeenCalledWith(['w-1', 'w-3', 'w-2']);
-  });
-
-  it('disables the move that would run off the end of the order', async () => {
-    const { getByTestId, onReorder, user } = await renderGrid(makeWidgets(3));
+  it('marks the footprint a widget is already at', async () => {
+    const { getByTestId, user } = await renderGrid(makeWidgets(1));
 
     await user.press(getByTestId('widget-menu-w-1'));
-    await user.press(getByTestId('widget-menu-sheet-w-1-move-earlier'));
-
-    expect(onReorder).not.toHaveBeenCalled();
+    expect(getByTestId('widget-menu-sheet-w-1-size-regular')).toHaveTextContent(/Current/);
   });
 
-  it('keeps the menu available outside edit mode — only dragging is gated', async () => {
+  it('keeps the menu available outside edit mode — only the gestures are gated', async () => {
     const { getByTestId } = await renderGrid(makeWidgets(3), false);
-
     expect(getByTestId('widget-menu-w-1')).toBeTruthy();
-  });
-});
-
-describe('WidgetGrid footprints', () => {
-  it('gives each cell a height from its row count', async () => {
-    // The frame inside is `flex: 1`, so a cell without a height collapses every card to its
-    // header — which is exactly what shipped before this was asserted.
-    const widgets = makeWidgets(1);
-    const { getByTestId } = await renderGrid(widgets);
-
-    const cell = getByTestId('widget-cell-w-1');
-    const height = StyleSheet.flatten(cell.props.style)?.height;
-    expect(height).toBeGreaterThan(heightForRows(widgets[0].h) - 1);
-  });
-
-  it('gives a wide widget twice the width of a regular one', async () => {
-    // Asserted as a ratio rather than a percentage: the column count follows the measured grid,
-    // so hard-coding it would test the harness rather than the layout.
-    const [regular, wide] = makeWidgets(2);
-    const { getByTestId } = await renderGrid([regular, { ...wide, w: 2 }]);
-
-    const percent = (id: string) =>
-      Number.parseFloat(String(StyleSheet.flatten(getByTestId(id).props.style)?.width));
-    expect(percent('widget-cell-w-2')).toBeCloseTo(percent('widget-cell-w-1') * 2, 5);
   });
 });

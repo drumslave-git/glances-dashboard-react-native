@@ -20,7 +20,7 @@ import type { GlancesEndpoint } from '@/types/dashboard';
  * The dashboard toolbar.
  *
  * **It carries no metric values and no animation**, which is a rule rather than
- * an omission: the toolbar hides in immersive mode, so anything that has to stay
+ * an omission: the toolbar leaves the flow in full screen, so anything that has to stay
  * continuously readable belongs in the grid — a widget whose endpoint is
  * unreachable says so on the widget.
  *
@@ -52,20 +52,23 @@ interface ToolbarProps {
   editMode: boolean;
   /** Polling cadence of the default server, e.g. `5s`. */
   refreshLabel?: string | null;
+  /** In full screen the bar is an overlay, and offers only the way out (ref §7.1). */
+  fullScreen?: boolean;
   onAddWidget: () => void;
   onToggleEditMode: () => void;
   onOpenSettings: () => void;
-  onEnterImmersive: () => void;
+  onToggleFullScreen: () => void;
 }
 
 export function Toolbar({
   endpoints,
   editMode,
   refreshLabel,
+  fullScreen = false,
   onAddWidget,
   onToggleEditMode,
   onOpenSettings,
-  onEnterImmersive,
+  onToggleFullScreen,
 }: ToolbarProps) {
   const { t } = useTelemetry();
   const [width, setWidth] = useState(0);
@@ -80,7 +83,17 @@ export function Toolbar({
 
   // Labels shorten before anything is dropped: a narrow toolbar loses words, not
   // controls, because every one of these is the only route to what it does.
-  const labelledActions = (
+  const labelledActions = fullScreen ? (
+    // The board has the whole screen; adding and editing can wait until it is given back.
+    <XStack items="center" gap={8} shrink={0}>
+      <ToolbarButton
+        label={wide ? 'Leave full screen' : 'Leave'}
+        glyph="⛶"
+        onPress={onToggleFullScreen}
+        testID="toolbar-leave-full-screen"
+      />
+    </XStack>
+  ) : (
     <XStack items="center" gap={8} shrink={0}>
       <ToolbarButton
         label={wide ? 'Add widget' : 'Add'}
@@ -98,14 +111,14 @@ export function Toolbar({
     </XStack>
   );
 
-  const glyphActions = (
+  const glyphActions = fullScreen ? null : (
     <XStack items="center" gap={4} shrink={0}>
       <GlyphButton
         glyph="⛶"
-        label="Enter immersive mode"
-        onPress={onEnterImmersive}
+        label="Full screen"
+        onPress={onToggleFullScreen}
         color={t.text.secondary}
-        testID="toolbar-immersive"
+        testID="toolbar-full-screen"
       />
       <GlyphButton
         glyph="⚙"

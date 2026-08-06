@@ -245,6 +245,48 @@ function tiers(compact: [number, number], regular: [number, number], wide: [numb
   };
 }
 
+/**
+ * The footprints a widget is **placed** at, which is not quite the set of tiers it can *render* at.
+ *
+ * Compact is missing on purpose: on the coarse grid it is what a one-column widget becomes when a
+ * narrow window squeezes its column under 300pt, not a size anyone chooses. `short` is the other
+ * way round — a height, not a tier — and it composes with regular width to give the minimum
+ * footprint the grid allows.
+ */
+export const FOOTPRINTS = ['wide', 'regular', 'short'] as const;
+export type Footprint = (typeof FOOTPRINTS)[number];
+
+export const FOOTPRINT_LABELS: Record<Footprint, string> = {
+  wide: 'Wide',
+  regular: 'Regular',
+  short: 'Short',
+};
+
+/** What each footprint does to the presentation — the part a preview of the body cannot show. */
+export const FOOTPRINT_NOTES: Record<Footprint, string> = {
+  wide: 'Two columns — facts beside the hero, every chip.',
+  regular: 'One column; facts fold into the footer, meta chips drop.',
+  short: 'Minimum height — the hero and a pulse, nothing that needs rows.',
+};
+
+/** Two rows is the short footprint: the hard minimum the grid will allow. */
+export const SHORT_ROWS = 2;
+
+/** The `{w, h}` a footprint means for one type. */
+export function footprintSize(type: WidgetType, footprint: Footprint): GridSize {
+  const { sizes } = widgetDefinition(type);
+  if (footprint === 'short') return { w: sizes.regular.w, h: SHORT_ROWS };
+  return sizes[footprint];
+}
+
+/** Which of the three footprints a placed widget currently matches, if any. */
+export function footprintOf(type: WidgetType, size: GridSize): Footprint | null {
+  return FOOTPRINTS.find((footprint) => {
+    const candidate = footprintSize(type, footprint);
+    return candidate.w === size.w && candidate.h === size.h;
+  }) ?? null;
+}
+
 export interface WidgetDefinition {
   type: WidgetType;
   label: string;

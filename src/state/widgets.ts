@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 
 import type { WidgetInstance } from '@/types/dashboard';
+import type { GridItem } from '@/utils/gridLayout';
 import { isWidgetType, parseWidgetConfig, widgetDefinition, type WidgetType } from '@/widgets/catalog';
 
 import { asyncStorageJSON, STORAGE_KEYS } from './storage';
@@ -21,7 +22,7 @@ export interface AddWidgetInput {
   h?: number;
 }
 
-/** What the config screen may change. Geometry moves through `moveWidget` / `resizeWidget`. */
+/** What the config screen may change. Geometry moves through `applyLayout`. */
 export type WidgetPatch = Partial<Pick<WidgetInstance, 'endpointId' | 'title' | 'config'>>;
 
 interface WidgetsState {
@@ -30,9 +31,11 @@ interface WidgetsState {
   addWidget: (input: AddWidgetInput) => WidgetInstance;
   updateWidget: (id: string, patch: WidgetPatch) => void;
   removeWidget: (id: string) => void;
-  setGeometry: (id: string, geometry: Partial<Pick<WidgetInstance, 'x' | 'y' | 'w' | 'h'>>) => void;
-  /** Persist a new order, e.g. after a drag. Ids not present keep their relative position. */
-  reorderWidgets: (orderedIds: string[]) => void;
+  /**
+   * Commit a whole layout — the grid is the only thing entitled to write geometry, because every
+   * drag and every resize moves more than the widget under the finger.
+   */
+  applyLayout: (items: readonly GridItem[]) => void;
   /** Drop widgets bound to a removed endpoint. General widgets survive it. */
   removeWidgetsForEndpoint: (endpointId: string) => void;
 }
@@ -59,14 +62,14 @@ export function resetWidgetIdCounter(): void {
 }
 
 /**
- * Re-flow the board into reading order.
+ * Where a new widget lands: the bottom of the board, in the first column.
  *
- * M12's grid is a wrap flow, so `y` is the position in that flow and `x` is unused until M15 gives
- * the grid real columns. Keeping `y` dense means removing a widget cannot leave a hole that only a
- * future grid would notice.
+ * The grid's vertical gravity then lifts it into the first slot that fits, which is what makes this
+ * "the first free slot" without the store having to know how many columns the window currently has
+ * — a fact about the *viewport*, which no persisted record should depend on.
  */
-function withSequentialRows(widgets: WidgetInstance[]): WidgetInstance[] {
-  return widgets.map((widget, index) => ({ ...widget, y: index }));
+function bottomRow(widgets: readonly WidgetInstance[]): number {
+  return widgets.reduce((bottom, widget) => Math.max(bottom, widget.y + widget.h), 0);
 }
 
 type PersistedWidgets = { widgets: WidgetInstance[] };
@@ -109,7 +112,7 @@ export const useWidgetsStore = create<WidgetsState>()(
           // options its own schema would reject.
           config: parseWidgetConfig(input.type, input.config ?? {}),
           x: 0,
-          y: get().widgets.length,
+          y: bottomRow(get().widgets),
           w: input.w ?? definition.defaultSize.w,
           h: input.h ?? definition.defaultSize.h,
           createdAt: Date.now(),
@@ -131,47 +134,36 @@ export const useWidgetsStore = create<WidgetsState>()(
         }));
       },
 
+      // The hole a removal leaves is not filled here: gravity is the grid's, and it runs on every
+      // render. Rewriting the survivors' rows from a store that cannot see the window would fight
+      // it — and would turn a delete on a phone into a re-layout of the desktop board.
       removeWidget: (id) => {
-        set((state) => ({
-          widgets: withSequentialRows(state.widgets.filter((widget) => widget.id !== id)),
-        }));
+        set((state) => ({ widgets: state.widgets.filter((widget) => widget.id !== id) }));
       },
 
-      setGeometry: (id, geometry) => {
+      applyLayout: (items) => {
+        const byId = new Map(items.map((item) => [item.id, item]));
         set((state) => ({
-          widgets: state.widgets.map((widget) =>
-            widget.id === id ? { ...widget, ...geometry } : widget,
-          ),
+          widgets: state.widgets.map((widget) => {
+            const placement = byId.get(widget.id);
+            if (!placement) return widget;
+            const { x, y, w, h } = placement;
+            return widget.x === x && widget.y === y && widget.w === w && widget.h === h
+              ? widget
+              : { ...widget, x, y, w, h };
+          }),
         }));
-      },
-
-      reorderWidgets: (orderedIds) => {
-        set((state) => {
-          const byId = new Map(state.widgets.map((widget) => [widget.id, widget]));
-          const ordered: WidgetInstance[] = [];
-          for (const id of orderedIds) {
-            const widget = byId.get(id);
-            if (widget) {
-              ordered.push(widget);
-              byId.delete(id);
-            }
-          }
-          // Anything the caller did not mention keeps its relative position at the end.
-          return { widgets: withSequentialRows([...ordered, ...byId.values()]) };
-        });
       },
 
       removeWidgetsForEndpoint: (endpointId) => {
         set((state) => ({
-          widgets: withSequentialRows(
-            state.widgets.filter(
-              (widget) =>
-                // `endpointId === null` is a general widget, which belongs to no host and outlives
-                // the deletion of any of them. The *type* is checked as well, so a record written
-                // before the config screen stopped offering an endpoint for a global widget is not
-                // collateral damage — the scope is the authority, not what happens to be stored.
-                widget.endpointId !== endpointId || isGlobalWidgetType(widget.type),
-            ),
+          widgets: state.widgets.filter(
+            (widget) =>
+              // `endpointId === null` is a general widget, which belongs to no host and outlives
+              // the deletion of any of them. The *type* is checked as well, so a record written
+              // before the config screen stopped offering an endpoint for a global widget is not
+              // collateral damage — the scope is the authority, not what happens to be stored.
+              widget.endpointId !== endpointId || isGlobalWidgetType(widget.type),
           ),
         }));
       },
@@ -190,7 +182,7 @@ export const useWidgetsStore = create<WidgetsState>()(
   ),
 );
 
-/** Widgets in display order: the wrap flow's row, then column. */
+/** Widgets in reading order: top row first, then left to right. */
 export function selectOrderedWidgets(state: Pick<WidgetsState, 'widgets'>): WidgetInstance[] {
   return [...state.widgets].sort((a, b) => a.y - b.y || a.x - b.x);
 }

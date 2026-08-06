@@ -1,195 +1,225 @@
 import { useCallback, useMemo, useRef, useState } from 'react';
-import { useWindowDimensions, type LayoutChangeEvent } from 'react-native';
+import type { LayoutChangeEvent } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
-import { runOnJS } from 'react-native-reanimated';
-import { ScrollView, XStack, YStack } from 'tamagui';
+import Animated, { LinearTransition, runOnJS } from 'react-native-reanimated';
+import { ScrollView, YStack } from 'tamagui';
 
 import { GEOMETRY } from '@/theme/telemetry';
 import type { WidgetInstance } from '@/types/dashboard';
-import { reorderForPointer, stepOrder, type CardRect } from '@/utils/dragReorder';
-import { columnsForWidth, heightForRows, widthPercentForSpan } from '@/utils/widgetLayout';
+import {
+  cellDelta,
+  cellRect,
+  columnWidth,
+  columnsForWidth,
+  contentHeight,
+  moveItem,
+  normalizeLayout,
+  resizeItem,
+  rowHeightForViewport,
+  spanDelta,
+  type GridItem,
+} from '@/utils/gridLayout';
+import { footprintOf, footprintSize, isWidgetType, type Footprint } from '@/widgets/catalog';
 
 import { WidgetFrame } from '@/widgets/widget-frame';
 
 /** Hold this long before a drag takes over from the scroll view. */
 const LONG_PRESS_MS = 300;
 
+/** The corner grip's side, in points. Big enough for a mouse; a phone gets the kebab instead. */
+const GRIP_SIZE = 22;
+
+/**
+ * How long a cell takes to slide to a new slot.
+ *
+ * The card snaps from cell to cell as the finger crosses a track — its position is grid units, and
+ * the grid has no half-columns. What makes that read as dragging rather than teleporting is this:
+ * every cell, the dragged one and the ones flowing around it, animates between placements.
+ */
+const SLIDE_MS = 130;
+
 interface WidgetGridProps {
   widgets: WidgetInstance[];
   editMode: boolean;
   onEdit: (widgetId: string) => void;
   onRemove: (widgetId: string) => void;
-  /** Commit a new order after a drag. */
-  onReorder: (orderedIds: string[]) => void;
+  /** Commit a layout — every drag, resize and footprint change goes through here. */
+  onLayoutChange: (items: GridItem[]) => void;
 }
 
 /**
- * Flow layout: each card takes a percentage of the row based on its size preset,
- * and the column count follows the window width.
+ * The dashboard grid: free placement over `{x, y, w, h}` with vertical gravity (ref §7.4).
  *
- * In edit mode a long press lifts a card and the grid reflows live underneath
- * it; the new order is committed on release. Cards report their measured
- * rectangles so `reorderForPointer` can decide the drop position — a wrap flow
- * of variable-width cards has no row/column arithmetic to rely on instead.
+ * The column count follows the **measured** width and the row height follows the **viewport**, so a
+ * windowful of rows fills the window exactly and entering full screen hands the toolbar's height
+ * back to the rows. Neither is stored: a layout is in grid units, and the same board is legal on a
+ * phone and on a desktop window.
+ *
+ * The stored layout is *normalized for rendering* — clamped to the columns this window has, then
+ * compacted — but that normalization is **not** written back. Otherwise opening the board in a
+ * narrow window would silently flatten a four-column arrangement into one, and rotating back would
+ * find it gone. Only a deliberate edit persists, which is also when the reference saves.
  */
-export function WidgetGrid({
-  widgets,
-  editMode,
-  onEdit,
-  onRemove,
-  onReorder,
-}: WidgetGridProps) {
-  const { width } = useWindowDimensions();
-  const columns = columnsForWidth(width);
+export function WidgetGrid({ widgets, editMode, onEdit, onRemove, onLayoutChange }: WidgetGridProps) {
+  const gap = GEOMETRY.gridGap;
 
-  const [draggingId, setDraggingId] = useState<string | null>(null);
-  // Order shown mid-drag. Null means "just use the widgets prop".
-  const [previewOrder, setPreviewOrder] = useState<string[] | null>(null);
-  // Measured per card; refs because layout changes must not trigger a render.
-  const rects = useRef<Map<string, CardRect>>(new Map());
-  // Where the dragged card sat when the drag began. The reflow moves its real
-  // rectangle out from under the finger, so the pointer is tracked from here.
-  const dragOrigin = useRef<CardRect | null>(null);
-
-  const ordered = useMemo(() => {
-    if (!previewOrder) return widgets;
-    const byId = new Map(widgets.map((widget) => [widget.id, widget]));
-    const result: WidgetInstance[] = [];
-    for (const id of previewOrder) {
-      const widget = byId.get(id);
-      if (widget) {
-        result.push(widget);
-        byId.delete(id);
-      }
-    }
-    // A widget added mid-drag would not be in previewOrder; keep it rather than drop it.
-    return [...result, ...byId.values()];
-  }, [previewOrder, widgets]);
-
-  const measure = useCallback((widgetId: string, event: LayoutChangeEvent) => {
-    const { x, y, width: w, height } = event.nativeEvent.layout;
-    rects.current.set(widgetId, { id: widgetId, x, y, width: w, height });
+  // The scroll viewport, not the content: the row height divides the height a windowful has.
+  const [box, setBox] = useState({ width: 0, height: 0 });
+  const measure = useCallback((event: LayoutChangeEvent) => {
+    const { width, height } = event.nativeEvent.layout;
+    setBox((current) => (current.width === width && current.height === height ? current : { width, height }));
   }, []);
 
-  // No drag is in flight before this runs, so the order on screen is the prop's.
+  const columns = columnsForWidth(box.width, gap);
+  const colWidth = columnWidth(box.width, columns, gap);
+  const rowHeight = rowHeightForViewport(box.height, gap);
+
+  const stored = useMemo<GridItem[]>(
+    () => widgets.map(({ id, x, y, w, h }) => ({ id, x, y, w, h })),
+    [widgets],
+  );
+  const base = useMemo(() => normalizeLayout(stored, columns), [stored, columns]);
+
+  // The layout shown mid-gesture. Null means "just use the normalized one".
+  const [preview, setPreview] = useState<GridItem[] | null>(null);
+  const [draggingId, setDraggingId] = useState<string | null>(null);
+  const [resizingId, setResizingId] = useState<string | null>(null);
+  // Last snapped target, so a drag that has not crossed a cell boundary does no React work.
+  const lastTarget = useRef<{ x: number; y: number } | null>(null);
+
+  const layout = preview ?? base;
+  const byId = useMemo(() => new Map(layout.map((item) => [item.id, item])), [layout]);
+
   const beginDrag = useCallback(
     (widgetId: string) => {
-      dragOrigin.current = rects.current.get(widgetId) ?? null;
+      const origin = base.find((item) => item.id === widgetId);
+      lastTarget.current = origin ? { x: origin.x, y: origin.y } : null;
       setDraggingId(widgetId);
-      setPreviewOrder(widgets.map((w) => w.id));
     },
-    [widgets],
+    [base],
   );
 
   const dragTo = useCallback(
     (widgetId: string, translationX: number, translationY: number) => {
-      const origin = dragOrigin.current;
+      const origin = base.find((item) => item.id === widgetId);
       if (!origin) return;
-
-      // The finger, in the same coordinate space the cards were measured in.
-      const point = {
-        x: origin.x + origin.width / 2 + translationX,
-        y: origin.y + origin.height / 2 + translationY,
-      };
-
-      setPreviewOrder((current) => {
-        const ids = current ?? widgets.map((w) => w.id);
-        const inOrder = ids
-          .map((id) => rects.current.get(id))
-          .filter((rect): rect is CardRect => rect !== undefined);
-        // Before every card has reported a layout there is nothing to aim at.
-        if (inOrder.length !== ids.length) return current;
-
-        const next = reorderForPointer(ids, inOrder, widgetId, point);
-        return next === ids ? current : next;
-      });
+      const { dx, dy } = cellDelta(translationX, translationY, colWidth, rowHeight, gap);
+      const target = { x: origin.x + dx, y: Math.max(0, origin.y + dy) };
+      if (lastTarget.current && lastTarget.current.x === target.x && lastTarget.current.y === target.y) return;
+      lastTarget.current = target;
+      setPreview(moveItem(base, widgetId, target.x, target.y, columns));
     },
-    [widgets],
+    [base, colWidth, columns, gap, rowHeight],
   );
 
-  const moveOne = useCallback(
-    (widgetId: string, offset: number) => {
-      const ids = widgets.map((w) => w.id);
-      const next = stepOrder(ids, widgetId, offset);
-      if (next !== ids) onReorder(next);
+  const resizeTo = useCallback(
+    (widgetId: string, translationX: number, translationY: number) => {
+      const origin = base.find((item) => item.id === widgetId);
+      if (!origin) return;
+      const { dw, dh } = spanDelta(translationX, translationY, colWidth, rowHeight, gap);
+      const target = { w: origin.w + dw, h: origin.h + dh };
+      if (lastTarget.current && lastTarget.current.x === target.w && lastTarget.current.y === target.h) return;
+      lastTarget.current = { x: target.w, y: target.h };
+      setPreview(resizeItem(base, widgetId, target.w, target.h, columns));
     },
-    [onReorder, widgets],
+    [base, colWidth, columns, gap, rowHeight],
   );
 
-  const endDrag = useCallback(() => {
-    dragOrigin.current = null;
+  const endGesture = useCallback(() => {
     setDraggingId(null);
-    setPreviewOrder((current) => {
-      if (current) onReorder(current);
+    setResizingId(null);
+    lastTarget.current = null;
+    setPreview((current) => {
+      if (current) onLayoutChange(current);
       return null;
     });
-  }, [onReorder]);
+  }, [onLayoutChange]);
+
+  // The kebab's footprints are the same edit as the corner grip, which is why they commit the
+  // same way: a phone has no grip, but it must not have a lesser layout model.
+  const setFootprint = useCallback(
+    (widgetId: string, footprint: Footprint) => {
+      const widget = widgets.find((entry) => entry.id === widgetId);
+      if (!widget || !isWidgetType(widget.type)) return;
+      const size = footprintSize(widget.type, footprint);
+      onLayoutChange(resizeItem(base, widgetId, size.w, size.h, columns));
+    },
+    [base, columns, onLayoutChange, widgets],
+  );
+
+  const measured = box.width > 0;
 
   return (
     <ScrollView
       flex={1}
       // A lifted card must not drag the page with it.
-      scrollEnabled={draggingId === null}
+      scrollEnabled={draggingId === null && resizingId === null}
       showsVerticalScrollIndicator={false}
+      onLayout={measure}
       testID="widget-grid"
     >
-      {/* The design's 11pt gutter and 15pt surround, expressed as a negative
-          margin on the flow plus half-gutter padding on each cell. */}
-      <XStack flexWrap="wrap" m={-GEOMETRY.gridGap / 2} p={GEOMETRY.gridPadding}>
-        {ordered.map((widget, index) => (
-          <WidgetGridCell
-            key={widget.id}
-            widget={widget}
-            columns={columns}
-            editMode={editMode}
-            dragging={draggingId === widget.id}
-            onMeasure={measure}
-            onDragBegin={beginDrag}
-            onDragMove={dragTo}
-            onDragEnd={endDrag}
-            onEdit={onEdit}
-            onRemove={onRemove}
-                onMove={moveOne}
-            index={index}
-            count={ordered.length}
-          />
-        ))}
-      </XStack>
+      {/* Tamagui emits no `position` on web, so an absolutely-placed child would escape to some
+          ancestor. The explicit stacking context keeps the dragged card above its neighbours. */}
+      <YStack position="relative" style={{ zIndex: 0 }} height={contentHeight(layout, rowHeight, gap)}>
+        {measured &&
+          widgets.map((widget) => {
+            const item = byId.get(widget.id);
+            if (!item) return null;
+            return (
+              <GridCell
+                key={widget.id}
+                widget={widget}
+                rect={cellRect(item, colWidth, rowHeight, gap)}
+                dragging={draggingId === widget.id}
+                editMode={editMode}
+                resizable={columns > 1}
+                onDragBegin={beginDrag}
+                onDragMove={dragTo}
+                onResizeMove={resizeTo}
+                onResizeBegin={setResizingId}
+                onGestureEnd={endGesture}
+                onEdit={onEdit}
+                onRemove={onRemove}
+                onFootprint={setFootprint}
+              />
+            );
+          })}
+      </YStack>
     </ScrollView>
   );
 }
 
-interface WidgetGridCellProps {
+interface GridCellProps {
   widget: WidgetInstance;
-  columns: number;
-  editMode: boolean;
+  rect: { left: number; top: number; width: number; height: number };
   dragging: boolean;
-  onMeasure: (widgetId: string, event: LayoutChangeEvent) => void;
+  editMode: boolean;
+  resizable: boolean;
   onDragBegin: (widgetId: string) => void;
   onDragMove: (widgetId: string, translationX: number, translationY: number) => void;
-  onDragEnd: () => void;
+  onResizeBegin: (widgetId: string) => void;
+  onResizeMove: (widgetId: string, translationX: number, translationY: number) => void;
+  onGestureEnd: () => void;
   onEdit: (widgetId: string) => void;
   onRemove: (widgetId: string) => void;
-  onMove: (widgetId: string, offset: number) => void;
-  index: number;
-  count: number;
+  onFootprint: (widgetId: string, footprint: Footprint) => void;
 }
 
-function WidgetGridCell({
+function GridCell({
   widget,
-  columns,
-  editMode,
+  rect,
   dragging,
-  onMeasure,
+  editMode,
+  resizable,
   onDragBegin,
   onDragMove,
-  onDragEnd,
+  onResizeBegin,
+  onResizeMove,
+  onGestureEnd,
   onEdit,
   onRemove,
-  onMove,
-  index,
-  count,
-}: WidgetGridCellProps) {
+  onFootprint,
+}: GridCellProps) {
   const pan = useMemo(
     () =>
       Gesture.Pan()
@@ -201,42 +231,81 @@ function WidgetGridCell({
           runOnJS(onDragBegin)(widget.id);
         })
         .onUpdate((event) => {
+          // Every frame reaches `onDragMove`, which returns without touching React unless the
+          // finger has crossed into another cell.
           runOnJS(onDragMove)(widget.id, event.translationX, event.translationY);
         })
         // onFinalize rather than onEnd, so a cancelled gesture also releases the card.
         .onFinalize(() => {
-          runOnJS(onDragEnd)();
+          runOnJS(onGestureEnd)();
         }),
-    [editMode, onDragBegin, onDragEnd, onDragMove, widget.id],
+    [editMode, onDragBegin, onDragMove, onGestureEnd, widget.id],
   );
 
+  const resize = useMemo(
+    () =>
+      Gesture.Pan()
+        .enabled(editMode && resizable)
+        .withTestId(`widget-resize-${widget.id}`)
+        .onStart(() => {
+          runOnJS(onResizeBegin)(widget.id);
+        })
+        .onUpdate((event) => {
+          runOnJS(onResizeMove)(widget.id, event.translationX, event.translationY);
+        })
+        .onFinalize(() => {
+          runOnJS(onGestureEnd)();
+        }),
+    [editMode, onGestureEnd, onResizeBegin, onResizeMove, resizable, widget.id],
+  );
+
+  const footprint = isWidgetType(widget.type)
+    ? footprintOf(widget.type, { w: widget.w, h: widget.h })
+    : null;
+
   return (
-    <GestureDetector gesture={pan}>
-      <YStack
-        width={`${widthPercentForSpan(widget.w, columns)}%`}
-        // The cell owns the footprint, not the frame: `h` is in grid rows, and the frame inside
-        // fills whatever it is given. Without this the frame's `flex: 1` has nothing to fill and
-        // every card collapses to its header.
-        height={heightForRows(widget.h) + GEOMETRY.gridGap}
-        p={GEOMETRY.gridGap / 2}
-        onLayout={(event) => onMeasure(widget.id, event)}
-        // The lifted card reads as picked up without leaving a hole in the flow.
-        opacity={dragging ? 0.85 : 1}
-        scale={dragging ? 1.04 : 1}
-        // The v5 config drops `zIndex` as a prop, so it has to go through `style`.
-        style={{ zIndex: dragging ? 1 : 0 }}
-        testID={`widget-cell-${widget.id}`}
-      >
-        <WidgetFrame
-          widget={widget}
-          editMode={editMode}
-          onEdit={onEdit}
-          onRemove={onRemove}
-          onMove={onMove}
-          index={index}
-          count={count}
-        />
-      </YStack>
-    </GestureDetector>
+    <Animated.View
+      // The slide between placements is what makes a snapping grid read as a drag — it applies to
+      // the neighbours flowing out of the way as much as to the card under the finger.
+      layout={LinearTransition.duration(SLIDE_MS)}
+      style={{ position: 'absolute', ...rect, zIndex: dragging ? 10 : 1 }}
+      testID={`widget-cell-${widget.id}`}
+    >
+      <GestureDetector gesture={pan}>
+        <YStack flex={1} opacity={dragging ? 0.9 : 1}>
+          <WidgetFrame
+            widget={widget}
+            editMode={editMode}
+            footprint={footprint}
+            onEdit={onEdit}
+            onRemove={onRemove}
+            onFootprint={onFootprint}
+          />
+        </YStack>
+      </GestureDetector>
+
+      {editMode && resizable && (
+        <GestureDetector gesture={resize}>
+          <YStack
+            position="absolute"
+            r={0}
+            b={0}
+            width={GRIP_SIZE}
+            height={GRIP_SIZE}
+            items="flex-end"
+            justify="flex-end"
+            pr={4}
+            pb={4}
+            role="button"
+            aria-label={`Resize ${widget.title ?? widget.type}`}
+            testID={`widget-grip-${widget.id}`}
+          >
+            {/* Two hairlines meeting at the corner — the design's language for a grip, and the
+                only thing on a widget that is chrome for editing rather than a readout. */}
+            <YStack width={10} height={10} borderRightWidth={2} borderBottomWidth={2} borderColor="$accent" />
+          </YStack>
+        </GestureDetector>
+      )}
+    </Animated.View>
   );
 }

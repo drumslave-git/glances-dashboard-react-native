@@ -25,7 +25,15 @@ import { useTelemetry } from '@/theme/use-telemetry';
 import type { WidgetInstance } from '@/types/dashboard';
 import { endpointIsStale, endpointOverlay } from '@/utils/endpointStatus';
 import { headerRung, sizeModeFor } from '@/utils/typeScale';
-import { isWidgetType, parseWidgetConfig, widgetDefinition } from '@/widgets/catalog';
+import {
+  FOOTPRINTS,
+  FOOTPRINT_LABELS,
+  footprintSize,
+  isWidgetType,
+  parseWidgetConfig,
+  widgetDefinition,
+  type Footprint,
+} from '@/widgets/catalog';
 import { widgetRenderer } from '@/widgets/registry';
 
 import { WidgetErrorBoundary } from './widget-error-boundary';
@@ -40,22 +48,21 @@ const UNMEASURED_BOX = { width: 360, height: 180 };
 export interface WidgetFrameProps {
   widget: WidgetInstance;
   editMode: boolean;
+  /** Which of the three footprints this card currently matches, if any. */
+  footprint: Footprint | null;
   onEdit: (widgetId: string) => void;
   onRemove: (widgetId: string) => void;
-  /** Step this card one position along the flow. */
-  onMove: (widgetId: string, offset: number) => void;
-  index: number;
-  count: number;
+  /** Resize to a named footprint — the corner grip's edit, for anyone who has no grip. */
+  onFootprint: (widgetId: string, footprint: Footprint) => void;
 }
 
 function WidgetFrameInner({
   widget,
   editMode,
+  footprint,
   onEdit,
   onRemove,
-  onMove,
-  index,
-  count,
+  onFootprint,
 }: WidgetFrameProps) {
   const { t, accentFor } = useTelemetry();
   const endpoint = useEndpointsStore((state) => selectEndpointById(state, widget.endpointId));
@@ -93,20 +100,25 @@ function WidgetFrameInner({
     box.height - GEOMETRY.widgetPadding.top - GEOMETRY.widgetPadding.bottom - HEADER_HEIGHT,
   );
 
+  // The footprints are here on every platform, not only where there is no corner grip: a grip is a
+  // mouse gesture even on a desktop window, and "make this one two columns wide" should not require
+  // aiming at 10 points of hairline.
+  const sizeItems: WidgetMenuItem[] = definition
+    ? FOOTPRINTS.map((entry) => {
+        const size = footprintSize(definition.type, entry);
+        return {
+          key: `size-${entry}`,
+          label: FOOTPRINT_LABELS[entry],
+          value: entry === footprint ? 'Current' : `${size.w}×${size.h}`,
+          disabled: entry === footprint,
+          onPress: () => onFootprint(widget.id, entry),
+        };
+      })
+    : [];
+
   const menuItems: WidgetMenuItem[] = [
     { key: 'edit', label: 'Edit widget', onPress: () => onEdit(widget.id) },
-    {
-      key: 'move-earlier',
-      label: 'Move earlier',
-      disabled: index === 0,
-      onPress: () => onMove(widget.id, -1),
-    },
-    {
-      key: 'move-later',
-      label: 'Move later',
-      disabled: index >= count - 1,
-      onPress: () => onMove(widget.id, 1),
-    },
+    ...sizeItems,
     { key: 'remove', label: 'Remove widget', destructive: true, onPress: () => onRemove(widget.id) },
   ];
 
@@ -162,6 +174,11 @@ function WidgetFrameInner({
 
       <YStack flex={1} minH={0} opacity={stale ? 0.55 : 1}>
         <WidgetBody
+          // Re-binding a widget to another host **remounts the body** (ref §7.1). A chart holds a
+          // series it has been accumulating from one endpoint's buffer; without this it would keep
+          // drawing the old host's history under the new host's name, and the two would interleave
+          // as the new samples arrived.
+          key={widget.endpointId ?? 'global'}
           widget={widget}
           width={box.width}
           height={bodyHeight}

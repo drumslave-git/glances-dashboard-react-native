@@ -1,12 +1,12 @@
 import { useUiStore } from './ui';
 
 beforeEach(() => {
-  useUiStore.setState({ editMode: false, immersive: false });
+  useUiStore.setState({ editMode: false, fullScreen: false });
 });
 
 describe('useUiStore', () => {
   it('starts with both modes off', () => {
-    expect(useUiStore.getState()).toMatchObject({ editMode: false, immersive: false });
+    expect(useUiStore.getState()).toMatchObject({ editMode: false, fullScreen: false });
   });
 
   it('toggles edit mode', () => {
@@ -21,18 +21,29 @@ describe('useUiStore', () => {
     expect(useUiStore.getState().editMode).toBe(true);
   });
 
-  it('leaves edit mode when entering immersive mode', () => {
+  it('leaves edit mode when entering full screen', () => {
     useUiStore.getState().setEditMode(true);
-    useUiStore.getState().enterImmersive();
+    useUiStore.getState().enterFullScreen();
 
-    expect(useUiStore.getState()).toMatchObject({ immersive: true, editMode: false });
+    expect(useUiStore.getState()).toMatchObject({ fullScreen: true, editMode: false });
   });
 
-  it('exits immersive mode without turning edit mode back on', () => {
+  it('exits full screen without turning edit mode back on', () => {
     useUiStore.getState().setEditMode(true);
-    useUiStore.getState().enterImmersive();
-    useUiStore.getState().exitImmersive();
+    useUiStore.getState().enterFullScreen();
+    useUiStore.getState().exitFullScreen();
 
-    expect(useUiStore.getState()).toMatchObject({ immersive: false, editMode: false });
+    expect(useUiStore.getState()).toMatchObject({ fullScreen: false, editMode: false });
+  });
+
+  it('toggles full screen, and the toggle in also leaves edit mode', () => {
+    useUiStore.getState().setEditMode(true);
+    useUiStore.getState().toggleFullScreen();
+    expect(useUiStore.getState()).toMatchObject({ fullScreen: true, editMode: false });
+
+    useUiStore.getState().setEditMode(true);
+    useUiStore.getState().toggleFullScreen();
+    // Leaving is only leaving: it does not undo an edit mode the user turned on since.
+    expect(useUiStore.getState()).toMatchObject({ fullScreen: false, editMode: true });
   });
 });
