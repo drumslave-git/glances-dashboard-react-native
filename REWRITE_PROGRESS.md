@@ -1124,8 +1124,10 @@ hidden headers, and the corner mark bringing a header back by press. Two things 
   `gradlew assembleRelease` (x86_64, JDK 17 — Android Studio's newer JDK still breaks AGP's CMake
   step) produced an APK that installs and runs standalone, with no Metro and no dev client: fonts,
   the toolbar, the first-run empty state, and a connection test that reached the live server and
-  reported *Glances 4.5.6 · 28 plugins*. The Windows installer and the web export were built
-  repeatedly through M15 and M16, so all three release artefacts have now been produced locally.
+  reported *Glances 4.5.6 · 28 plugins*. The Windows installer was then rebuilt at **0.2.0** and
+  run — `Glances Dashboard_0.2.0_x64-setup.exe`, board live against the same server — and the web
+  export is what `build:desktop` wraps, so all three release artefacts have been produced locally
+  at the version about to ship.
 - **Two stale strings, found by being the first person in months to see a fresh install.** The
   endpoint form still said "Add server" — the word the app dropped in M11 — and still offered
   "0 fetches once without polling", which M11 retired in favour of pausing. Both were invisible to
