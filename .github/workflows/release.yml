@@ -1,21 +1,31 @@
 # The version field in package.json is the release trigger.
 #
 # Bump it locally (`npm run release:patch`), commit, push to main — this workflow
-# notices the change, runs the full gate, builds all three targets and publishes
-# a GitHub Release with the artifacts attached. Ordinary edits to package.json
-# (a dependency added, a script renamed) leave the version alone and release
-# nothing.
+# runs the full gate, builds all three targets and publishes a GitHub Release with
+# the artifacts attached. Ordinary edits to package.json (a dependency added, a
+# script renamed) leave the version alone and release nothing.
+#
+# **The question it asks is "is this version tagged?", not "did the last commit
+# change it?"** The first version of this compared HEAD against HEAD^, which is
+# only the same question when the bump is the tip of the push. v0.2.0 went up
+# behind one more commit, so the workflow looked at the tip, found its parent
+# already at 0.2.0, and released nothing — with no failure anywhere to notice.
 #
 # The tag is created here rather than locally so a local tag can never disagree
 # with what actually shipped, and only after every build has succeeded — a failed
 # desktop build means no tag and no half-empty release. Re-running the workflow
-# on the same version is safe: the tag and release steps both check first.
+# on the same version is safe: the tag and release steps both check first, and so
+# does this.
 name: Release
 
 on:
   push:
     branches: [main]
-    paths: ['package.json']
+    paths:
+      - 'package.json'
+      # So a change to this file re-evaluates: a fix to the release logic must be
+      # able to release, and the version alone may not have moved.
+      - '.github/workflows/release.yml'
   workflow_dispatch:
 
 permissions:
@@ -30,15 +40,13 @@ env:
 
 jobs:
   check:
-    name: Version changed?
+    name: Untagged version?
     runs-on: ubuntu-latest
     outputs:
       version: ${{ steps.version.outputs.version }}
       release: ${{ steps.version.outputs.release }}
     steps:
       - uses: actions/checkout@v7
-        with:
-          fetch-depth: 2
 
       - id: version
         shell: bash
@@ -52,17 +60,15 @@ jobs:
             exit 0
           fi
 
-          if git show HEAD^:package.json > /tmp/previous-package.json 2>/dev/null; then
-            previous=$(node -p "require('/tmp/previous-package.json').version")
-          else
-            previous=""
-          fi
-
-          if [ "$current" = "$previous" ]; then
-            echo "Version unchanged at $current — nothing to release."
+          # The tag is the record of what shipped (the publish job creates it, and
+          # only after every build passed). So an untagged version is one that has
+          # not shipped, however many commits carried it here — which is the rule a
+          # diff against the previous commit was only ever approximating.
+          if git ls-remote --exit-code --tags origin "refs/tags/v$current" > /dev/null 2>&1; then
+            echo "v$current is already tagged — nothing to release."
             echo "release=false" >> "$GITHUB_OUTPUT"
           else
-            echo "Version $previous -> $current."
+            echo "v$current has no tag — releasing."
             echo "release=true" >> "$GITHUB_OUTPUT"
           fi
 

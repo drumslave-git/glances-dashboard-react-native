@@ -257,8 +257,9 @@ with what shipped. `npm version` runs `scripts/sync-version.js` on the way throu
 propagates the new version into `app.json` (including a monotonic Android `versionCode`) and
 `src-tauri/tauri.conf.json`. Commit all four files together.
 
-On push, the workflow compares the version against the previous commit. Unchanged means nothing
-runs, so ordinary dependency edits to `package.json` are free. Changed means:
+On push, the workflow asks whether the current version is **already tagged**. Tagged means nothing
+runs, so ordinary dependency edits to `package.json` are free. Untagged means it has not shipped
+yet, whatever the commit history looks like:
 
 1. **Gate** — `lint`, `typecheck`, `test`, plus a check that the three version fields agree.
 2. **Build**, in parallel — the web export, the Android APK, and the Windows installer.
@@ -272,8 +273,12 @@ runs, so ordinary dependency edits to `package.json` are free. Changed means:
 | `glances-dashboard-web-<version>.zip` | `npm run build:web`, zipped `dist/` |
 
 The tag is pushed only after all three builds succeed, so a broken build leaves no tag and no
-half-empty release. Re-running the workflow on the same version is safe — the tag, the release and
+half-empty release — and, because the tag is also what the first job looks for, the next push
+simply tries again. Re-running the workflow on the same version is safe: the tag, the release and
 each upload all check for what is already there.
+
+If a release is ever missed, **Actions → Release → Run workflow** publishes whatever version
+`main` is on right now; a manual run skips the tag check entirely.
 
 A release needs no code change: bumping the version alone is enough to rebuild, which is how you
 pick up a base-image or toolchain fix.

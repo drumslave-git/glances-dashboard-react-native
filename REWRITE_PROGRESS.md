@@ -518,6 +518,7 @@ for phone, tablet, web and the Tauri window are listed under *Adapted from deskt
   `npm run release:patch` bumps it with `--no-git-tag-version`, and the workflow tags only
   after every build has passed. Local and remote tags therefore cannot disagree, and a broken
   desktop build leaves no tag and no half-empty release rather than something to clean up.
+  *(How the workflow **detects** the bump was wrong until 2026-08-07 — see M17.)*
 - Three files carry a version (`package.json`, `app.json`, `src-tauri/tauri.conf.json`), so
   `scripts/sync-version.js` runs from `npm version`'s lifecycle hook and CI re-checks it with
   `--check`. It edits the JSON by targeted string replacement rather than round-tripping it,
@@ -1102,7 +1103,8 @@ hidden headers, and the corner mark bringing a header back by press. Two things 
 - [x] README rewritten for all four targets, and for the app this has become
 - [x] In-app updates assessed and their absence written down where someone looking for them will be
 - [x] Two stale strings the release build's own first-run flow exposed
-- [x] **v0.2.0** cut: version bumped and propagated, ready to push — CI owns the tag and the release
+- [x] **v0.2.0** cut: version bumped and propagated; CI owns the tag and the release
+- [x] Fixed the release check, which let v0.2.0 through without releasing it
 - [x] 733 tests across 40 suites; typecheck and lint clean
 
 **Notes**
@@ -1136,10 +1138,24 @@ hidden headers, and the corner mark bringing a header back by press. Two things 
   model — and a patch bump would describe them wrongly. The bump creates no tag: the workflow owns
   tags, so a local one cannot disagree with what shipped.
 
-**Version 0.2.0 is committed but deliberately not pushed.** Pushing to `main` is what starts the
-release, and that is the owner's call — the workflow then gates on lint, typecheck, tests and the
-version check, builds the Windows installer, the Android APK and the web bundle in parallel, and
-tags `v0.2.0` only once all three have passed.
+**v0.2.0 was pushed and released nothing — the release check was asking the wrong question
+(2026-08-07).**
+
+- **Symptom.** The `Release` workflow ran on the push and finished in **11 seconds**. No failure
+  anywhere: the gate never ran, no artefacts were built, no tag, no release.
+- **Cause.** `check` compared `package.json` at `HEAD` against `HEAD^`. That is the same question
+  as "did this push change the version" *only when the bump is the tip*. The two M17 commits went
+  up together, so the run checked out `88c8d72`, found its parent `eebb6d8` already at 0.2.0, and
+  concluded nothing had changed. A push with any commit after the bump would have done the same.
+- **Fix.** The check now asks whether **`v$current` is already tagged**, using the same
+  `git ls-remote --tags` the publish job already used for idempotence. The tag is what records that
+  a version shipped — it is created only after all three builds pass — so an untagged version is
+  one that has not shipped, however many commits carried it here. The trigger's `paths` gained the
+  workflow file itself, or a fix to the release logic could never release anything.
+- **Worth noticing:** this failed *quietly*. A green tick on a run that did nothing looks exactly
+  like a green tick on a run that shipped, which is why nobody saw it until the release page was
+  checked. The tag-based rule is also self-healing where the old one was not: a version that failed
+  to ship stays untagged, so the next push tries again.
 
 ---
 
