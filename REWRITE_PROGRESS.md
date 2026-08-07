@@ -4,18 +4,23 @@ Tracks execution of [REWRITE_PLAN.md](REWRITE_PLAN.md). Update this file in the 
 commit as the work it describes. One line per task; add dated notes under each milestone
 when something non-obvious happened.
 
-**Current status:** M10–M16 complete — the data layer, the endpoint model, the full catalog of
-**26 widget renderings** across 14 metrics, and now the shell around them: a free drag-and-resize
-grid over `{x, y, w, h}` with density-driven columns, an add-widget picker whose cards draw the
-real widget live, and a full screen that hands the window to the board. On top of that, the
-appearance layer the user owns: per-scheme translucent colours, spacing and corners, hidden headers,
-a per-widget background, and a desktop window the board can be seen through. All verified on the built Windows app and on Android
-against a live server. What remains is the release sweep (M17). Background: M10 (data
-layer) and M11 (endpoint model) complete. The poller now runs against
-the endpoints store: probing, tiered polling, backoff, and a state machine the endpoint chip renders
-identically in the toolbar, on every widget header and in settings. Next is M12 (widget framework +
-core metrics), which is where the typed widget catalog begins and `useGlancesQuery` finally goes.
-Background: M0–M8 complete and v0.1.2 shipped, but **the reference app they were ported from no longer exists**. On 2026-08-04 the reference was re-examined at **v1.13.0** — it is now an Electron desktop app with 26 purpose-built widget types, a main-process tiered poller and a free drag/resize grid, where the port's source was a Mantine web app with five generic widgets. The owner's instruction is full parity with the current reference, so [REWRITE_PLAN.md](REWRITE_PLAN.md) has been realigned: §2's parity checklist is replaced and milestones **M10–M17** carry the work. The visual language already matches (both are the same "Telemetry" design system); the gap is what the app does. M9's remaining items are folded into the new plan. **The plan is awaiting the owner's approval — no M10+ code has been written.**
+**Current status:** **M10–M17 complete — the realignment onto reference v1.13.0 is done.** The data
+layer and the endpoint model, the full catalog of **26 widget renderings** across 14 metrics, the
+shell around them — a free drag-and-resize grid over `{x, y, w, h}` with density-driven columns, an
+add-widget picker whose cards draw the real widget live, a full screen that hands the window to the
+board — and the appearance layer the user owns: per-scheme translucent colours, spacing and corners,
+hidden headers, a per-widget background, and a desktop window the board can be seen through. All of
+it verified on the built Windows app and on Android against a live server, with all three release
+artefacts built locally. **v0.2.0 is committed and waiting to be pushed**, which is what starts the
+release.
+
+**How it got here.** M0–M9 ported a Vite + React + **Mantine** web app with five *generic* widgets,
+and shipped v0.1.2. On 2026-08-04 the reference was re-examined at **v1.13.0** and turned out to be
+a different application: Electron + MUI + ECharts, 26 purpose-built widget types, a main-process
+tiered poller and a free drag/resize grid. The owner's instruction was full parity with the current
+reference, so [REWRITE_PLAN.md](REWRITE_PLAN.md) was realigned — §2's parity checklist replaced,
+milestones **M10–M17** carrying the work, M9's remaining items folded in. The visual language
+already matched, both being the same "Telemetry" design system; the gap was what the app did.
 
 ## Milestones
 
@@ -471,12 +476,14 @@ for phone, tablet, web and the Tauri window are listed under *Adapted from deskt
   `explicitSize` prop so the widget shell's own measurement is reused — one fewer layout pass,
   and deterministic geometry in tests, where no layout event ever fires.
 
-### M9 — Hardening & release — `in progress`
-- [ ] Component tests: settings + config screens, error paths
-- [ ] Perf pass (memoization, background polling pause, processlist cost)
+### M9 — Hardening & release — `done` (closed out in M17, 2026-08-07)
+- [x] Component tests: settings + config screens, error paths — landed with the screens they cover
+      (M13–M16), not as a separate pass
+- [x] Perf pass — see M17's note; the three items were answered by the M10 poller and the M12 frame
+      rather than by a sweep
 - [x] Release pipeline — `.github/workflows/release.yml` + `scripts/sync-version.js`
 - [x] Fix: v0.1.1 desktop rendered a blank window (`GradientSurface` covered it)
-- [ ] README for all targets
+- [x] README for all targets — rewritten in M17
 
 **v0.1.1 shipped a blank desktop window (found and fixed 2026-08-04)**
 - **Symptom.** The installed Windows app opened to an empty dark rectangle with a single
@@ -1089,8 +1096,48 @@ hidden headers, and the corner mark bringing a header back by press. Two things 
    corner, which is exactly where the body's first row starts; the body is now inset by the mark's
    width when the header is away.
 
-### M17 — Release parity — `not started`
-- [ ] CORS story per target, README for all four targets, release across Windows / Android / web
+### M17 — Release parity — `done` (2026-08-07)
+- [x] The CORS story documented **per target** — and corrected: the README still claimed the
+      desktop build was bound by CORS like any browser, which stopped being true in M10
+- [x] README rewritten for all four targets, and for the app this has become
+- [x] In-app updates assessed and their absence written down where someone looking for them will be
+- [x] Two stale strings the release build's own first-run flow exposed
+- [x] **v0.2.0** cut: version bumped and propagated, ready to push — CI owns the tag and the release
+- [x] 733 tests across 40 suites; typecheck and lint clean
+
+**Notes**
+
+- **The desktop CORS section was wrong, and had been since M10.** It said a WebView2 is a browser so
+  everything in the web section applies — true of the *shell*, false of the app: the poller and the
+  connection test both go through Tauri's Rust client, which has no origin, follows redirects and
+  ignores private-network gating. The README now leads with a table of the three targets and what
+  each one actually does, because that difference is the reason the desktop build exists.
+- **The perf items M9 left open were answered by later milestones, not by a sweep.** Background
+  polling pause is `HIDDEN_TIER_MS` in the M10 poller, driven by `watchVisibility`; memoization is
+  `WidgetFrame`'s `memo` plus the ring buffers living outside React entirely; the processlist cost
+  is the heavy tier's 3 s floor and the row cap the table already applies. Recorded rather than
+  re-done — a pass that changes nothing is not a pass.
+- **In-app updates are out of scope, and the README says so where someone would look for them** —
+  under Releases, with the reason and the pointer to plan §6. An absence nobody explains reads as an
+  oversight.
+- **The release APK was built and run rather than trusted to CI.** `expo prebuild` +
+  `gradlew assembleRelease` (x86_64, JDK 17 — Android Studio's newer JDK still breaks AGP's CMake
+  step) produced an APK that installs and runs standalone, with no Metro and no dev client: fonts,
+  the toolbar, the first-run empty state, and a connection test that reached the live server and
+  reported *Glances 4.5.6 · 28 plugins*. The Windows installer and the web export were built
+  repeatedly through M15 and M16, so all three release artefacts have now been produced locally.
+- **Two stale strings, found by being the first person in months to see a fresh install.** The
+  endpoint form still said "Add server" — the word the app dropped in M11 — and still offered
+  "0 fetches once without polling", which M11 retired in favour of pausing. Both were invisible to
+  everyone whose app already had an endpoint in it, which is everyone who has been testing it.
+- **`npm run release:minor`, not `patch`.** M15 and M16 are features — a free grid, an appearance
+  model — and a patch bump would describe them wrongly. The bump creates no tag: the workflow owns
+  tags, so a local one cannot disagree with what shipped.
+
+**Version 0.2.0 is committed but deliberately not pushed.** Pushing to `main` is what starts the
+release, and that is the owner's call — the workflow then gates on lint, typecheck, tests and the
+version check, builds the Windows installer, the Android APK and the web bundle in parallel, and
+tags `v0.2.0` only once all three have passed.
 
 ---
 
@@ -1188,6 +1235,7 @@ hidden headers, and the corner mark bringing a header back by press. Two things 
 | 2026-08-06 | An **untouched** widget background keeps the design's gradient; any other value paints flat | Opening the appearance tab must not silently cost the handoff's panel. The same rule scales the design's asymmetric padding from one number rather than flattening it |
 | 2026-08-06 | Colours are per scheme; **opacity is not** | A hex that reads on near-black is wrong on paper-white, but a window is either see-through or it is not, and an alpha that differs between schemes is a difference nobody can see two of at once |
 | 2026-08-06 | The desktop window is **always** created transparent | Neither Tauri nor Electron can toggle it later; an opaque grid colour — the default — is what makes the window look solid, and the alpha is what makes the transparency visible |
+| 2026-08-07 | v0.2.0 is a **minor** bump, and it is committed but not pushed | M15 and M16 are features, so a patch bump would describe them wrongly. Pushing is what starts the release, and starting a release is the owner's call |
 | 2026-08-04 | **The transparent window is in scope** | Confirmed with the owner. It is what makes the appearance model's alpha mean anything on desktop. Note the reference's own trade: a transparent window cannot be edge-resized and loses the WM drop shadow, so it is only requested when an alpha is actually below 1 |
 | 2026-08-04 | This app **replaces** the Electron one — same product name, same install path, no rename | Confirmed with the owner. They are not meant to coexist, so the install collision is not a case to design around |
 

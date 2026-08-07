@@ -1,7 +1,7 @@
 {
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
   "productName": "Glances Dashboard",
-  "version": "0.1.2",
+  "version": "0.2.0",
   "identifier": "com.glancesdashboard.app",
   "build": {
     "frontendDist": "../dist",
@@ -35,7 +35,7 @@
     "publisher": "George Tislenko",
     "homepage": "https://github.com/drumslave-git/glances-dashboard",
     "shortDescription": "A configurable dashboard for Glances system monitors.",
-    "longDescription": "Point it at one or more Glances servers, then build a dashboard out of text, donut, pie, bar and process-list widgets.",
+    "longDescription": "Point it at one or more machines running Glances, then build a board out of 26 purpose-built widgets: CPU traces and ring gauges, memory, load, per-core bars, network and disk throughput, filesystems, sensors, GPUs, process and container tables, and a cross-host alerts feed.",
     "category": "Utility",
     "icon": [
       "icons/32x32.png",

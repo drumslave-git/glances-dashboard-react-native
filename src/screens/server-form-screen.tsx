@@ -77,7 +77,9 @@ export function ServerFormScreen() {
   return (
     <SafeAreaView style={{ flex: 1 }} edges={['top', 'left', 'right']}>
       <YStack flex={1} bg="$appBg" p={GEOMETRY.gridPadding} gap="$3">
-        <SectionLabel variant="readout">{existing ? 'Edit server' : 'Add server'}</SectionLabel>
+        <SectionLabel variant="readout">
+          {existing ? 'Edit endpoint' : 'Add endpoint'}
+        </SectionLabel>
 
         <ScrollView flex={1} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
           <YStack gap="$4">
@@ -109,7 +111,11 @@ export function ServerFormScreen() {
                 testID="server-url-input"
               />
               <Paragraph size="$1" opacity={0.6}>
-                {trimmedUrl ? coerceServerUrl(trimmedUrl) : 'http:// and port 61208 are filled in automatically.'}
+                {/* The live resolution, so the rule below is visible rather than described: a bare
+                    IP is a direct `glances -w`, a bare hostname is assumed proxied. */}
+                {trimmedUrl
+                  ? coerceServerUrl(trimmedUrl)
+                  : 'An IP gets http:// and port 61208; a hostname gets https:// on the default port.'}
               </Paragraph>
             </YStack>
 
@@ -123,7 +129,10 @@ export function ServerFormScreen() {
                 testID="server-refresh-input"
               />
               <Paragraph size="$1" opacity={0.6}>
-                0 fetches once without polling.
+                {/* "Fetch once" was retired in M11: pausing is how an endpoint is stopped, and the
+                    interval is floored at a second because the server caches its stats for that
+                    long anyway. */}
+                Floored at 1 second. Pause an endpoint to stop polling it.
               </Paragraph>
             </YStack>
 

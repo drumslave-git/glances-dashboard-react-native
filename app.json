@@ -2,7 +2,7 @@
   "expo": {
     "name": "Glances Dashboard",
     "slug": "glances-dashboard",
-    "version": "0.1.2",
+    "version": "0.2.0",
     "orientation": "default",
     "icon": "./assets/images/icon.png",
     "scheme": "glancesdashboard",
@@ -14,7 +14,7 @@
     },
     "android": {
       "package": "com.glancesdashboard.app",
-      "versionCode": 102,
+      "versionCode": 200,
       "adaptiveIcon": {
         "backgroundColor": "#101113",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
