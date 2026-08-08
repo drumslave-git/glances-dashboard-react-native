@@ -51,10 +51,33 @@ async function toResponse(response: Response): Promise<HttpResponse> {
   return { status: response.status, ok: response.ok, text };
 }
 
+/**
+ * The caller's signal is never handed to the underlying fetch directly — it is forwarded through a
+ * local controller that is detached the moment the body has been read.
+ *
+ * This is a workaround for tauri-plugin-http (2.5.9, current): its `fetch` adds `abort` listeners
+ * to the signal and never removes them. The poller's `AbortSignal.timeout(5000)` fires on *every*
+ * request, including ones that completed in 200 ms — and by then the Rust side has already freed
+ * the response resource at body EOF, so the listener's floating `fetch_cancel_body` invoke rejects
+ * with "The resource id NNN is invalid", unhandled, roughly once per poll. Detaching after the body
+ * is consumed means the plugin's listeners are on a signal that can no longer fire, so a late
+ * timeout is inert. A timeout that fires while the request is genuinely in flight still aborts it,
+ * and at that moment every Rust resource is still live, so the plugin's cancel path is valid.
+ */
 export const httpGet: HttpGet = async (url, signal) => {
   const request = isTauri() ? ((await loadTauriFetch()) ?? fetch) : fetch;
-  const response = await request(url, { signal, headers: { Accept: 'application/json' } });
-  return toResponse(response);
+  const controller = new AbortController();
+  const forward = () => controller.abort(signal?.reason);
+  if (signal?.aborted) forward();
+  else signal?.addEventListener('abort', forward, { once: true });
+  try {
+    const response = await request(url, { signal: controller.signal, headers: { Accept: 'application/json' } });
+    // `return await`, not `return`: the finally block must not detach until the body is read, or a
+    // timeout during a slow body would no longer cancel anything.
+    return await toResponse(response);
+  } finally {
+    signal?.removeEventListener('abort', forward);
+  }
 };
 
 /**
