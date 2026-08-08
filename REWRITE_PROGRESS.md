@@ -1229,6 +1229,29 @@ OS-level capture proving window transparency). Tests 729/40 suites, typecheck an
   the placed widget. It caught one real bug: Android's `TextInput` own vertical padding clipped
   the hex field's glyphs inside its fixed 30pt height — fixed with `py={0}`.
 
+### Post-0.2.1 — window opacity is broken upstream, not here (2026-08-08)
+
+The owner reported grid opacity still showing nothing behind the window on v0.2.1. Reproduced,
+and this time pinned to ground truth with a known-colour window placed directly behind the app
+(`SetWindowPos` + single-pixel sampling — see the AGENTS.md gotcha for why nothing weaker counts
+as evidence):
+
+- **The app's whole chain is correct.** At 10% grid alpha, `html`, `body`, `#root` and the grid
+  all compute to `transparent`/`rgba` exactly as designed (verified over CDP in the built exe).
+- **WebView2 paints opaque white underneath anyway.** The runtime auto-updated to 152.0.4191.10
+  on 2026-08-07, and runtimes ≥ 145 ignore a transparent `DefaultBackgroundColor` — via the API
+  wry calls *and* via the `WEBVIEW2_DEFAULT_BACKGROUND_COLOR` env var (both were tried against
+  the real window; an opaque-red env value produced no red, proving the var is not consulted).
+  Upstream: MicrosoftEdge/WebView2Feedback#5481 — regression, tracked by Microsoft, no
+  workaround, fix unreleased. Last working runtime: 143.
+- **This also corrects the 2026-08-08 desktop-review note above.** The "OS-level capture proving
+  window transparency" was taken with the runtime already broken; what it actually photographed
+  was another window in front of the capture region. The 2026-08-06 M16 verification predated
+  the runtime update and was real.
+- **No code change shipped.** An env-var workaround was written, built, disproven pixel-by-pixel,
+  and reverted. When Microsoft ships the fix, the existing `transparent: true` +
+  `put_DefaultBackgroundColor` path resumes working with no change on our side; re-test then.
+
 ---
 
 ## Decisions log

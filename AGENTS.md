@@ -176,6 +176,19 @@ Verify against installed types (`node_modules/**/*.d.ts`) rather than memory —
 - **`flex: 1` on a child of a *column* collapses it to nothing on web.** Tamagui/RNW emit `flex-basis: 0%`, and in a column whose height is content-sized that resolves to zero height — native (yoga) keeps the declared height, so Android and the Jest suite both look fine while web and desktop render nothing. This is how the meter bars vanished in v0.2.0. Only give `flex: 1` to something meant to fill its parent's main axis; in a column, stretch provides the width for free.
 - **A Tauri window can be driven over CDP.** Launch the exe with `WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS=--remote-debugging-port=9222` and attach to `http://127.0.0.1:9222/json/list`. **Set the variable on the exe directly** (`target/debug/glances-dashboard.exe` works — dev URLs are baked in): through `npx tauri dev` the variable never reaches WebView2 and the port stays dark. Unlike the automation pane's hidden tab, this window is genuinely visible, so Skia paints and `Page.captureScreenshot` works. Mouse events are dispatched in viewport coordinates — an element scrolled below the fold gets a click at a `y` outside the window, which silently does nothing. **Close the window before rebuilding**: a running app holds `target/release/glances-dashboard.exe` open and `tauri build` fails with `Access is denied. (os error 5)`.
 - **Never `Page.reload` or `Page.navigate` the Tauri window over CDP.** Neither goes through Tauri's custom-protocol handler, so the page lands on `about:blank` or `chrome-error://chromewebdata/` — where `localStorage` throws SecurityError — and only restarting the exe recovers it. To boot the app with seeded state: attach, write `localStorage` while the page is on `tauri.localhost` (it persists in the WebView2 profile), kill the exe, relaunch.
+- **The transparent window is broken by the WebView2 runtime itself, and nothing app-side fixes
+  it.** Runtimes ≥ 145 (this machine: 152.0.4191.10, auto-updated 2026-08-07) ignore a transparent
+  `DefaultBackgroundColor` — the API call wry makes *and* the `WEBVIEW2_DEFAULT_BACKGROUND_COLOR`
+  env var both succeed and do nothing; the compositor paints **opaque white** under every
+  transparent page pixel. Upstream: MicrosoftEdge/WebView2Feedback#5481 (regression, tracked, no
+  workaround, last working runtime 143). So a below-1 grid alpha currently blends toward white
+  instead of showing the desktop; the app's shell chain (`html`/`body`/`#root` →
+  `transparent`) is correct and verified — re-test when the runtime updates, change nothing here.
+  Two verification traps this hunt stepped in: **a screen capture proves nothing unless you also
+  prove your window is frontmost** (another window in front of the region reads exactly like
+  "transparency works"), and CDP `Page.captureScreenshot` / `PrintWindow` composite over their own
+  white, so neither can see this bug. The probe that works: put a known-colour window directly
+  behind the app (`SetWindowPos`), sample single pixels, and demand the blend arithmetic.
 - **`AbortSignal.timeout` rejections are nondeterministic to observe.** Chromium may GC a pending timeout signal before it fires, so a bug triggered by late aborts (the plugin-http invalid-rid one was) can show zero rejections for a 45 s window and then fire on every poll minutes later. A quiet `unhandledrejection` hook is not proof — force the failing sequence directly before trusting it.
 
 ## The "Telemetry" design system (M8)
