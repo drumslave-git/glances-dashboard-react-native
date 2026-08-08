@@ -22,11 +22,14 @@
  */
 
 /**
- * Just under `sizeClassForWidth`'s 300pt compact boundary, so a column squeezed to its floor renders
- * its widgets compact and a column at ordinary stretch renders them regular. Compact is what a
- * narrow window does, never a footprint anyone places.
+ * Just **over** `sizeClassForWidth`'s 300pt compact boundary, so a column can never stretch to a
+ * width that renders its widgets compact. The first cut of this floor was 290 — just *under* the
+ * boundary — and that was wrong in practice: for a whole band of window widths every column
+ * settled between 290 and 300, and the entire board silently degraded to the compact rendering
+ * (no gridlines, no axis labels) while the picker had previewed the regular one at 360. Compact
+ * now happens only where it was meant to: a window narrower than a single column.
  */
-export const MIN_COL_WIDTH_PX = 290;
+export const MIN_COL_WIDTH_PX = 302;
 export const MIN_ROW_HEIGHT_PX = 70;
 
 /** The floor a widget may be resized to: one column, and two rows — the short state. */

@@ -18,13 +18,11 @@ import { SizeField, ThemedColorField } from './appearance-fields';
 /**
  * The appearance tab: everything about the board the user owns (ref §7.6).
  *
- * **The dashboard behind this screen is the preview.** Every control writes the *draft*, which
- * `useAppearance` prefers over the stored value, so the board repaints as the control moves. There
- * is no preview surface to keep in step with the real thing, and Cancel is a matter of dropping the
- * draft rather than undoing a series of writes.
- *
- * Each setting carries its own reset, disabled while it is already at the default. Undoing one
- * experiment must not cost the rest of the theme.
+ * **Every control applies — and saves — the moment it changes**, the same as the theme buttons
+ * always did. The dashboard beside this panel repaints live, so it is the preview; undo is the
+ * per-field Reset, and "Reset everything" is the way back to a fresh install. There is no Save and
+ * no Cancel, because a panel where half the controls commit on press and the other half wait for a
+ * button at the bottom of the scroll teaches the user not to trust any of it.
  */
 
 const THEMES: { value: ThemePreference; label: string }[] = [
@@ -33,7 +31,7 @@ const THEMES: { value: ThemePreference; label: string }[] = [
   { value: 'system', label: 'System' },
 ];
 
-/** Named steps rather than a slider: this is a preference, not a fine adjustment. */
+/** Named steps rather than a slider: text has four legible sizes, not a continuum worth walking. */
 const SCALES: { value: number; label: string }[] = [
   { value: READING_SCALE_MIN, label: 'Small' },
   { value: 1, label: 'Default' },
@@ -48,19 +46,21 @@ export function AppearanceSection() {
   const toggleSummaryStrip = usePreferencesStore((state) => state.toggleSummaryStrip);
 
   const appearance = useAppearance();
-  const draft = usePreferencesStore((state) => state.appearanceDraft);
-  const setDraft = usePreferencesStore((state) => state.setAppearanceDraft);
+  const setAppearance = usePreferencesStore((state) => state.setAppearance);
   const resetKey = usePreferencesStore((state) => state.resetAppearanceKey);
   const resetAll = usePreferencesStore((state) => state.resetAppearance);
-  const commit = usePreferencesStore((state) => state.commitAppearance);
-  const cancel = usePreferencesStore((state) => state.cancelAppearance);
 
   const isDefault = <K extends keyof Appearance>(key: K) =>
     isDefaultAppearanceKey(appearance, key as never);
 
   return (
     <YStack gap={18} py={4} testID="appearance-section">
-      <Label>Appearance</Label>
+      <YStack gap={4}>
+        <Label>Appearance</Label>
+        <UiText variant="footer" color="$textDim">
+          Changes apply to the board as you make them. Reset puts one setting back.
+        </UiText>
+      </YStack>
 
       <YStack gap={7}>
         <MicroLabel>Theme</MicroLabel>
@@ -96,7 +96,7 @@ export function AppearanceSection() {
               key={option.label}
               label={option.label}
               active={Math.abs(appearance.interfaceScale - option.value) < 0.001}
-              onPress={() => setDraft('interfaceScale', option.value)}
+              onPress={() => setAppearance('interfaceScale', option.value)}
               testID={`reading-scale-${option.label.toLowerCase()}`}
             />
           ))}
@@ -109,7 +109,7 @@ export function AppearanceSection() {
       <ThemedColorField
         label="Grid background"
         value={appearance.gridBackground}
-        onChange={(next) => setDraft('gridBackground', next)}
+        onChange={(next) => setAppearance('gridBackground', next)}
         onReset={() => resetKey('gridBackground')}
         isDefault={isDefault('gridBackground')}
         testID="appearance-gridBackground"
@@ -118,7 +118,7 @@ export function AppearanceSection() {
       <ThemedColorField
         label="Widget background"
         value={appearance.widgetBackground}
-        onChange={(next) => setDraft('widgetBackground', next)}
+        onChange={(next) => setAppearance('widgetBackground', next)}
         onReset={() => resetKey('widgetBackground')}
         isDefault={isDefault('widgetBackground')}
         testID="appearance-widgetBackground"
@@ -127,8 +127,8 @@ export function AppearanceSection() {
       <SizeField
         label="Grid spacing"
         value={appearance.gridGap}
-        steps={[0, 4, 8, 11, 16, 24]}
-        onChange={(next) => setDraft('gridGap', next)}
+        max={40}
+        onChange={(next) => setAppearance('gridGap', next)}
         onReset={() => resetKey('gridGap')}
         isDefault={isDefault('gridGap')}
         hint="One value for the gap between widgets and the space around the board."
@@ -138,8 +138,8 @@ export function AppearanceSection() {
       <SizeField
         label="Widget padding"
         value={appearance.widgetPadding}
-        steps={[6, 11, 17, 22, 28]}
-        onChange={(next) => setDraft('widgetPadding', next)}
+        max={40}
+        onChange={(next) => setAppearance('widgetPadding', next)}
         onReset={() => resetKey('widgetPadding')}
         isDefault={isDefault('widgetPadding')}
         testID="appearance-widgetPadding"
@@ -148,8 +148,8 @@ export function AppearanceSection() {
       <SizeField
         label="Corner radius"
         value={appearance.widgetRadius}
-        steps={[0, 3, 6, 10, 16]}
-        onChange={(next) => setDraft('widgetRadius', next)}
+        max={24}
+        onChange={(next) => setAppearance('widgetRadius', next)}
         onReset={() => resetKey('widgetRadius')}
         isDefault={isDefault('widgetRadius')}
         testID="appearance-widgetRadius"
@@ -158,8 +158,8 @@ export function AppearanceSection() {
       <SizeField
         label="Widget border"
         value={appearance.widgetBorder.width}
-        steps={[0, 1, 2, 3]}
-        onChange={(next) => setDraft('widgetBorder', { ...appearance.widgetBorder, width: next })}
+        max={6}
+        onChange={(next) => setAppearance('widgetBorder', { ...appearance.widgetBorder, width: next })}
         onReset={() => resetKey('widgetBorder')}
         isDefault={isDefault('widgetBorder')}
         hint="Zero removes the outline; the background is then what separates a widget from the board."
@@ -169,7 +169,7 @@ export function AppearanceSection() {
       <ThemedColorField
         label="Border colour"
         value={appearance.widgetBorder.color}
-        onChange={(next) => setDraft('widgetBorder', { ...appearance.widgetBorder, color: next })}
+        onChange={(next) => setAppearance('widgetBorder', { ...appearance.widgetBorder, color: next })}
         onReset={() => resetKey('widgetBorder')}
         isDefault={isDefault('widgetBorder')}
         testID="appearance-borderColor"
@@ -181,7 +181,7 @@ export function AppearanceSection() {
           <ToolbarButton
             label={appearance.hideWidgetHeaders ? 'Hidden' : 'Shown'}
             active={!appearance.hideWidgetHeaders}
-            onPress={() => setDraft('hideWidgetHeaders', !appearance.hideWidgetHeaders)}
+            onPress={() => setAppearance('hideWidgetHeaders', !appearance.hideWidgetHeaders)}
             testID="toggle-widget-headers"
           />
         </XStack>
@@ -210,31 +210,7 @@ export function AppearanceSection() {
           onPress={resetAll}
           testID="appearance-reset-all"
         />
-        <YStack flex={1} />
-        {draft != null && (
-          <>
-            <ToolbarButton label="Cancel" onPress={cancel} testID="appearance-cancel" />
-            <ToolbarButton
-              label="Save"
-              variant="primary"
-              onPress={commit}
-              testID="appearance-save"
-            />
-          </>
-        )}
       </XStack>
-      {draft != null && (
-        <UiText variant="footer" color="$textDim" testID="appearance-draft-notice">
-          Previewing on the dashboard behind this screen. Cancel puts it back.
-        </UiText>
-      )}
-      {/* Only there while the defaults still hold, because that is the one state the sentence
-          above cannot describe. */}
-      {draft == null && !isDefaultAppearance(appearance) && (
-        <UiText variant="footer" color="$textDim" testID="appearance-saved-notice">
-          Saved.
-        </UiText>
-      )}
     </YStack>
   );
 }
@@ -278,6 +254,7 @@ export function AccentPicker({
             items="center"
             justify="center"
             borderWidth={1}
+            cursor="pointer"
             pressStyle={{ opacity: 0.6 }}
             onPress={() => onChange(option)}
             role="button"

@@ -32,8 +32,10 @@ beforeEach(() => {
   mockPush.mockClear();
   resetEndpointIdCounter();
   resetWidgetIdCounter();
-  useEndpointsStore.setState({ endpoints: [], defaultEndpointId: null });
-  useWidgetsStore.setState({ widgets: [] });
+  // `hasHydrated` because the screen renders nothing until the persisted stores have loaded —
+  // tests write state directly, which is the hydrated condition.
+  useEndpointsStore.setState({ endpoints: [], defaultEndpointId: null, hasHydrated: true });
+  useWidgetsStore.setState({ widgets: [], hasHydrated: true });
   // Edit mode and full screen live in a module-level store now, so without this
   // each test would inherit whatever the previous one toggled.
   useUiStore.setState({ editMode: false, fullScreen: false });
@@ -41,7 +43,6 @@ beforeEach(() => {
     theme: 'dark',
     summaryStripVisible: true,
     appearance: DEFAULT_APPEARANCE,
-    appearanceDraft: null,
   });
 });
 
@@ -77,6 +78,17 @@ describe('DashboardScreen - empty states', () => {
     const { getByTestId } = await renderDashboard();
 
     expect(getByTestId('dashboard-no-endpoints')).toBeTruthy();
+  });
+
+  it('says nothing at all while the stores are still hydrating', async () => {
+    // On a real launch the persisted stores answer a beat after the first render. Flashing
+    // "No endpoints configured" during that beat was v0.2.0's launch blink.
+    useEndpointsStore.setState({ hasHydrated: false });
+
+    const { getByTestId, queryByTestId } = await renderDashboard();
+
+    expect(getByTestId('dashboard-hydrating')).toBeTruthy();
+    expect(queryByTestId('dashboard-no-endpoints')).toBeNull();
   });
 
   it('asks for a widget once a server exists', async () => {

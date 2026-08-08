@@ -23,41 +23,36 @@ interface PreferencesState {
   summaryStripVisible: boolean;
   /** What the board is painted with. Read through `useAppearance`, never directly. */
   appearance: Appearance;
-  /**
-   * The appearance being edited, or `null`.
-   *
-   * The editor writes the **draft** on every keystroke and the dashboard behind it repaints live —
-   * so there is no preview surface to keep in step with the real thing, and Cancel is just
-   * clearing this. Deliberately not persisted: an abandoned experiment must not come back.
-   */
-  appearanceDraft: Appearance | null;
   hasHydrated: boolean;
   setTheme: (theme: ThemePreference) => void;
   setSummaryStripVisible: (visible: boolean) => void;
   toggleSummaryStrip: () => void;
-  /** Start editing from whatever is on screen now. */
-  beginAppearanceEdit: () => void;
-  /** Change one key of the draft, starting one if the editor has not already. */
-  setAppearanceDraft: <K extends AppearanceKey>(key: K, value: Appearance[K]) => void;
+  /**
+   * Change one key, **applied and persisted immediately** — exactly like the theme buttons.
+   *
+   * The editor used to write a draft that only Save committed, while the theme, the reading scale
+   * and the summary strip applied on press. Two apply models in one panel meant the Save/Cancel pair
+   * lived at the very bottom of a long scroll and half the controls ignored it (found in the v0.2.0
+   * review). Now every control commits on change, the dashboard repaints live, and undo is the
+   * per-key Reset beside each field.
+   */
+  setAppearance: <K extends AppearanceKey>(key: K, value: Appearance[K]) => void;
   /** Put one key back to its default, without touching the rest of the theme. */
   resetAppearanceKey: (key: AppearanceKey) => void;
   resetAppearance: () => void;
-  commitAppearance: () => void;
-  cancelAppearance: () => void;
 }
 
-/** Everything reads the draft first, so an editor's changes are what the board draws. */
-export function selectAppearance(state: Pick<PreferencesState, 'appearance' | 'appearanceDraft'>): Appearance {
-  return state.appearanceDraft ?? state.appearance;
+/** What the board draws. Kept as a named selector because half the app subscribes through it. */
+export function selectAppearance(state: Pick<PreferencesState, 'appearance'>): Appearance {
+  return state.appearance;
 }
 
 export const usePreferencesStore = create<PreferencesState>()(
   persist(
-    (set, get) => ({
+    (set) => ({
       theme: 'dark',
       summaryStripVisible: true,
       appearance: DEFAULT_APPEARANCE,
-      appearanceDraft: null,
       hasHydrated: false,
 
       setTheme: (theme) => set({ theme }),
@@ -65,34 +60,15 @@ export const usePreferencesStore = create<PreferencesState>()(
       toggleSummaryStrip: () =>
         set((state) => ({ summaryStripVisible: !state.summaryStripVisible })),
 
-      beginAppearanceEdit: () => {
-        if (get().appearanceDraft) return;
-        set((state) => ({ appearanceDraft: { ...state.appearance } }));
-      },
-
-      setAppearanceDraft: (key, value) =>
-        set((state) => ({
-          appearanceDraft: { ...(state.appearanceDraft ?? state.appearance), [key]: value },
-        })),
+      setAppearance: (key, value) =>
+        set((state) => ({ appearance: { ...state.appearance, [key]: value } })),
 
       resetAppearanceKey: (key) =>
         set((state) => ({
-          appearanceDraft: {
-            ...(state.appearanceDraft ?? state.appearance),
-            [key]: DEFAULT_APPEARANCE[key],
-          },
+          appearance: { ...state.appearance, [key]: DEFAULT_APPEARANCE[key] },
         })),
 
-      resetAppearance: () => set({ appearanceDraft: { ...DEFAULT_APPEARANCE } }),
-
-      commitAppearance: () =>
-        set((state) =>
-          state.appearanceDraft
-            ? { appearance: state.appearanceDraft, appearanceDraft: null }
-            : { appearanceDraft: null },
-        ),
-
-      cancelAppearance: () => set({ appearanceDraft: null }),
+      resetAppearance: () => set({ appearance: { ...DEFAULT_APPEARANCE } }),
     }),
     {
       name: STORAGE_KEYS.preferences,

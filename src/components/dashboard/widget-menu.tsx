@@ -77,6 +77,7 @@ export function WidgetMenu({ open, title, items, onClose, testID }: WidgetMenuPr
                 borderBottomWidth={1}
                 borderColor="$rowBorder"
                 opacity={item.disabled ? 0.4 : 1}
+                cursor={item.disabled ? 'default' : 'pointer'}
                 pressStyle={{ bg: '$trackBg' }}
                 onPress={
                   item.disabled

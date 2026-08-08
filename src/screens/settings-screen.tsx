@@ -1,15 +1,14 @@
 import { useRouter } from 'expo-router';
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
+import { useWindowDimensions } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Paragraph, ScrollView, Separator, SizableText, XStack, YStack } from 'tamagui';
 
 import { ToolbarButton } from '@/components/telemetry/surfaces';
-import { Label, UiText } from '@/components/telemetry/text';
+import { Label } from '@/components/telemetry/text';
 import { GEOMETRY, type AccentName } from '@/theme/telemetry';
 
 import { AccentPicker, AppearanceSection } from '@/components/settings/appearance-section';
-import { usePreferencesStore } from '@/state/preferences';
-import { WidgetFrame } from '@/widgets/widget-frame';
 import { AccentTick } from '@/components/telemetry/chips';
 import { useEndpointStatus } from '@/data/feed-store';
 import { useEndpointState } from '@/hooks/useEndpointState';
@@ -160,43 +159,20 @@ function ServerRow({
 type SettingsTab = 'endpoints' | 'appearance';
 
 /**
- * One real widget, painted by the appearance being edited.
- *
- * The reference pins its appearance panel to the window edge and lets the dashboard behind it be
- * the preview. A full-screen route cannot do that, so the tab brings one card *with* it — the
- * actual `WidgetFrame` of the first widget on the board, live data and all, rather than a mock-up
- * that could drift from what the board really draws.
+ * From this width up, settings is a **side panel over the live dashboard** rather than a full
+ * screen — the reference pins its appearance panel to the window edge for the same reason: the
+ * board behind it is the preview, and a full-screen form on a desktop monitor is mostly margin.
+ * The route is presented as a transparent modal (see `app/_layout.tsx`), so the dashboard stays
+ * mounted, polling and repainting under every change.
  */
-function AppearancePreview() {
-  const widgets = useWidgetsStore((state) => state.widgets);
-  const first = [...widgets].sort((a, b) => a.y - b.y || a.x - b.x)[0];
-
-  if (!first) {
-    return (
-      <UiText variant="footer" color="$textDim" testID="appearance-preview-empty">
-        Add a widget to see these settings on a real one.
-      </UiText>
-    );
-  }
-
-  return (
-    <YStack height={190} testID="appearance-preview">
-      <WidgetFrame
-        widget={first}
-        editMode={false}
-        footprint={null}
-        onEdit={() => undefined}
-        onRemove={() => undefined}
-        onFootprint={() => undefined}
-      />
-    </YStack>
-  );
-}
+const SIDEBAR_FROM_PX = 920;
+const SIDEBAR_WIDTH_PX = 460;
 
 export function SettingsScreen() {
   const router = useRouter();
   const [tab, setTab] = useState<SettingsTab>('endpoints');
-  const cancelAppearance = usePreferencesStore((state) => state.cancelAppearance);
+  const { width } = useWindowDimensions();
+  const sidebar = width >= SIDEBAR_FROM_PX;
   const servers = useEndpointsStore((state) => state.endpoints);
   const defaultEndpointId = useEndpointsStore((state) => state.defaultEndpointId);
   const setDefaultEndpoint = useEndpointsStore((state) => state.setDefaultEndpoint);
@@ -212,51 +188,37 @@ export function SettingsScreen() {
     removeEndpoint(id);
   };
 
-  /**
-   * Leaving with an experiment still in the draft would strand it — the board would go on
-   * repainting from a value nothing on screen is offering to save any more.
-   *
-   * On unmount rather than in the Done handler, because Done is not the only way out: the Android
-   * back gesture and a swipe-back both leave without pressing anything. Committing clears the draft
-   * itself, so a saved appearance is not affected.
-   */
-  useEffect(() => () => cancelAppearance(), [cancelAppearance]);
-
   const close = () => router.back();
 
-  return (
-    <SafeAreaView style={{ flex: 1 }} edges={['top', 'left', 'right']}>
-      <YStack flex={1} bg="$appBg" p={GEOMETRY.gridPadding} gap="$3">
-        <XStack items="center" gap="$3">
-          <Label flex={1} variant="readout">
-            Settings
-          </Label>
-          <ToolbarButton label="Done" onPress={close} testID="settings-close" />
-        </XStack>
+  const panel = (
+    <YStack flex={1} bg="$appBg" p={GEOMETRY.gridPadding} gap="$3" testID="settings-panel">
+      <XStack items="center" gap="$3">
+        <Label flex={1} variant="readout">
+          Settings
+        </Label>
+        <ToolbarButton label="Done" onPress={close} testID="settings-close" />
+      </XStack>
 
-        <XStack gap={8}>
-          <ToolbarButton
-            label="Endpoints"
-            active={tab === 'endpoints'}
-            onPress={() => setTab('endpoints')}
-            testID="settings-tab-endpoints"
-          />
-          <ToolbarButton
-            label="Appearance"
-            active={tab === 'appearance'}
-            onPress={() => setTab('appearance')}
-            testID="settings-tab-appearance"
-          />
-        </XStack>
+      <XStack gap={8}>
+        <ToolbarButton
+          label="Endpoints"
+          active={tab === 'endpoints'}
+          onPress={() => setTab('endpoints')}
+          testID="settings-tab-endpoints"
+        />
+        <ToolbarButton
+          label="Appearance"
+          active={tab === 'appearance'}
+          onPress={() => setTab('appearance')}
+          testID="settings-tab-appearance"
+        />
+      </XStack>
 
-        {tab === 'appearance' ? (
-          <ScrollView flex={1} showsVerticalScrollIndicator={false}>
-            <YStack gap="$3">
-              <AppearancePreview />
-              <AppearanceSection />
-            </YStack>
-          </ScrollView>
-        ) : (
+      {tab === 'appearance' ? (
+        <ScrollView flex={1} showsVerticalScrollIndicator={false}>
+          <AppearanceSection />
+        </ScrollView>
+      ) : (
         <ScrollView flex={1} showsVerticalScrollIndicator={false}>
           <YStack gap="$3">
             {servers.length === 0 ? (
@@ -291,18 +253,44 @@ export function SettingsScreen() {
             )}
           </YStack>
         </ScrollView>
-        )}
+      )}
 
-        {tab === 'endpoints' && (
-          <ToolbarButton
-            label="Add endpoint"
-            glyph="+"
-            variant="primary"
-            onPress={() => router.push({ pathname: '/settings/server/[id]', params: { id: 'new' } })}
-            testID="add-server"
-          />
-        )}
-      </YStack>
+      {tab === 'endpoints' && (
+        <ToolbarButton
+          label="Add endpoint"
+          glyph="+"
+          variant="primary"
+          onPress={() => router.push({ pathname: '/settings/server/[id]', params: { id: 'new' } })}
+          testID="add-server"
+        />
+      )}
+    </YStack>
+  );
+
+  if (!sidebar) {
+    return (
+      <SafeAreaView style={{ flex: 1 }} edges={['top', 'left', 'right']}>
+        {panel}
+      </SafeAreaView>
+    );
+  }
+
+  return (
+    <SafeAreaView style={{ flex: 1 }} edges={['top', 'left', 'right']}>
+      <XStack flex={1}>
+        {/* Deliberately unpainted: dimming the board would falsify the one thing the panel is
+            beside it to show — what the appearance being edited actually looks like. */}
+        <YStack
+          flex={1}
+          onPress={close}
+          role="button"
+          aria-label="Close settings"
+          testID="settings-scrim"
+        />
+        <YStack width={SIDEBAR_WIDTH_PX} borderLeftWidth={1} borderColor="$borderColor">
+          {panel}
+        </YStack>
+      </XStack>
     </SafeAreaView>
   );
 }

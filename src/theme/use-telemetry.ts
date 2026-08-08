@@ -49,11 +49,11 @@ export function useThemeMode(): ThemeMode {
 }
 
 /**
- * What the board is painted with, **draft first**.
+ * What the board is painted with.
  *
- * Nothing reads `preferences.appearance` directly. The editor writes a draft and every surface in
- * the app re-resolves from it, which is what makes the dashboard behind the settings screen the
- * live preview — and Cancel a matter of dropping the draft rather than undoing writes.
+ * Nothing reads `preferences.appearance` directly. The editor writes the store on every change and
+ * every surface in the app re-resolves from it — which is what makes the dashboard beside the
+ * settings panel the live preview, with nothing to commit and nothing to keep in step.
  */
 export function useAppearance(): Appearance {
   return usePreferencesStore(selectAppearance);

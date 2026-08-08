@@ -2,7 +2,7 @@ import { usePreferencesStore } from '@/state/preferences';
 import { DEFAULT_APPEARANCE } from '@/theme/appearance';
 import { resetEndpointIdCounter, useEndpointsStore } from '@/state/endpoints';
 import { resetWidgetIdCounter, useWidgetsStore } from '@/state/widgets';
-import { renderWithProviders, waitFor } from '@/test-utils/render';
+import { fireEvent, renderWithProviders } from '@/test-utils/render';
 import { heroFontSize } from '@/utils/typeScale';
 
 
@@ -119,7 +119,6 @@ describe('SettingsScreen — appearance', () => {
       theme: 'dark',
       summaryStripVisible: true,
       appearance: DEFAULT_APPEARANCE,
-      appearanceDraft: null,
     });
   });
 
@@ -156,8 +155,8 @@ describe('SettingsScreen — appearance', () => {
 
     await user.press(getByTestId('reading-scale-large'));
 
-    // The draft is what the board reads, so the scale is live before anything is saved.
-    expect(usePreferencesStore.getState().appearanceDraft?.interfaceScale).toBe(1.2);
+    // Applied and stored on press — every appearance control commits immediately.
+    expect(usePreferencesStore.getState().appearance.interfaceScale).toBe(1.2);
     // Hero numerals size off the widget box, so nothing here can reach them —
     // see utils/typeScale.ts. This is a contract, not an implementation detail.
     expect(heroFontSize(400)).toBe(40);
@@ -171,70 +170,38 @@ describe('SettingsScreen — appearance', () => {
     expect(usePreferencesStore.getState().summaryStripVisible).toBe(false);
   });
 
-  it('edits a draft, and Save is what makes it the board', async () => {
-    const { getByTestId, user } = await openAppearance();
+  it('takes a typed hex colour the moment it parses', async () => {
+    const { getByTestId } = await openAppearance();
 
-    await user.press(getByTestId('appearance-gridGap-24'));
+    fireEvent.changeText(getByTestId('appearance-gridBackground-dark-hex'), '#123456');
 
-    // Nothing is stored yet; the board is repainting from the draft.
-    expect(usePreferencesStore.getState().appearance.gridGap).toBe(DEFAULT_APPEARANCE.gridGap);
-    expect(usePreferencesStore.getState().appearanceDraft?.gridGap).toBe(24);
-
-    await user.press(getByTestId('appearance-save'));
-
-    expect(usePreferencesStore.getState().appearance.gridGap).toBe(24);
-    expect(usePreferencesStore.getState().appearanceDraft).toBeNull();
-  });
-
-  it('cancels by dropping the draft, with nothing to undo', async () => {
-    const { getByTestId, user } = await openAppearance();
-
-    await user.press(getByTestId('appearance-widgetRadius-16'));
-    await user.press(getByTestId('appearance-cancel'));
-
-    expect(usePreferencesStore.getState().appearanceDraft).toBeNull();
-    expect(usePreferencesStore.getState().appearance.widgetRadius).toBe(
-      DEFAULT_APPEARANCE.widgetRadius,
+    expect(usePreferencesStore.getState().appearance.gridBackground.dark.color).toBe('#123456');
+    // The other scheme's half is untouched — colours are edited per scheme.
+    expect(usePreferencesStore.getState().appearance.gridBackground.light.color).toBe(
+      DEFAULT_APPEARANCE.gridBackground.light.color,
     );
   });
 
-  it('leaving the screen drops an uncommitted draft too', async () => {
-    // On unmount, not on Done: the Android back gesture and a swipe-back both leave the screen
-    // without pressing anything, and a stranded draft would go on repainting the board.
-    const { getByTestId, user, unmount } = await openAppearance();
+  it('ignores a hex that does not parse', async () => {
+    const { getByTestId } = await openAppearance();
 
-    await user.press(getByTestId('appearance-gridGap-24'));
-    expect(usePreferencesStore.getState().appearanceDraft).not.toBeNull();
+    fireEvent.changeText(getByTestId('appearance-gridBackground-dark-hex'), 'nonsense');
 
-    unmount();
-
-    // React 19 runs a passive effect's cleanup after the commit, so the assertion waits for it
-    // rather than assuming `unmount()` was synchronous.
-    await waitFor(() => expect(usePreferencesStore.getState().appearanceDraft).toBeNull());
-    expect(usePreferencesStore.getState().appearance.gridGap).toBe(DEFAULT_APPEARANCE.gridGap);
+    expect(usePreferencesStore.getState().appearance.gridBackground.dark.color).toBe(
+      DEFAULT_APPEARANCE.gridBackground.dark.color,
+    );
   });
 
   it('resets one setting without touching the rest', async () => {
-    const { getByTestId, user } = await openAppearance();
+    usePreferencesStore.getState().setAppearance('gridGap', 24);
+    usePreferencesStore.getState().setAppearance('widgetRadius', 16);
 
-    await user.press(getByTestId('appearance-gridGap-24'));
-    await user.press(getByTestId('appearance-widgetRadius-16'));
+    const { getByTestId, user } = await openAppearance();
     await user.press(getByTestId('appearance-gridGap-reset'));
 
-    const draft = usePreferencesStore.getState().appearanceDraft;
-    expect(draft?.gridGap).toBe(DEFAULT_APPEARANCE.gridGap);
-    expect(draft?.widgetRadius).toBe(16);
-  });
-
-  it('picks a colour per scheme, and an opacity for both', async () => {
-    const { getByTestId, user } = await openAppearance();
-
-    await user.press(getByTestId('appearance-gridBackground-alpha-50'));
-
-    const draft = usePreferencesStore.getState().appearanceDraft;
-    expect(draft?.gridBackground.dark.alpha).toBe(0.5);
-    // A window is either see-through or it is not — one control moves both schemes.
-    expect(draft?.gridBackground.light.alpha).toBe(0.5);
+    const appearance = usePreferencesStore.getState().appearance;
+    expect(appearance.gridGap).toBe(DEFAULT_APPEARANCE.gridGap);
+    expect(appearance.widgetRadius).toBe(16);
   });
 
   it('hides widget headers', async () => {
@@ -242,7 +209,7 @@ describe('SettingsScreen — appearance', () => {
 
     await user.press(getByTestId('toggle-widget-headers'));
 
-    expect(usePreferencesStore.getState().appearanceDraft?.hideWidgetHeaders).toBe(true);
+    expect(usePreferencesStore.getState().appearance.hideWidgetHeaders).toBe(true);
   });
 
   it('recolours an endpoint, and the change sticks', async () => {

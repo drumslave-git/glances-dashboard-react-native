@@ -11,8 +11,11 @@ add-widget picker whose cards draw the real widget live, a full screen that hand
 board — and the appearance layer the user owns: per-scheme translucent colours, spacing and corners,
 hidden headers, a per-widget background, and a desktop window the board can be seen through. All of
 it verified on the built Windows app and on Android against a live server, with all three release
-artefacts built locally. **v0.2.0 is committed and waiting to be pushed**, which is what starts the
-release.
+artefacts built locally. **v0.2.0 shipped**, and the owner's first desktop review of it filed a
+punch list — rendering bugs (bars, chart axes, launch blink, window opacity), missing pointer
+cursors, and an appearance panel that needed rethinking. All of it is fixed and verified on the
+desktop window (see *Post-0.2.0*, 2026-08-08); **an Android pass over those changes is the one
+thing owed before the next version bump.**
 
 **How it got here.** M0–M9 ported a Vite + React + **Mantine** web app with five *generic* widgets,
 and shipped v0.1.2. On 2026-08-04 the reference was re-examined at **v1.13.0** and turned out to be
@@ -1157,6 +1160,72 @@ hidden headers, and the corner mark bringing a header back by press. Two things 
   checked. The tag-based rule is also self-healing where the old one was not: a version that failed
   to ship stays untagged, so the next push tries again.
 
+### Post-0.2.0 — the owner's desktop review — `done on desktop, Android pass pending` (2026-08-08)
+
+The owner ran v0.2.0 on Windows and filed a punch list. Every item was reproduced, fixed, and
+verified in the real Tauri window over CDP (screenshots of the board, the settings sidebar, and an
+OS-level capture proving window transparency). Tests 729/40 suites, typecheck and lint clean.
+
+**Rendering bugs**
+
+- [x] **GPU / summary / per-core bars drew no bars on web and desktop.** `Meter`'s track carried
+  `flex={1}` for the inline rung; in the *stacked* rung the track sits in a column, where web
+  resolves `flex: 1` to `flex-basis: 0%` and the track collapses to zero height. Native is
+  unaffected, which is why every Android run looked fine and the Jest suite (native preset) stayed
+  green — the same blind spot as the v0.1.1 blank window. The track now grows only inline.
+- [x] **Charts lost their axes on desktop windows** (the "legend visible in the picker, missing on
+  the board" report). `MIN_COL_WIDTH_PX` was 290 — just *under* the 300pt compact breakpoint — so
+  for whole bands of window widths every column stretched to 290–300 and the entire board silently
+  rendered the compact rung: no gridlines, no Y labels, while the picker previewed the regular
+  rendering at 360. The floor is now 302, so a placed column can never measure compact; compact is
+  back to meaning "window narrower than one column". A test now sweeps common window widths.
+- [x] **Launch blinked the "no endpoints" empty state.** The dashboard rendered before the
+  persisted stores had answered, and `endpoints.length === 0` is not a fact until hydration. The
+  screen now paints the bare canvas until both stores report hydrated.
+- [x] **Window opacity did nothing.** The runtime repaint covered `html` and `body` but not
+  `#root`, which keeps its hard-coded near-black from `public/index.html` — one opaque layer
+  between the board and the desktop, so the user's alpha only made the board look pale. `#root` is
+  now repainted too; verified with an OS-level screen capture showing another window bleeding
+  through the board at 45%.
+
+**Pointer affordances (desktop ran with a text caret everywhere)**
+
+- [x] Every pressable declares its cursor: `pointer` on buttons, chips, swatches, menu rows and
+  picker cards; `grab`/`grabbing` on the whole card in edit mode; `nwse-resize` on the corner
+  grip. Tamagui does not infer a cursor from `onPress`, so this is now part of the two shared
+  button components plus the handful of ad-hoc pressables.
+
+**Appearance settings, reworked end to end**
+
+- [x] **One apply model: immediate.** The draft/Save/Cancel machinery is gone — every control
+  applies and persists on change, exactly as the theme buttons always did. The panel said
+  "previewing, Save to keep" for half its controls while the other half committed on press; that
+  inconsistency (and the Save pair buried at the bottom of the scroll) was the owner's sharpest
+  complaint. Undo is the per-field Reset; `preferences.ts` shrank accordingly.
+- [x] **Settings is a side panel on wide viewports** (≥ 920pt): the route is a transparent modal
+  over the dashboard, so the live board sits beside the panel and repaints under every change —
+  the reference's own layout, and what makes immediate apply legible. Narrow viewports keep the
+  full-screen layout. The one-widget `AppearancePreview` died with this: the real board is the
+  preview.
+- [x] **Real colour controls.** Swatches stay, joined by a hex field and — on web/desktop — the OS
+  colour picker (`<input type="color">`; legal because the RN tree on web renders through
+  react-dom). The reference's own wording: "anything genuinely outside the system is still
+  reachable through the OS color picker and the hex field". Opacity is a 10–100% slider, sizes
+  (gap, padding, radius, border) are sliders over their schema ranges — the fixed five-step rows
+  are gone.
+
+**Notes (2026-08-08)**
+
+- The desktop window was driven with `WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS` set when launching
+  `target/debug/glances-dashboard.exe` **directly** — through `npx tauri dev` the variable never
+  reached WebView2 and CDP stayed dark.
+- CDP surfaced a stream of pre-existing unhandled rejections from `@tauri-apps/plugin-http`
+  ("The resource id N is invalid") as polls complete or abort. Invisible to the user, not
+  introduced here, filed as a follow-up.
+- **Android has not been re-run on these changes.** They are all in shared code; the slider,
+  the settings-as-modal presentation and the immediate-apply model all need one emulator pass
+  before the next release bump.
+
 ---
 
 ## Decisions log
@@ -1254,6 +1323,10 @@ hidden headers, and the corner mark bringing a header back by press. Two things 
 | 2026-08-06 | Colours are per scheme; **opacity is not** | A hex that reads on near-black is wrong on paper-white, but a window is either see-through or it is not, and an alpha that differs between schemes is a difference nobody can see two of at once |
 | 2026-08-06 | The desktop window is **always** created transparent | Neither Tauri nor Electron can toggle it later; an opaque grid colour — the default — is what makes the window look solid, and the alpha is what makes the transparency visible |
 | 2026-08-07 | v0.2.0 is a **minor** bump, and it is committed but not pushed | M15 and M16 are features, so a patch bump would describe them wrongly. Pushing is what starts the release, and starting a release is the owner's call |
+| 2026-08-08 | Appearance settings **apply immediately** — the draft/Save/Cancel model is gone | Two apply models in one panel (theme and strip on press, colours behind Save) taught the user to trust neither; the per-field Reset is the undo. Supersedes the 2026-08-06 draft rows above |
+| 2026-08-08 | Settings renders as a **transparent-modal side panel** on wide viewports | The dashboard behind it is the live preview, which is what the reference does and what the one-widget `AppearancePreview` failed to be |
+| 2026-08-08 | The colour editor offers **hex + OS picker** beyond the swatches; sizes are sliders | The reference's own §7.6 wording; the fixed steps were an over-restriction this port introduced, not a design rule |
+| 2026-08-08 | `MIN_COL_WIDTH_PX` sits **above** the compact breakpoint (302 > 300) | A stretched column must never render compact — 290 put whole desktop windows into the degraded rung with no way to see why |
 | 2026-08-04 | **The transparent window is in scope** | Confirmed with the owner. It is what makes the appearance model's alpha mean anything on desktop. Note the reference's own trade: a transparent window cannot be edge-resized and loses the WM drop shadow, so it is only requested when an alpha is actually below 1 |
 | 2026-08-04 | This app **replaces** the Electron one — same product name, same install path, no rename | Confirmed with the owner. They are not meant to coexist, so the install collision is not a case to design around |
 

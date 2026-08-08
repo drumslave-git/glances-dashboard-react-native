@@ -49,6 +49,11 @@ export default function RootLayout() {
     if (Platform.OS !== 'web' || typeof document === 'undefined') return;
     document.documentElement.style.backgroundColor = shell;
     document.body.style.backgroundColor = shell;
+    // `#root` carries the same hard-coded near-black as html/body (public/index.html). Skipping
+    // it leaves one opaque layer between the board and the desktop, and the window never becomes
+    // see-through no matter what alpha the user picks.
+    const root = document.getElementById('root');
+    if (root) root.style.backgroundColor = shell;
   }, [shell]);
   // The poller outlives every screen — it holds the ring buffers a chart draws from and the
   // backoff state a failing endpoint accumulates — so it is started once here and torn down only
@@ -73,7 +78,20 @@ export default function RootLayout() {
                     headerShown: false,
                     contentStyle: { backgroundColor: shell },
                   }}
-                />
+                >
+                  {/* Settings floats over the dashboard instead of replacing it: on a wide
+                      window it renders as a side panel and the board behind it is the live
+                      preview of every appearance change. The screen itself paints its own
+                      surface, so the transparent content style leaks nothing on phones. */}
+                  <Stack.Screen
+                    name="settings/index"
+                    options={{
+                      presentation: 'transparentModal',
+                      animation: 'none',
+                      contentStyle: { backgroundColor: 'transparent' },
+                    }}
+                  />
+                </Stack>
               )}
             </SafeAreaProvider>
           </QueryClientProvider>

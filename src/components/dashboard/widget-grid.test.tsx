@@ -28,7 +28,7 @@ beforeEach(() => {
     .mockResolvedValue({ ok: true, text: async () => JSON.stringify({ total: 1 }) }) as unknown as typeof fetch;
   useEndpointsStore.setState({ endpoints: [], defaultEndpointId: null });
   useWidgetsStore.setState({ widgets: [] });
-  usePreferencesStore.setState({ appearance: DEFAULT_APPEARANCE, appearanceDraft: null });
+  usePreferencesStore.setState({ appearance: DEFAULT_APPEARANCE });
 });
 
 afterEach(() => {
@@ -51,7 +51,7 @@ function makeWidgets(count: number): WidgetInstance[] {
   }));
 }
 
-/** A grid wide enough for two columns (2 × 290 + 3 × 11 = 613) and tall enough for several rows. */
+/** A grid wide enough for two columns (2 × 302 + 3 × 11 = 637) and tall enough for several rows. */
 const GRID_BOX = { x: 0, y: 0, width: 700, height: 800 };
 
 async function renderGrid(widgets: WidgetInstance[], editMode = true, box = GRID_BOX) {

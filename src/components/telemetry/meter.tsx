@@ -62,13 +62,17 @@ export function Meter({
     </XStack>
   );
 
-  const track = (
+  // `grow` is only for the inline rung, where the track shares a row and takes the leftover
+  // width. In the stacked rung the track is a child of a *column*: there `flex: 1` resolves to
+  // `flex-basis: 0%` on web, which collapses the track to zero height — the bars simply vanish
+  // on web and desktop while native looks fine. Stretch provides the width in a column.
+  const track = (grow: boolean) => (
     <YStack
       height={GEOMETRY.meterTrack}
       rounded={GEOMETRY.radius.bar}
       overflow="hidden"
       bg="$trackBg"
-      flex={1}
+      {...(grow ? { flex: 1 } : null)}
       testID={testID ? `${testID}-track` : undefined}
     >
       <YStack width={`${filled}%`} height="100%" rounded={GEOMETRY.radius.bar} overflow="hidden">
@@ -97,7 +101,7 @@ export function Meter({
     return (
       <XStack items="center" gap={10} testID={testID}>
         <MeterLabel label={label} />
-        {track}
+        {track(true)}
         {readoutRow}
       </XStack>
     );
@@ -109,7 +113,7 @@ export function Meter({
         <MeterLabel label={label} />
         {readoutRow}
       </XStack>
-      {track}
+      {track(false)}
     </YStack>
   );
 }

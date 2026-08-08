@@ -133,6 +133,7 @@ export function StateChip({ label, accent, onPress, testID }: StateChipProps) {
       borderWidth={1}
       shrink={0}
       pressStyle={onPress ? { opacity: 0.65 } : undefined}
+      {...(onPress ? { cursor: 'pointer' as const } : {})}
       onPress={onPress}
       style={{
         borderColor: skin ? skin.chip.border : t.border.chip,

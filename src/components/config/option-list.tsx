@@ -81,6 +81,7 @@ export function OptionList({
               minH={32}
               rounded={GEOMETRY.radius.control}
               borderWidth={1}
+              cursor="pointer"
               pressStyle={{ opacity: 0.65 }}
               onPress={() => onSelect(option)}
               role="button"

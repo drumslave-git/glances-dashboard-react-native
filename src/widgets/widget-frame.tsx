@@ -195,7 +195,7 @@ function WidgetFrameInner({
         <Pressable
           onPress={() => setPinned(true)}
           aria-label={`Show header for ${title}`}
-          style={{ position: 'absolute', top: padding.top, left: padding.left, zIndex: 1 }}
+          style={{ position: 'absolute', top: padding.top, left: padding.left, zIndex: 1, cursor: 'pointer' }}
           testID={`widget-corner-${widget.id}`}
         >
           <AccentTick color={endpoint?.color ?? null} state={endpointState} />
@@ -208,6 +208,7 @@ function WidgetFrameInner({
         <Pressable
           onPress={appearance.hideWidgetHeaders && !editMode ? () => setPinned(false) : undefined}
           disabled={!appearance.hideWidgetHeaders || editMode}
+          style={appearance.hideWidgetHeaders && !editMode ? { cursor: 'pointer' } : undefined}
           aria-label={
             appearance.hideWidgetHeaders && !editMode ? `Hide header for ${title}` : undefined
           }

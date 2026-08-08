@@ -49,6 +49,12 @@ export function DashboardScreen() {
   const summaryStripVisible = usePreferencesStore((state) => state.summaryStripVisible);
 
   const endpoints = useEndpointsStore((state) => state.endpoints);
+  // Both stores load from AsyncStorage after the first render. Until they have, "no endpoints"
+  // and "no widgets" are not facts — flashing the empty state's call-to-action on every launch
+  // reads as "something is broken" for the moment it takes localStorage to answer.
+  const endpointsHydrated = useEndpointsStore((state) => state.hasHydrated);
+  const widgetsHydrated = useWidgetsStore((state) => state.hasHydrated);
+  const hydrated = endpointsHydrated && widgetsHydrated;
   const defaultServer = useEndpointsStore((state) => selectEndpointById(state, state.defaultEndpointId));
   // Selecting the sorted array directly would hand useSyncExternalStore a new
   // reference on every render and loop, so sort outside the selector.
@@ -115,7 +121,11 @@ export function DashboardScreen() {
 
         {showStrip && <SummaryStrip {...summary} testID="dashboard-summary" />}
 
-        {endpoints.length === 0 ? (
+        {!hydrated ? (
+          // The stores are still reading from disk: paint the canvas and nothing else. Any words
+          // here would be wrong for somebody, and the wait is a few frames.
+          <YStack flex={1} testID="dashboard-hydrating" />
+        ) : endpoints.length === 0 ? (
           <EmptyState
             message="No endpoints configured. Add one to start reading metrics."
             action="Add an endpoint"

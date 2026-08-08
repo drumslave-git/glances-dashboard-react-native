@@ -319,7 +319,14 @@ function GridCell({
       testID={`widget-cell-${widget.id}`}
     >
       <GestureDetector gesture={pan}>
-        <YStack flex={1} opacity={dragging ? 0.9 : 1} {...panPointer}>
+        <YStack
+          flex={1}
+          opacity={dragging ? 0.9 : 1}
+          // The whole card is the drag surface in edit mode, and a pointer should say so.
+          // Buttons inside still win with their own `pointer`.
+          cursor={editMode ? (dragging ? 'grabbing' : 'grab') : undefined}
+          {...panPointer}
+        >
           <WidgetFrame
             widget={widget}
             editMode={editMode}
@@ -343,6 +350,7 @@ function GridCell({
             justify="flex-end"
             pr={4}
             pb={4}
+            cursor="nwse-resize"
             role="button"
             aria-label={`Resize ${widget.title ?? widget.type}`}
             testID={`widget-grip-${widget.id}`}

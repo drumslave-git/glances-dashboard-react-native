@@ -165,6 +165,7 @@ export function WidgetConfigScreen() {
                   <YStack
                     key={entry.id}
                     onPress={() => rebind(entry.id)}
+                    cursor="pointer"
                     opacity={entry.id === endpointId ? 1 : 0.5}
                     role="button"
                     aria-label={`Endpoint ${entry.name}`}
@@ -212,6 +213,7 @@ export function WidgetConfigScreen() {
                       items="center"
                       justify="center"
                       borderWidth={1}
+                      cursor="pointer"
                       pressStyle={{ opacity: 0.6 }}
                       // Both schemes get the same hex here: a per-widget override is a mark on one
                       // card, and asking for it twice would cost more than the mark is worth. The

@@ -163,6 +163,9 @@ export function ToolbarButton({
       borderWidth={1}
       opacity={disabled ? 0.45 : 1}
       pressStyle={{ opacity: 0.65 }}
+      // Web only; ignored on native. Every pressable in this app declares its cursor, because
+      // Tamagui does not infer one from `onPress` and a button under a text caret reads as inert.
+      cursor={disabled ? 'default' : 'pointer'}
       onPress={disabled ? undefined : onPress}
       role="button"
       aria-label={label}
@@ -223,6 +226,7 @@ export function GlyphButton({
       justify="center"
       rounded={GEOMETRY.radius.control}
       pressStyle={{ opacity: 0.6 }}
+      cursor="pointer"
       onPress={onPress}
       role="button"
       aria-label={label}

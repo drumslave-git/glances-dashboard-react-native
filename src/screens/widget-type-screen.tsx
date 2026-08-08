@@ -147,6 +147,7 @@ export function WidgetTypeScreen() {
                       <YStack
                         key={entry.id}
                         onPress={() => setEndpointId(entry.id)}
+                        cursor="pointer"
                         opacity={entry.id === endpointId ? 1 : 0.5}
                         role="button"
                         aria-label={`Endpoint ${entry.name}`}
@@ -177,6 +178,7 @@ export function WidgetTypeScreen() {
                         borderColor={chosen ? '$accent' : '$borderColor'}
                         bg="$widgetBg"
                         opacity={available ? 1 : 0.45}
+                        cursor={available ? 'pointer' : 'default'}
                         pressStyle={available ? { borderColor: '$borderRaised' } : undefined}
                         onPress={available ? () => setType(definition.type) : undefined}
                         role="button"
@@ -226,6 +228,7 @@ export function WidgetTypeScreen() {
                         borderWidth={1}
                         borderColor="$borderColor"
                         bg="$widgetBg"
+                        cursor="pointer"
                         pressStyle={{ borderColor: '$borderRaised' }}
                         onPress={() => chooseMetric(definition.id)}
                         role="button"
@@ -276,6 +279,7 @@ export function WidgetTypeScreen() {
                           borderWidth={1}
                           borderColor={footprint === entry ? '$accent' : '$borderColor'}
                           bg="$widgetBg"
+                          cursor="pointer"
                           pressStyle={{ borderColor: '$borderRaised' }}
                           onPress={() => setFootprint(entry)}
                           role="button"

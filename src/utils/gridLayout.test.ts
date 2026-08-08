@@ -31,7 +31,7 @@ const positions = (items: GridItem[]) =>
 
 describe('tracks', () => {
   it('fits as many tracks as clear the floor, counting the surround', () => {
-    // 1200 = 11 surround + 3 × 290 + 3 × 11 … and a fourth would need 301 more.
+    // 1200 = 11 surround + 3 × 302 + 3 × 11 with 47 to spare … a fourth would need 313 more.
     expect(tracksFor(1200, MIN_COL_WIDTH_PX, 11)).toBe(3);
     expect(tracksFor(1300, MIN_COL_WIDTH_PX, 11)).toBe(4);
   });
@@ -51,6 +51,16 @@ describe('tracks', () => {
 
   it('a phone-width grid is one column', () => {
     expect(columnsForWidth(393, 11)).toBe(1);
+  });
+
+  it('a stretched column never renders its widgets compact', () => {
+    // The compact breakpoint is 300 (`sizeClassForWidth`). Whatever width the grid measures,
+    // a column at the floor must clear it — 290 used to sit under it, and whole desktop
+    // windows rendered every widget compact (v0.2.0's missing chart axes).
+    for (const width of [620, 950, 1200, 1500, 1526, 1900, 2560]) {
+      const columns = columnsForWidth(width, 11);
+      expect(columnWidth(width, columns, 11)).toBeGreaterThan(300);
+    }
   });
 
   it('spans a footprint across its tracks and the gaps between them', () => {
