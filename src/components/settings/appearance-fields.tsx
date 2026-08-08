@@ -166,6 +166,9 @@ function HexField({
       height={30}
       width={92}
       px={8}
+      // Android's TextInput carries its own vertical padding, which inside a fixed 30pt height
+      // pushes the baseline low enough to clip the glyphs — zero it and let the height centre.
+      py={0}
       rounded={4}
       borderWidth={1}
       borderColor="$borderColor"

@@ -14,8 +14,8 @@ it verified on the built Windows app and on Android against a live server, with 
 artefacts built locally. **v0.2.0 shipped**, and the owner's first desktop review of it filed a
 punch list — rendering bugs (bars, chart axes, launch blink, window opacity), missing pointer
 cursors, and an appearance panel that needed rethinking. All of it is fixed and verified on the
-desktop window (see *Post-0.2.0*, 2026-08-08); **an Android pass over those changes is the one
-thing owed before the next version bump.**
+desktop window **and re-verified on the Android emulator** (see *Post-0.2.0*, 2026-08-08). Ready
+for the owner's next release bump.
 
 **How it got here.** M0–M9 ported a Vite + React + **Mantine** web app with five *generic* widgets,
 and shipped v0.1.2. On 2026-08-04 the reference was re-examined at **v1.13.0** and turned out to be
@@ -1160,7 +1160,7 @@ hidden headers, and the corner mark bringing a header back by press. Two things 
   checked. The tag-based rule is also self-healing where the old one was not: a version that failed
   to ship stays untagged, so the next push tries again.
 
-### Post-0.2.0 — the owner's desktop review — `done on desktop, Android pass pending` (2026-08-08)
+### Post-0.2.0 — the owner's desktop review — `done` (2026-08-08)
 
 The owner ran v0.2.0 on Windows and filed a punch list. Every item was reproduced, fixed, and
 verified in the real Tauri window over CDP (screenshots of the board, the settings sidebar, and an
@@ -1222,9 +1222,12 @@ OS-level capture proving window transparency). Tests 729/40 suites, typecheck an
 - CDP surfaced a stream of pre-existing unhandled rejections from `@tauri-apps/plugin-http`
   ("The resource id N is invalid") as polls complete or abort. Invisible to the user, not
   introduced here, filed as a follow-up.
-- **Android has not been re-run on these changes.** They are all in shared code; the slider,
-  the settings-as-modal presentation and the immediate-apply model all need one emulator pass
-  before the next release bump.
+- **The Android pass ran the same day** (Pixel_10 emulator, live TCLOUD server, whole flow driven
+  over adb): correct empty state after hydration, endpoint added and Online, settings keeps its
+  full-screen layout on a phone under the new transparent-modal presentation, the appearance
+  sliders drag and apply immediately, and the GPU bars variant draws its bars in the picker and on
+  the placed widget. It caught one real bug: Android's `TextInput` own vertical padding clipped
+  the hex field's glyphs inside its fixed 30pt height — fixed with `py={0}`.
 
 ---
 
