@@ -370,8 +370,10 @@ disappearing mid-session; `scripts/run-android.ps1` does not set it.
   `localStorage` is per-origin — so servers and widgets configured in one are invisible to the
   other. Expected, but surprising the first time a dev window opens to an empty dashboard.
 - **The service worker registers on `http://tauri.localhost`** and, since `public/sw.js`
-  caches nothing, does nothing. Left alone rather than special-cased: suppressing it would
-  need a desktop-only branch in the HTML shell for no behavioural gain.
+  caches nothing, does nothing. ~~Left alone rather than special-cased: suppressing it would
+  need a desktop-only branch in the HTML shell for no behavioural gain.~~ **Wrong — see the
+  2026-08-12 note**: a worker controlling that origin broke every desktop launch's first
+  navigation, and the shell now has exactly that desktop-only branch.
 - The release profile is tuned for size (`lto`, `opt-level = "s"`, `strip`, `panic = "abort"`).
   There is no Rust in the hot path — `main.rs` opens a window — so nothing trades away.
 - **A black screen a minute into an Android launch is normal, not a failure.** The first
@@ -1252,6 +1254,34 @@ as evidence):
   and reverted. When Microsoft ships the fix, the existing `transparent: true` +
   `put_DefaultBackgroundColor` path resumes working with no change on our side; re-test then.
 
+### Post-0.2.1 — the desktop launch flash was our own service worker (2026-08-12)
+
+The owner reported Edge's "can't reach this page" (`ERR_FAILED` for `http://tauri.localhost/`)
+flashing for about a second on **every** desktop launch. Traced over CDP by polling the target
+list at 40 ms during startup:
+
+- **Cause: `public/sw.js`.** Once the pass-through worker controls `tauri.localhost` (first run
+  onward), each launch's initial navigation is answered by the worker's `fetch(event.request)`.
+  That fetch, issued from the just-woken service-worker process, escapes Tauri's
+  `WebResourceRequested` interception at cold start and goes to the real network, where
+  `tauri.localhost` does not exist — navigation fails at ~2.8 s, Edge's error page shows for
+  ~1 s, then Chromium's error-page auto-reload retries and interception works. Timeline with
+  worker: app usable at **~3.9 s**; identical launch after unregistering it: **~0.4 s**, no
+  error state. Re-registering brought the flash straight back — cause confirmed both directions.
+- **Fix: `public/index.html` never registers the worker on `tauri.localhost`**, and on that
+  origin actively unregisters any leftover registration, so installs that already carry a worker
+  from older builds heal themselves (their first launch after updating still flashes once — the
+  old worker is in control until then — and every launch after that is clean). The worker keeps
+  its job on the web build, where "Install app" is the whole point of it.
+- The 2026-08-05 M14 note saying suppressing the worker on desktop had "no behavioural gain"
+  was written before this failure mode was known; it is struck through above.
+- Verified on the rebuilt release exe, with one detour worth recording: launches that were
+  ended with `Stop-Process -Force` kept flashing, because **force-killing the exe loses
+  recent WebView2 profile writes** — the unregistration commits to the profile's LevelDB
+  lazily, so each kill threw it away and the next launch met the same old worker. With the
+  window closed normally, one launch unregisters it and every launch after is clean:
+  CDP-traced app-ready at ~320 ms, no service-worker target, no error page, twice in a row.
+
 ---
 
 ## Decisions log
@@ -1287,6 +1317,7 @@ as evidence):
 | 2026-08-03 | Web keeps the drag **and** gains ←/→ move buttons | A mouse has no long press to discover and a keyboard has no drag; the gesture still serves touch-screen browsers, so this is an addition rather than the plan's either/or fallback |
 | 2026-08-03 | The web `<head>` lives in `public/index.html`, not `app/+html.tsx` | `+html.tsx` is only consulted by the rendered output modes; a `single` export takes its shell from `public/index.html` when present |
 | 2026-08-03 | `public/sw.js` registers a service worker that caches nothing | Chrome gates "Install app" on a worker with a fetch handler, but a dashboard of live values gains nothing from an offline cache and would inherit stale-bundle bugs |
+| 2026-08-12 | The service worker is never registered on `tauri.localhost`, and leftovers are unregistered there | A worker controlling that origin routes the first navigation of every desktop launch through its `fetch()`, which escapes Tauri's request interception at cold start and flashes `ERR_FAILED` for a second (and costs ~3.5 s) per launch |
 | 2026-08-03 | Accessibility labels are written `aria-label` | Tamagui forwards unknown props to the DOM on web, so `accessibilityLabel` is an invalid attribute there; `aria-label` works on both platforms |
 | 2026-08-03 | `setup:skia-web` runs from `web` and `build:web` | A fresh clone that forgot the manual step got a web build whose charts silently did not draw |
 | 2026-08-03 | The chart square carries an explicit `position="relative"` | Tamagui emits no `position` on web, so the absolutely-positioned slice labels escaped the chart box; native was unaffected because every RN `View` is already a containing block |

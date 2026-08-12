@@ -76,12 +76,28 @@
       // Registering a worker is what unlocks "Install app" in Chrome; see
       // public/sw.js for why it caches nothing. Browsers only allow this over
       // https or on localhost, so a plain-http deployment simply skips it.
+      //
+      // Never on tauri.localhost: the desktop app is already installed, and a
+      // worker controlling that origin routes every launch's first navigation
+      // through its fetch(), which escapes Tauri's WebResourceRequested
+      // interception at cold start and hits the real network — ERR_FAILED,
+      // ~1 s of Edge's error page, and ~3 s of launch time until Chromium's
+      // auto-reload retries. The unregister branch heals installs that already
+      // have a worker from builds before this guard.
       if ('serviceWorker' in navigator) {
-        window.addEventListener('load', function () {
-          navigator.serviceWorker.register('/sw.js').catch(function (error) {
-            console.warn('Service worker registration failed:', error);
+        if (window.location.hostname === 'tauri.localhost') {
+          navigator.serviceWorker.getRegistrations().then(function (registrations) {
+            registrations.forEach(function (registration) {
+              registration.unregister();
+            });
           });
-        });
+        } else {
+          window.addEventListener('load', function () {
+            navigator.serviceWorker.register('/sw.js').catch(function (error) {
+              console.warn('Service worker registration failed:', error);
+            });
+          });
+        }
       }
     </script>
   </body>
