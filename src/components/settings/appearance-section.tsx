@@ -31,11 +31,12 @@ const THEMES: { value: ThemePreference; label: string }[] = [
   { value: 'system', label: 'System' },
 ];
 
-/** Named steps rather than a slider: text has four legible sizes, not a continuum worth walking. */
+/** Named steps rather than a slider: text has a few legible sizes, not a continuum worth walking. */
 const SCALES: { value: number; label: string }[] = [
   { value: READING_SCALE_MIN, label: 'Small' },
   { value: 1, label: 'Default' },
   { value: 1.2, label: 'Large' },
+  { value: 1.6, label: 'Larger' },
   { value: READING_SCALE_MAX, label: 'Largest' },
 ];
 
@@ -102,7 +103,8 @@ export function AppearanceSection() {
           ))}
         </XStack>
         <UiText variant="footer" color="$textDim">
-          Labels, table rows and axis ticks only. Hero numbers size off their widget.
+          Scales all text — labels, menus, forms, and the big widget numbers, which also size off
+          their widget box.
         </UiText>
       </YStack>
 

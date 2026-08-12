@@ -9,6 +9,8 @@ import {
   gaugeValueFontSize,
   headerRung,
   heroFontSize,
+  heroPairFontSizes,
+  heroRowHeight,
   heroUnitFontSize,
   meterRung,
   readingSize,
@@ -77,10 +79,32 @@ describe('display channel', () => {
     expect(heroUnitFontSize(460)).toBe(19);
   });
 
-  it('ignores the user scale entirely', () => {
-    // There is no scale parameter to pass — that is the point. A 450pt card
-    // renders the same hero whatever the reading setting says.
+  it('defaults to the box clamp when no scale is passed', () => {
     expect(heroFontSize(450)).toBe(45);
+  });
+
+  it('takes the user scale after the box clamp, under a width ceiling', () => {
+    // The owner's 2026-08-12 override of the old "reading channel only" rule.
+    expect(heroFontSize(400, 1.2)).toBe(48);
+    expect(heroFontSize(900, 2)).toBe(92);
+    // A small card caps the scaled hero at ~a quarter of its width.
+    expect(heroFontSize(200, 2)).toBeLessThanOrEqual(52);
+    // The row reserved for the hero follows the same size.
+    expect(heroRowHeight(900, 1)).toBe(Math.round(46 * 0.88) + 12);
+    expect(heroRowHeight(900, 2)).toBeGreaterThan(heroRowHeight(900, 1));
+  });
+
+  it('shrinks a hero pair to fit one row, flagging the tight fit', () => {
+    // Roomy at the default scale: the full display sizes come back untouched.
+    expect(heroPairFontSizes(623, 1)).toEqual({ hero: 46, stat: 26, fitted: false });
+    // At the largest scale the pair shrinks together instead of truncating a numeral.
+    const tight = heroPairFontSizes(623, 2);
+    expect(tight.fitted).toBe(true);
+    expect(tight.hero).toBeLessThan(heroFontSize(623, 2));
+    expect(tight.stat).toBeLessThan(statFontSize(623, 2));
+    // Both directions must still be legible.
+    expect(tight.hero).toBeGreaterThanOrEqual(24);
+    expect(tight.stat).toBeGreaterThanOrEqual(15);
   });
 
   it('sizes network stat numerals and gauge centres off their own boxes', () => {

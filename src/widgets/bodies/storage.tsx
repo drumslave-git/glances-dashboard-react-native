@@ -5,10 +5,15 @@
  * them can be empty, and every reading can be absent. "Not reported" is drawn as a dash and never
  * as zero — a GPU whose vendor omits fan speed is not a GPU with a stopped fan.
  */
+import { useMemo } from 'react';
+
+import { ChartView } from '@/components/charts/chart-view';
 import { useLatest } from '@/data/feed-store';
 import { sensorThresholdLevel, thresholdLevel, thresholdTone } from '@/data/thresholds';
 import { useTelemetry } from '@/theme/use-telemetry';
 import type { FsItem, GpuItem, SensorItem } from '@/types/glances';
+import { recentSamples, TIME_WINDOWS } from '@/utils/sampleBuffer';
+import { chartRung } from '@/utils/typeScale';
 import { formatFieldValue, formatLooseNumber } from '@/utils/widgetData';
 
 import { ScrollView, XStack, YStack } from 'tamagui';
@@ -17,9 +22,17 @@ import { MicroLabel, MonoText } from '@/components/telemetry/text';
 
 import { DataGrid, GridStack } from '../data-grid';
 import { flexibleColumnWidth, visibleColumns, type GridColumn } from '../grid-columns';
-import { MeterList, TextReadout, type MeterRow, type ReadoutGroup, type ReadoutRow } from '../readout';
+import {
+  MeterList,
+  TextReadout,
+  meterRowHeights,
+  type MeterRow,
+  type ReadoutGroup,
+  type ReadoutRow,
+} from '../readout';
 import { dedupeMounts, shortenMountPath } from '../rates';
 import type { WidgetProps } from '../types';
+import { useMultiSeries } from '../use-series';
 
 const bytes = (value: number | null | undefined) =>
   value == null ? null : formatFieldValue(value, 'bytes');
@@ -263,17 +276,42 @@ function visibleGpus(items: GpuItem[], config: Record<string, unknown>): GpuItem
   return selected.length > 0 ? items.filter((gpu) => selected.includes(gpu.gpuId)) : items;
 }
 
+/**
+ * Leftover height below the rails that earns a utilization trace — the reference's
+ * `TRACE_FROM_PX` (ref GpuWidget). Measured from the box the meters leave behind, not from the
+ * size tier, because how much is left depends on how many GPUs share the panel.
+ */
+const GPU_TRACE_FROM_PX = 72;
+
+/** The stacked meter list's gap, matching `MeterList`. */
+const METER_STACKED_GAP = 4;
+
 export function GpuWidget({
   endpointId,
   config,
   mode,
+  width,
   height,
   accentColor,
   status,
   testID,
 }: WidgetProps) {
   const gpus = visibleGpus(useLatest<GpuItem[]>(endpointId, 'gpu') ?? [], config);
-  const { t } = useTelemetry();
+  const { t, size } = useTelemetry();
+
+  // Utilization history per visible GPU. Keyed by the ids, so a fresh payload array every poll
+  // does not rebuild the selectors — the same identity rule as the network chart.
+  const gpuIds = gpus.map((gpu) => gpu.gpuId).join(',');
+  const selectors = useMemo(() => {
+    const map: Record<string, (list: GpuItem[]) => number | null> = {};
+    for (const gpu of gpus) {
+      const id = gpu.gpuId;
+      map[id] = (list) => list.find((item) => item.gpuId === id)?.proc ?? null;
+    }
+    return map;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [gpuIds]);
+  const series = useMultiSeries<GpuItem[]>(endpointId, 'gpu', selectors);
 
   const toneFor = (key: string, value: number | null) => {
     const tone = thresholdTone(thresholdLevel(status?.limits, key, value));
@@ -303,8 +341,52 @@ export function GpuWidget({
     ];
   });
 
+  // The rails at their stacked height, then the label row, then the trace in whatever is left —
+  // but only when "whatever is left" is a chart worth reading rather than a sliver.
+  const stackedRow = meterRowHeights(size('metric')).stacked;
+  const metersHeight = rows.length * stackedRow + Math.max(0, rows.length - 1) * METER_STACKED_GAP;
+  const labelHeight = size('micro') + 8;
+  const traceHeight = height - metersHeight - labelHeight;
+  const showTrace = !mode.short && gpus.length > 0 && traceHeight >= GPU_TRACE_FROM_PX;
+
+  if (!showTrace) {
+    return (
+      <MeterList rows={rows} mode={mode} height={height} accentColor={accentColor} testID={testID} />
+    );
+  }
+
+  const layers = gpus.map((gpu, index) => ({
+    samples: recentSamples(series[gpu.gpuId] ?? [], TIME_WINDOWS['5m']),
+    color: index === 0 ? accentColor : t.signal.info,
+    fill: index === 0,
+  }));
+
   return (
-    <MeterList rows={rows} mode={mode} height={height} accentColor={accentColor} testID={testID} />
+    <YStack flex={1} minH={0} gap={4} testID={testID}>
+      <YStack height={metersHeight}>
+        <MeterList
+          rows={rows}
+          mode={mode}
+          height={metersHeight}
+          accentColor={accentColor}
+          {...(testID ? { testID: `${testID}-meters` } : {})}
+        />
+      </YStack>
+      <MicroLabel mt={4}>Utilization · 5m</MicroLabel>
+      <YStack flex={1} minH={0}>
+        <ChartView
+          kind="line"
+          segments={[]}
+          metric="gpu-utilization"
+          series={layers}
+          domain={[0, 100]}
+          rung={chartRung(mode.tier, traceHeight)}
+          accentColor={accentColor}
+          explicitSize={{ width: width - 34, height: traceHeight }}
+          {...(testID ? { testID: `${testID}-trace` } : {})}
+        />
+      </YStack>
+    </YStack>
   );
 }
 

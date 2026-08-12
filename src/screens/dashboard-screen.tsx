@@ -72,6 +72,11 @@ export function DashboardScreen() {
   const handleToggleFullScreen = useCallback(() => toggleFullScreen(), [toggleFullScreen]);
   const openPicker = useCallback(() => router.push('/widget/pick'), [router]);
   const openSettings = useCallback(() => router.push('/settings'), [router]);
+  // Stable, or every summary-strip poll re-renders every widget body through the memo'd frames.
+  const openWidgetConfig = useCallback(
+    (id: string) => router.push({ pathname: '/widget/[id]', params: { id } }),
+    [router],
+  );
 
   useHardwareBackExit(fullScreen, handleExitFullScreen);
   useBrowserFullScreen(fullScreen, handleExitFullScreen);
@@ -145,7 +150,7 @@ export function DashboardScreen() {
           <WidgetGrid
             widgets={widgets}
             editMode={editMode}
-            onEdit={(id) => router.push({ pathname: '/widget/[id]', params: { id } })}
+            onEdit={openWidgetConfig}
             onRemove={removeWidget}
             onLayoutChange={applyLayout}
           />

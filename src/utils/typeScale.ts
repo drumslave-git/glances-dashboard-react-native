@@ -52,7 +52,7 @@ export function sizeModeFor(width: number, height: number): SizeMode {
 
 /** User font-size multiplier bounds. Wider than this stops being legible either way. */
 export const READING_SCALE_MIN = 0.85;
-export const READING_SCALE_MAX = 1.6;
+export const READING_SCALE_MAX = 2;
 export const READING_SCALE_DEFAULT = 1;
 
 export function clampReadingScale(scale: number): number {
@@ -90,6 +90,8 @@ export const TYPE = {
   axis: { size: 9, min: 9, letterSpacing: 0, weight: '400' },
   /** Device line under a widget header. */
   device: { size: 10, min: 9, letterSpacing: 0, weight: '400' },
+  /** Chrome headings — a settings row's name, a screen title. */
+  title: { size: 15, min: 13, letterSpacing: 0, weight: '600' },
 } as const;
 
 export type TypeRole = keyof typeof TYPE;
@@ -114,26 +116,69 @@ function clamp(min: number, value: number, max: number): number {
 }
 
 /* ------------------------------------------------------------------ *
- * Display channel — sizes off the box, never off the user's setting.
+ * Display channel — sizes off the box first, then the user's multiplier.
+ *
+ * The handoff kept the user's setting out of this channel entirely; the owner
+ * overrode that after living with it — "largest" that leaves the hero at 46pt
+ * reads as the setting being ignored. The box still leads: the multiplier is
+ * applied *after* the box clamp, and a width ceiling keeps a scaled hero from
+ * outgrowing a small card. Layouts that reserve room for these numerals must
+ * size off the same functions (see `heroRowHeight`), never off constants.
  * ------------------------------------------------------------------ */
 
-/** Hero numeral: `clamp(26, 10cqw, 46)`. */
-export function heroFontSize(widgetWidth: number): number {
-  return Math.round(clamp(26, widgetWidth * 0.1, 46));
+/** Hero numeral: `clamp(26, 10cqw, 46)`, then the user's multiplier. */
+export function heroFontSize(widgetWidth: number, scale = 1): number {
+  const base = clamp(26, widgetWidth * 0.1, 46);
+  return Math.round(clamp(20, base * clampReadingScale(scale), Math.max(26, widgetWidth * 0.24)));
 }
 
 /** The unit rides the hero at the handoff's 19/46 ratio. */
-export function heroUnitFontSize(widgetWidth: number): number {
-  return Math.round(heroFontSize(widgetWidth) * (19 / 46));
+export function heroUnitFontSize(widgetWidth: number, scale = 1): number {
+  return Math.round(heroFontSize(widgetWidth, scale) * (19 / 46));
+}
+
+/**
+ * The row a hero occupies above a chart: the numeral's line height plus its
+ * breathing room (the handoff's 52pt at the reference 46pt hero).
+ */
+export function heroRowHeight(widgetWidth: number, scale = 1): number {
+  return Math.round(heroFontSize(widgetWidth, scale) * 0.88) + 12;
 }
 
 /** Secondary display numerals (network throughput): 26 at the reference width. */
-export function statFontSize(widgetWidth: number): number {
-  return Math.round(clamp(18, widgetWidth * 0.062, 26));
+export function statFontSize(widgetWidth: number, scale = 1): number {
+  const base = clamp(18, widgetWidth * 0.062, 26);
+  return Math.round(clamp(15, base * clampReadingScale(scale), Math.max(18, widgetWidth * 0.16)));
 }
 
-export function statUnitFontSize(widgetWidth: number): number {
-  return Math.round(clamp(9, statFontSize(widgetWidth) * (12 / 26), 12));
+export function statUnitFontSize(widgetWidth: number, scale = 1): number {
+  return Math.round(clamp(9, statFontSize(widgetWidth, scale) * (12 / 26), 24));
+}
+
+/**
+ * Display sizes when **two** numerals share the hero row (a bidirectional rate pair).
+ *
+ * Each direction is budgeted ~10 mono characters at the JetBrains Mono ~0.62em advance; when the
+ * pair at full display size cannot fit the row, both shrink by the same factor — the numbers stay
+ * whole, because truncating a numeral is worse than shrinking it. `fitted` reports that the row is
+ * tight, which is the caller's cue to drop derived stats before anything else.
+ */
+export function heroPairFontSizes(
+  widgetWidth: number,
+  scale = 1,
+): { hero: number; stat: number; fitted: boolean } {
+  const hero = heroFontSize(widgetWidth, scale);
+  const stat = statFontSize(widgetWidth, scale);
+  // The card's 34pt side padding plus the 20pt gap between the pair.
+  const budget = Math.max(120, widgetWidth - 54);
+  const need = (hero + stat) * 10 * 0.62;
+  if (need <= budget) return { hero, stat, fitted: false };
+  const fit = budget / need;
+  return {
+    hero: Math.max(24, Math.round(hero * fit)),
+    stat: Math.max(15, Math.round(stat * fit)),
+    fitted: true,
+  };
 }
 
 /** Ring gauge centre value: 32 inside the reference 158pt ring. */

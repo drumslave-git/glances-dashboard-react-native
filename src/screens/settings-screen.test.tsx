@@ -150,15 +150,16 @@ describe('SettingsScreen — appearance', () => {
     expect(usePreferencesStore.getState().theme).toBe('light');
   });
 
-  it('sets the reading-channel scale, and only that channel', async () => {
+  it('sets the font scale, which reaches the display channel too', async () => {
     const { getByTestId, user } = await openAppearance();
 
     await user.press(getByTestId('reading-scale-large'));
 
     // Applied and stored on press — every appearance control commits immediately.
     expect(usePreferencesStore.getState().appearance.interfaceScale).toBe(1.2);
-    // Hero numerals size off the widget box, so nothing here can reach them —
-    // see utils/typeScale.ts. This is a contract, not an implementation detail.
+    // The owner's 2026-08-12 review overrode the old "reading channel only" rule: a hero
+    // numeral now takes the multiplier as well, after its box clamp. This is the contract.
+    expect(heroFontSize(400, 1.2)).toBe(48);
     expect(heroFontSize(400)).toBe(40);
   });
 

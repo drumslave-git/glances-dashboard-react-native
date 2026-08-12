@@ -39,7 +39,7 @@ interface WidgetMenuProps {
 }
 
 export function WidgetMenu({ open, title, items, onClose, testID }: WidgetMenuProps) {
-  const { t, accent } = useTelemetry();
+  const { t, accent, size } = useTelemetry();
 
   return (
     <Modal visible={open} transparent animationType="fade" onRequestClose={onClose}>
@@ -97,7 +97,9 @@ export function WidgetMenu({ open, title, items, onClose, testID }: WidgetMenuPr
                 <Text
                   fontFamily="$body"
                   fontWeight="500"
-                  fontSize={14}
+                  // The reading channel, one step up: an action row is chrome, and chrome follows
+                  // the user's font-size setting like everything else.
+                  fontSize={Math.max(14, size('readout'))}
                   style={{ color: item.destructive ? accent('amber').text : t.text.primary }}
                 >
                   {item.label}

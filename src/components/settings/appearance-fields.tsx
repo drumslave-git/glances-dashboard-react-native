@@ -133,6 +133,7 @@ function HexField({
   label: string;
   testID?: string;
 }) {
+  const { size } = useTelemetry();
   const [draft, setDraft] = useState(value);
   // A change arriving from outside (a swatch, the OS picker, a reset) wins over a stale draft.
   // Reconciled during render — React's sanctioned "adjust state when a prop changes" shape —
@@ -162,9 +163,9 @@ function HexField({
       autoCapitalize="none"
       autoCorrect={false}
       fontFamily="$mono"
-      fontSize={12}
-      height={30}
-      width={92}
+      fontSize={size('metric')}
+      height={Math.max(30, Math.round(size('metric') * 2.5))}
+      width={Math.max(92, Math.round(size('metric') * 7.7))}
       px={8}
       // Android's TextInput carries its own vertical padding, which inside a fixed 30pt height
       // pushes the baseline low enough to clip the glyphs — zero it and let the height centre.

@@ -2,10 +2,10 @@ import { useRouter } from 'expo-router';
 import { useState } from 'react';
 import { useWindowDimensions } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Paragraph, ScrollView, Separator, SizableText, XStack, YStack } from 'tamagui';
+import { ScrollView, Separator, XStack, YStack } from 'tamagui';
 
 import { ToolbarButton } from '@/components/telemetry/surfaces';
-import { Label } from '@/components/telemetry/text';
+import { Label, MicroLabel, UiText } from '@/components/telemetry/text';
 import { GEOMETRY, type AccentName } from '@/theme/telemetry';
 
 import { AccentPicker, AppearanceSection } from '@/components/settings/appearance-section';
@@ -64,43 +64,41 @@ function ServerRow({
           state={state}
           testID={`server-accent-tick-${server.id}`}
         />
-        <SizableText size="$6" flex={1} numberOfLines={1}>
+        <UiText variant="title" flex={1} numberOfLines={1} color="$textPrimary">
           {server.name}
-        </SizableText>
+        </UiText>
         {isDefault && (
-          <SizableText size="$1" opacity={0.7} testID={`server-default-${server.id}`}>
-            DEFAULT
-          </SizableText>
+          <MicroLabel testID={`server-default-${server.id}`}>DEFAULT</MicroLabel>
         )}
       </XStack>
 
-      <Paragraph size="$2" opacity={0.7} numberOfLines={1}>
+      <UiText variant="metric" color="$textDim" numberOfLines={1}>
         {server.url}
-      </Paragraph>
+      </UiText>
 
       {/* State first, because it answers the question someone opens this screen with. The version
           rides along once the probe has reported it — it is how you tell "reachable" from
           "reachable and speaking a dialect we support". */}
       <XStack items="center" gap="$2" flexWrap="wrap">
-        <SizableText size="$2" testID={`server-state-${server.id}`}>
+        <UiText variant="metric" testID={`server-state-${server.id}`}>
           {endpointStateLabel(state)}
-        </SizableText>
+        </UiText>
         {status?.glancesVersion && (
-          <Paragraph size="$2" opacity={0.6} testID={`server-version-${server.id}`}>
+          <UiText variant="metric" color="$textDim" testID={`server-version-${server.id}`}>
             Glances {status.glancesVersion}
-          </Paragraph>
+          </UiText>
         )}
       </XStack>
       {status?.lastError && state !== 'disabled' && (
-        <Paragraph size="$2" opacity={0.6} testID={`server-error-${server.id}`}>
+        <UiText variant="metric" color="$textDim" testID={`server-error-${server.id}`}>
           {status.lastError}
-        </Paragraph>
+        </UiText>
       )}
 
-      <Paragraph size="$2" opacity={0.5}>
+      <UiText variant="metric" color="$textDim">
         {describeRefresh(server.pollIntervalMs)}
         {widgetCount > 0 ? ` · ${widgetCount} widget${widgetCount === 1 ? '' : 's'}` : ''}
-      </Paragraph>
+      </UiText>
 
       <AccentPicker
         color={server.color}
@@ -110,11 +108,11 @@ function ServerRow({
 
       {confirming ? (
         <YStack gap="$2">
-          <Paragraph size="$2">
+          <UiText variant="metric">
             {widgetCount > 0
               ? `Delete this endpoint and its ${widgetCount} widget${widgetCount === 1 ? '' : 's'}?`
               : 'Delete this endpoint?'}
-          </Paragraph>
+          </UiText>
           <XStack gap="$2">
             <ToolbarButton
               label="Delete"
@@ -223,9 +221,9 @@ export function SettingsScreen() {
           <YStack gap="$3">
             {servers.length === 0 ? (
               <YStack py="$6" justify="center" items="center" gap="$3">
-                <Paragraph text="center" opacity={0.7} testID="endpoints-empty">
+                <UiText variant="readout" color="$textDim" text="center" testID="endpoints-empty">
                   No endpoints yet. Add the address of a machine running `glances -w`.
-                </Paragraph>
+                </UiText>
               </YStack>
             ) : (
               <YStack>

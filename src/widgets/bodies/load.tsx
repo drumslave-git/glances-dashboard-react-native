@@ -8,6 +8,7 @@
 import { useMemo } from 'react';
 
 import { useLatest } from '@/data/feed-store';
+import { useTelemetry } from '@/theme/use-telemetry';
 import type { LoadStats } from '@/types/glances';
 import { formatLooseNumber } from '@/utils/widgetData';
 
@@ -32,6 +33,7 @@ export function LoadChartWidget({
   accentColor,
   testID,
 }: WidgetProps) {
+  const { t } = useTelemetry();
   const load = useLatest<LoadStats>(endpointId, 'load');
   const normalize = config.normalize === true;
 
@@ -64,6 +66,9 @@ export function LoadChartWidget({
       sizeClass={mode.tier}
       accentColor={accentColor}
       timeWindow={windowFromConfig(config)}
+      // Three windows of the same queue: the instant reading leads in the accent, the smoothed
+      // ones recede — same rule as the CPU chart's user/system split.
+      colors={{ min1: accentColor, min5: t.signal.info, min15: t.signal.muted }}
       {...(testID ? { testID } : {})}
     />
   );

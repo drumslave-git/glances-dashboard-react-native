@@ -11,7 +11,7 @@ import { XStack, YStack } from 'tamagui';
 import { Meter } from '@/components/telemetry/meter';
 import { MicroLabel, MonoText, UiText } from '@/components/telemetry/text';
 import { useTelemetry } from '@/theme/use-telemetry';
-import { meterRung, type SizeMode } from '@/utils/typeScale';
+import type { MeterRung, SizeMode } from '@/utils/typeScale';
 
 export interface ReadoutRow {
   label: string;
@@ -42,7 +42,22 @@ export function rowsThatFit(height: number, rowHeight: number, headings = 0): nu
   return Math.max(0, Math.floor(usable / rowHeight));
 }
 
-const ROW_HEIGHT = 20;
+/**
+ * Row heights, derived from the reading-channel sizes they hold. At the default scale these are
+ * exactly the old constants (20pt rows, 30/18pt meters); at a larger scale the rows grow with
+ * their text instead of overlapping it — fixed row metrics were how the "Largest" setting broke
+ * every readout at once.
+ */
+export function readoutRowHeight(rowFontSize: number): number {
+  return Math.max(20, Math.round(rowFontSize * 1.74));
+}
+
+export function meterRowHeights(metricFontSize: number): { stacked: number; inline: number } {
+  return {
+    stacked: Math.max(30, Math.round(metricFontSize * 2.5)),
+    inline: Math.max(18, Math.round(metricFontSize * 1.5)),
+  };
+}
 
 export function TextReadout({
   groups,
@@ -55,9 +70,10 @@ export function TextReadout({
   height: number;
   testID?: string;
 }) {
-  const { t } = useTelemetry();
+  const { t, size } = useTelemetry();
+  const rowHeight = readoutRowHeight(size('row'));
   const headings = groups.filter((group) => group.label).length;
-  const budget = rowsThatFit(height, ROW_HEIGHT, headings);
+  const budget = rowsThatFit(height, rowHeight, headings);
 
   let remaining = budget;
   const visible: ReadoutGroup[] = [];
@@ -81,7 +97,7 @@ export function TextReadout({
             <XStack
               key={row.label}
               items="center"
-              height={ROW_HEIGHT}
+              height={rowHeight}
               gap={8}
               borderBottomWidth={1}
               borderColor="$rowBorder"
@@ -148,8 +164,15 @@ export function MeterList({
   accentColor: string;
   testID?: string;
 }) {
-  const rung = mode.short ? 'value' : meterRung(rows.length, height);
-  const perRow = rung === 'stacked' ? 30 : rung === 'inline' ? 18 : ROW_HEIGHT;
+  const { size } = useTelemetry();
+  const heights = meterRowHeights(size('metric'));
+  // `meterRung` with its thresholds scaled: at the default scale this is exactly the tested
+  // 30/18 ladder, and at a larger one a rung needs proportionally more room.
+  const per = rows.length > 0 ? height / rows.length : 0;
+  const rung: MeterRung =
+    mode.short || per < heights.inline ? 'value' : per < heights.stacked ? 'inline' : 'stacked';
+  const perRow =
+    rung === 'stacked' ? heights.stacked : rung === 'inline' ? heights.inline : readoutRowHeight(size('row'));
   // At least one: a panel too short for any row should show the first rather than nothing, which
   // would be indistinguishable from a widget that failed to load.
   const visible = rows.slice(0, Math.max(1, rowsThatFit(height, perRow)));

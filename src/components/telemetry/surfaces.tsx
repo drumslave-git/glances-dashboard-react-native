@@ -97,7 +97,8 @@ export function Wordmark({ compact = false }: { compact?: boolean }) {
       <Text
         fontFamily="$body"
         fontWeight="700"
-        fontSize={13}
+        // Rides the reading scale like its sibling, or the two halves of the wordmark diverge.
+        fontSize={Math.max(13, size('readout'))}
         letterSpacing={2.6}
         color="$textPrimary"
       >

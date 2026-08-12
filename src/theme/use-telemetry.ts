@@ -22,7 +22,7 @@ export interface Telemetry {
   mode: ThemeMode;
   /** Surfaces, rules and text colours. */
   t: TelemetryTokens;
-  /** The reading-channel multiplier. Never apply it to a hero numeral. */
+  /** The user's font-size multiplier. Display numerals apply it through `typeScale`'s clamps. */
   scale: number;
   /** Reading-channel font size for a named role, floors already applied. */
   size: (role: TypeRole) => number;

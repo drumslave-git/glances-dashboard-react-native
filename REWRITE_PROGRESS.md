@@ -14,8 +14,11 @@ it verified on the built Windows app and on Android against a live server, with 
 artefacts built locally. **v0.2.0 shipped**, and the owner's first desktop review of it filed a
 punch list — rendering bugs (bars, chart axes, launch blink, window opacity), missing pointer
 cursors, and an appearance panel that needed rethinking. All of it is fixed and verified on the
-desktop window **and re-verified on the Android emulator** (see *Post-0.2.0*, 2026-08-08). Ready
-for the owner's next release bump.
+desktop window **and re-verified on the Android emulator** (see *Post-0.2.0*, 2026-08-08). The
+second review (2026-08-12) filed seven more — font scale not unified, one-colour bidirectional
+charts, an unnamed "busiest" pick, no GPU trace, mismatched branding, a stripped fullscreen
+header, and a choppy drag — all fixed and verified on the built Windows app against the live
+server (see *Post-0.2.2*). Ready for the owner's next release bump.
 
 **How it got here.** M0–M9 ported a Vite + React + **Mantine** web app with five *generic* widgets,
 and shipped v0.1.2. On 2026-08-04 the reference was re-examined at **v1.13.0** and turned out to be
@@ -1282,6 +1285,69 @@ list at 40 ms during startup:
   window closed normally, one launch unregisters it and every launch after is clean:
   CDP-traced app-ready at ~320 ms, no service-worker target, no error page, twice in a row.
 
+### Post-0.2.2 — the owner's second desktop review (2026-08-12)
+
+Seven complaints, all addressed and verified on the built Windows exe against the live TCloud
+server (CDP-driven, isolated `WEBVIEW2_USER_DATA_FOLDER` so the owner's real board was untouched):
+
+1. **The font-size setting now reaches everything — including the display channel.** The owner
+   overrode M8's "reading channel only" rule: a hero that ignores "Largest" reads as the setting
+   being broken. `heroFontSize`/`statFontSize` now take the multiplier *after* their box clamp and
+   under a width ceiling, `heroRowHeight` replaces the hard-coded 52pt so layouts follow, and the
+   ring gauge stays box-only (its value must fit the ring). The chrome that bypassed the scale is
+   on it now: the widget ⋮ menu, the endpoints list, both forms (a scaled `TextField` wraps
+   Tamagui's `Input`, whose static tokens were the root cause), the appearance hex fields, and the
+   wordmark's first half. Readout and meter **row heights derive from the text they hold**
+   (`readoutRowHeight`/`meterRowHeights` — the old fixed 20/30/18pt metrics overlapped at large
+   scales and are those functions' floors at the default). Scale runs 0.85–2.0 in five steps; the
+   settings test asserting the hero *cannot* scale now asserts that it does.
+2. **Bidirectional charts are two colours.** `SeriesPanel` callers pass per-series colours:
+   network rx / disk read draw `signal.info` (cyan), tx / write draw `signal.up` (green) — the
+   pairing `telemetry.ts` reserved green for all along, and the reference's own rule. A second
+   busiest item keeps the direction hues at 0.45 alpha. Load (accent/info/muted) and memory
+   (accent/warning for swap) stopped drawing three-lines-one-colour too. Two latent bugs fixed on
+   the way: the Y domain and the peak/avg stats were computed from `layers[0]` alone, so an upload
+   spike above the download trace was clipped.
+3. **"Busiest" names its pick.** `SeriesPanel` grew labelled heroes (`heroStats`): the network
+   chart leads with `ENP5S0 ↓ 1.65 MB/s` beside `ENP5S0 ↑ 230 KB/s`, each label and numeral in its
+   trace's colour — which also answers "what does the big number mean". Disk I/O the same with
+   read/write. When the pair outgrows the row (large scale × modest card), both numerals shrink
+   together and the peak/avg cluster is dropped first — `heroPairFontSizes`, pure and tested,
+   because flex-shrink alone silently discarded the upload numeral.
+4. **The GPU widget grows a utilization trace** when the box below its rails measures ≥ 72px
+   (the reference's `TRACE_FROM_PX`, measured not inferred from the tier): a `UTILIZATION · 5M`
+   line chart from the already-buffered `gpu` history, per-GPU layers, 0–100 domain.
+5. **One brand.** The stock Expo chevron is gone: `scripts/make-app-icons.js` renders the
+   in-app `LogoMark` geometry (lime tile, 6/25 corner, 0.32 punched diamond) into every icon —
+   Expo set, Android adaptive + monochrome, favicon, splash, PWA set via `icons:web`, and the
+   Windows set via `npx tauri icon`. Window title, `productName`, `expo.name`, PWA manifest and
+   the shell all say **Glances Telemetry**, matching the wordmark; `mainBinaryName` pins the exe
+   name so paths and docs stay valid, and the `#101113` remnants became the real `#07080a`.
+   *Caveat for the next release: the NSIS installer name and Start-Menu entry change with
+   `productName`; the identifier is unchanged.*
+6. **Full screen reveals the same toolbar.** The fullScreen branch stripped Add/Edit/settings
+   down to one "Leave" button, which read as a different header. The bar is now identical in both
+   modes; ⛶ turns primary-bright in full screen and is the way out (it always was).
+7. **The drag is continuous.** The dragged card rides the pointer via a transform on Reanimated
+   shared values — written from the gesture worklet (native) and the pointermove handler (web),
+   zero React work per frame — over an origin frozen at drag start, with the snapping preview
+   reflowing only the *neighbours* (130 ms transitions, as before). On release the remainder
+   animates into the slot instead of teleporting. Per-crossing cost dropped too: `GridCell` is
+   memoized on rect values (a fresh rect object per render made every card re-render on every
+   crossing) and the dashboard's `onEdit` is stable so summary-strip polls stop re-rendering
+   every widget body. Verified over CDP: computed transform tracks the pointer 1:1
+   (`translate(80,40)` after an 80 px move), neighbours reflow mid-drag, a drop at the origin
+   leaves the layout byte-identical. Three targeted lint disables document why shared-value
+   writes from gesture callbacks are correct here — the rule that forbade them is what made
+   M15's drag snap in the first place.
+
+Also: the dead `src/components/config/` pair (formatter-editor, option-list — orphaned since the
+typed-widget realignment retired the generic config screen) is deleted.
+
+**Not re-verified on Android in this pass** — the changes are platform-shared (the drag's native
+path runs the same code the Jest gesture tests drive), but the emulator round was skipped; run
+`npm run android:emulator` before the next release if in doubt.
+
 ---
 
 ## Decisions log
@@ -1384,6 +1450,9 @@ list at 40 ms during startup:
 | 2026-08-08 | Settings renders as a **transparent-modal side panel** on wide viewports | The dashboard behind it is the live preview, which is what the reference does and what the one-widget `AppearancePreview` failed to be |
 | 2026-08-08 | The colour editor offers **hex + OS picker** beyond the swatches; sizes are sliders | The reference's own §7.6 wording; the fixed steps were an over-restriction this port introduced, not a design rule |
 | 2026-08-08 | `MIN_COL_WIDTH_PX` sits **above** the compact breakpoint (302 > 300) | A stretched column must never render compact — 290 put whole desktop windows into the degraded rung with no way to see why |
+| 2026-08-12 | **The display channel takes the font-size multiplier** — after its box clamp, under a width ceiling; supersedes M8's "reading channel only" rule | Owner's review: a setting the hero ignores reads as broken. What the old rule protected against is kept by scaling the row the hero sits in (`heroRowHeight`) instead of freezing the glyphs |
+| 2026-08-12 | The app presents as **Glances Telemetry** everywhere, wearing the in-app logo mark; identifiers (`com.glancesdashboard.app`, exe name, slug) unchanged | The title bar, Start Menu, launcher and installer disagreed with the wordmark; identifiers stay so upgrades and docs keep working |
+| 2026-08-12 | **Shared-value writes from gesture callbacks are allowed, behind documented lint disables** | The rule that forbade them is why M15's drag snapped cell-to-cell; the owner's review judged that unusable, and a per-frame transform outside React is the standard Reanimated drag |
 | 2026-08-08 | `httpGet` forwards the caller's signal through a **local controller and detaches it once the body is read** | tauri-plugin-http (2.5.9, latest) never removes its abort listeners, so the poller's 5 s timeout signal fired `fetch_cancel_body` on already-freed Rust resources after every completed poll — a continuous stream of unhandled "The resource id NNN is invalid" rejections in the desktop build, confirmed and re-verified over CDP |
 | 2026-08-04 | **The transparent window is in scope** | Confirmed with the owner. It is what makes the appearance model's alpha mean anything on desktop. Note the reference's own trade: a transparent window cannot be edge-resized and loses the WM drop shadow, so it is only requested when an alpha is actually below 1 |
 | 2026-08-04 | This app **replaces** the Electron one — same product name, same install path, no rename | Confirmed with the owner. They are not meant to coexist, so the install collision is not a case to design around |

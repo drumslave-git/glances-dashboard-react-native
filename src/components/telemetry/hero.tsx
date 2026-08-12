@@ -5,22 +5,21 @@ import {
   gaugeUnitFontSize,
   gaugeValueFontSize,
   heroFontSize,
-  heroUnitFontSize,
   statFontSize,
-  statUnitFontSize,
 } from '@/utils/typeScale';
 
 import { MicroLabel, MonoText, TABULAR } from './text';
 
 /**
- * The **display channel**: numerals that size off their widget box and ignore
- * the user's font-size setting entirely.
+ * The **display channel**: numerals that size off their widget box first, and
+ * the user's multiplier second.
  *
- * This is the single most important rule in the handoff. The reading channel
- * (labels, chips, rows — see `text.tsx`) scales with the user's multiplier; a
- * hero numeral does not, because a 46pt hero multiplied to ~90pt inside a 450pt
- * card is what made the first implementation of this design fall apart. There is
- * deliberately no `scale` parameter anywhere in this file.
+ * The handoff kept the user's setting out of this channel; the owner overrode
+ * that (2026-08-12) — a font-size setting the hero ignores reads as broken. The
+ * box still leads: `typeScale.ts` applies the multiplier after the box clamp
+ * and under a width ceiling, and everything that reserves room for a hero
+ * (`heroRowHeight`) scales with it, which is what made the original rule
+ * necessary. The ring gauge stays box-only: its value must fit the ring.
  */
 
 interface HeroValueProps {
@@ -30,13 +29,16 @@ interface HeroValueProps {
   unit?: string;
   /** The measured width of the widget box. */
   widgetWidth: number;
+  /** Display-channel override — a pair-fitted size from `heroPairFontSizes`. */
+  fontSize?: number;
   color?: string;
   testID?: string;
 }
 
-export function HeroValue({ value, unit, widgetWidth, color, testID }: HeroValueProps) {
-  const { t } = useTelemetry();
-  const size = heroFontSize(widgetWidth);
+export function HeroValue({ value, unit, widgetWidth, fontSize, color, testID }: HeroValueProps) {
+  const { t, scale } = useTelemetry();
+  const size = fontSize ?? heroFontSize(widgetWidth, scale);
+  const unitSize = Math.round(size * (19 / 46));
 
   return (
     <XStack items="flex-end" testID={testID}>
@@ -57,8 +59,8 @@ export function HeroValue({ value, unit, widgetWidth, color, testID }: HeroValue
         <Text
           fontFamily="$mono"
           fontWeight="500"
-          fontSize={heroUnitFontSize(widgetWidth)}
-          lineHeight={Math.round(heroUnitFontSize(widgetWidth) * 1.2)}
+          fontSize={unitSize}
+          lineHeight={Math.round(unitSize * 1.2)}
           color="$textTertiary"
           style={TABULAR}
         >
@@ -73,14 +75,17 @@ interface StatValueProps {
   value: string;
   unit?: string;
   widgetWidth: number;
+  /** Display-channel override — a pair-fitted size from `heroPairFontSizes`. */
+  fontSize?: number;
   color?: string;
   testID?: string;
 }
 
 /** The second display size — network throughput, and anything paired with it. */
-export function StatValue({ value, unit, widgetWidth, color, testID }: StatValueProps) {
-  const { t } = useTelemetry();
-  const size = statFontSize(widgetWidth);
+export function StatValue({ value, unit, widgetWidth, fontSize, color, testID }: StatValueProps) {
+  const { t, scale } = useTelemetry();
+  const size = fontSize ?? statFontSize(widgetWidth, scale);
+  const unitSize = Math.round(Math.min(24, Math.max(9, size * (12 / 26))));
 
   return (
     <XStack items="flex-end" testID={testID}>
@@ -99,7 +104,7 @@ export function StatValue({ value, unit, widgetWidth, color, testID }: StatValue
         <Text
           fontFamily="$mono"
           fontWeight="500"
-          fontSize={statUnitFontSize(widgetWidth)}
+          fontSize={unitSize}
           color="$textTertiary"
           style={TABULAR}
         >

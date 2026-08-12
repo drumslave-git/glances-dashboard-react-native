@@ -1,13 +1,13 @@
 {
   "expo": {
-    "name": "Glances Dashboard",
+    "name": "Glances Telemetry",
     "slug": "glances-dashboard",
     "version": "0.2.2",
     "orientation": "default",
     "icon": "./assets/images/icon.png",
     "scheme": "glancesdashboard",
     "userInterfaceStyle": "dark",
-    "backgroundColor": "#101113",
+    "backgroundColor": "#07080a",
     "ios": {
       "icon": "./assets/expo.icon",
       "supportsTablet": true
@@ -16,7 +16,7 @@
       "package": "com.glancesdashboard.app",
       "versionCode": 202,
       "adaptiveIcon": {
-        "backgroundColor": "#101113",
+        "backgroundColor": "#07080a",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
         "backgroundImage": "./assets/images/android-icon-background.png",
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
@@ -28,14 +28,14 @@
       "favicon": "./assets/images/favicon.png",
       "lang": "en",
       "description": "A configurable dashboard for Glances system monitors.",
-      "themeColor": "#101113"
+      "themeColor": "#07080a"
     },
     "plugins": [
       "expo-router",
       [
         "expo-splash-screen",
         {
-          "backgroundColor": "#101113",
+          "backgroundColor": "#07080a",
           "image": "./assets/images/splash-icon.png",
           "imageWidth": 76
         }

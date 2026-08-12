@@ -1,7 +1,13 @@
-import { useCallback, useMemo, useRef, useState } from 'react';
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { LayoutChangeEvent } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
-import Animated, { LinearTransition, runOnJS } from 'react-native-reanimated';
+import Animated, {
+  LinearTransition,
+  runOnJS,
+  useAnimatedStyle,
+  useSharedValue,
+  withTiming,
+} from 'react-native-reanimated';
 import { ScrollView, YStack } from 'tamagui';
 
 import type { WidgetInstance } from '@/types/dashboard';
@@ -40,11 +46,13 @@ const DRAG_THRESHOLD_PX = 3;
 const GRIP_SIZE = 22;
 
 /**
- * How long a cell takes to slide to a new slot.
+ * How long a *neighbour* takes to slide out of the dragged card's way, and how long the dragged
+ * card takes to settle into its slot on release.
  *
- * The card snaps from cell to cell as the finger crosses a track — its position is grid units, and
- * the grid has no half-columns. What makes that read as dragging rather than teleporting is this:
- * every cell, the dragged one and the ones flowing around it, animates between placements.
+ * The dragged card itself does not snap any more — it rides the pointer through a transform on
+ * shared values, which never touches React (the owner's review called the snapping "choppy, zero
+ * smoothness", and it was: the card teleported a whole column at a time and this transition was
+ * the only motion). Only the cells flowing around it animate between placements.
  */
 const SLIDE_MS = 130;
 
@@ -227,7 +235,7 @@ interface GridCellProps {
   onFootprint: (widgetId: string, footprint: Footprint) => void;
 }
 
-function GridCell({
+function GridCellInner({
   widget,
   rect,
   dragging,
@@ -242,6 +250,50 @@ function GridCell({
   onRemove,
   onFootprint,
 }: GridCellProps) {
+  // The pointer's raw translation, applied as a transform so the card rides the finger at frame
+  // rate without a single React render. Written from the gesture worklet on native and from the
+  // DOM pointermove handler on web.
+  const dragX = useSharedValue(0);
+  const dragY = useSharedValue(0);
+
+  /**
+   * The cell's rect, frozen at drag start. While a drag is live the preview keeps moving this
+   * cell's *slot*, but the card on screen must stay `origin + translation` — tracking the live
+   * slot is what made the old drag oscillate. Captured by render-phase reconciliation (the
+   * sanctioned adjust-state-on-prop-change shape) because the gesture callbacks are memoized
+   * without `rect` and would close over a stale one.
+   */
+  const [origin, setOrigin] = useState<typeof rect | null>(null);
+  // Keeps the layout transition off while the card animates its release remainder to zero, so
+  // the slide is the transform's and not fought over by two animators.
+  const [settling, setSettling] = useState(false);
+  if (dragging && origin === null) {
+    setOrigin(rect);
+    if (settling) setSettling(false);
+  }
+
+  // Drag just ended: the card sits at `origin + translation`; its slot is `rect`. Carry the
+  // difference into the transform and time it out, so the card glides the last stretch into its
+  // cell instead of teleporting. This must react to the `dragging` prop flipping and it must
+  // write shared values, which only an effect may do — the state writes alongside are what hand
+  // the card from "frozen at origin" to "settling at its slot", so they belong to the same step.
+  useEffect(() => {
+    if (dragging || origin === null) return;
+    dragX.value = origin.left + dragX.value - rect.left;
+    dragY.value = origin.top + dragY.value - rect.top;
+    dragX.value = withTiming(0, { duration: SLIDE_MS });
+    dragY.value = withTiming(0, { duration: SLIDE_MS });
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setOrigin(null);
+    setSettling(true);
+    const timer = setTimeout(() => setSettling(false), SLIDE_MS);
+    return () => clearTimeout(timer);
+  }, [dragging, origin, rect.left, rect.top, dragX, dragY]);
+
+  const animatedStyle = useAnimatedStyle(() => ({
+    transform: [{ translateX: dragX.value }, { translateY: dragY.value }],
+  }));
+
   const pan = useMemo(
     () =>
       Gesture.Pan()
@@ -253,15 +305,21 @@ function GridCell({
           runOnJS(onDragBegin)(widget.id);
         })
         .onUpdate((event) => {
-          // Every frame reaches `onDragMove`, which returns without touching React unless the
-          // finger has crossed into another cell.
+          // The transform follows every frame on the UI thread; `onDragMove` returns without
+          // touching React unless the finger has crossed into another cell. The immutability rule
+          // refuses shared-value writes from gesture callbacks, but that is the one place a drag
+          // transform can be written from — reinstated deliberately (owner's review, 2026-08-12).
+          // eslint-disable-next-line react-hooks/immutability
+          dragX.value = event.translationX;
+          // eslint-disable-next-line react-hooks/immutability
+          dragY.value = event.translationY;
           runOnJS(onDragMove)(widget.id, event.translationX, event.translationY);
         })
         // onFinalize rather than onEnd, so a cancelled gesture also releases the card.
         .onFinalize(() => {
           runOnJS(onGestureEnd)();
         }),
-    [editMode, onDragBegin, onDragMove, onGestureEnd, widget.id],
+    [dragX, dragY, editMode, onDragBegin, onDragMove, onGestureEnd, widget.id],
   );
 
   const resize = useMemo(
@@ -288,8 +346,18 @@ function GridCell({
     threshold: DRAG_THRESHOLD_PX,
     onBegin: useCallback(() => onDragBegin(widget.id), [onDragBegin, widget.id]),
     onMove: useCallback(
-      (dx: number, dy: number) => onDragMove(widget.id, dx, dy),
-      [onDragMove, widget.id],
+      (dx: number, dy: number) => {
+        // Same order as the native worklet: transform first, snapping second. The immutability
+        // rule refuses shared-value writes from a callback, but a pointer-move handler is exactly
+        // where a drag transform is written from — this is the smooth path the old snapping drag
+        // existed to avoid needing, reinstated deliberately (owner's review, 2026-08-12).
+        // eslint-disable-next-line react-hooks/immutability
+        dragX.value = dx;
+        // eslint-disable-next-line react-hooks/immutability
+        dragY.value = dy;
+        onDragMove(widget.id, dx, dy);
+      },
+      [dragX, dragY, onDragMove, widget.id],
     ),
     onEnd: onGestureEnd,
   });
@@ -310,12 +378,17 @@ function GridCell({
     ? footprintOf(widget.type, { w: widget.w, h: widget.h })
     : null;
 
+  // While dragged (or settling) the card is positioned at its frozen origin and moved by the
+  // transform alone; the layout transition is handed back only once both are over, so the two
+  // animators never fight over one card. Neighbours keep the transition throughout — the flow
+  // around the finger is theirs.
+  const lifted = origin !== null || settling;
+  const position = origin ?? rect;
+
   return (
     <Animated.View
-      // The slide between placements is what makes a snapping grid read as a drag — it applies to
-      // the neighbours flowing out of the way as much as to the card under the finger.
-      layout={LinearTransition.duration(SLIDE_MS)}
-      style={{ position: 'absolute', ...rect, zIndex: dragging ? 10 : 1 }}
+      layout={lifted ? undefined : LinearTransition.duration(SLIDE_MS)}
+      style={[{ position: 'absolute', ...position, zIndex: lifted ? 10 : 1 }, animatedStyle]}
       testID={`widget-cell-${widget.id}`}
     >
       <GestureDetector gesture={pan}>
@@ -365,3 +438,30 @@ function GridCell({
     </Animated.View>
   );
 }
+
+/**
+ * Memoized on the rect's *values*: `cellRect` mints a fresh object every grid render, so the
+ * default shallow compare would re-render every card on every preview crossing — most of the
+ * per-crossing cost the old drag paid. Everything else is compared by identity, which holds
+ * because the grid's callbacks are `useCallback`-stable.
+ */
+const GridCell = memo(GridCellInner, (prev, next) => {
+  return (
+    prev.widget === next.widget &&
+    prev.dragging === next.dragging &&
+    prev.editMode === next.editMode &&
+    prev.resizable === next.resizable &&
+    prev.rect.left === next.rect.left &&
+    prev.rect.top === next.rect.top &&
+    prev.rect.width === next.rect.width &&
+    prev.rect.height === next.rect.height &&
+    prev.onDragBegin === next.onDragBegin &&
+    prev.onDragMove === next.onDragMove &&
+    prev.onResizeBegin === next.onResizeBegin &&
+    prev.onResizeMove === next.onResizeMove &&
+    prev.onGestureEnd === next.onGestureEnd &&
+    prev.onEdit === next.onEdit &&
+    prev.onRemove === next.onRemove &&
+    prev.onFootprint === next.onFootprint
+  );
+});

@@ -9,9 +9,11 @@
 import { useMemo } from 'react';
 
 import { useLatest } from '@/data/feed-store';
+import { withAlpha } from '@/theme/telemetry';
+import { useTelemetry } from '@/theme/use-telemetry';
 import type { DiskIoItem, NetworkItem } from '@/types/glances';
 
-import { SeriesPanel, reading } from '../panels';
+import { SeriesPanel, reading, type HeroStat } from '../panels';
 import { TextReadout, type ReadoutGroup, type ReadoutRow } from '../readout';
 import { formatRate, formatTotal, pickBusiest, type RateUnit } from '../rates';
 import type { WidgetProps } from '../types';
@@ -35,6 +37,26 @@ function unitOf(config: Record<string, unknown>): RateUnit {
 const netActivity = (item: NetworkItem) => (item.rxRatePerSec ?? 0) + (item.txRatePerSec ?? 0);
 const diskActivity = (item: DiskIoItem) => (item.readRatePerSec ?? 0) + (item.writeRatePerSec ?? 0);
 
+/**
+ * Direction is a colour, not a legend: cyan down, green up — the reference's rule, and the one
+ * job `signal.up` exists for. A second item keeps the direction hues at reduced alpha, so
+ * direction stays readable before "which item" does.
+ */
+function directionColors(
+  names: readonly string[],
+  suffixes: readonly [string, string],
+  down: string,
+  up: string,
+): Record<string, string> {
+  const colors: Record<string, string> = {};
+  names.forEach((name, index) => {
+    const fade = index === 0 ? 1 : 0.45;
+    colors[`${name}-${suffixes[0]}`] = index === 0 ? down : withAlpha(down, fade);
+    colors[`${name}-${suffixes[1]}`] = index === 0 ? up : withAlpha(up, fade);
+  });
+  return colors;
+}
+
 export function NetworkChartWidget({
   endpointId,
   config,
@@ -44,6 +66,7 @@ export function NetworkChartWidget({
   accentColor,
   testID,
 }: WidgetProps) {
+  const { t } = useTelemetry();
   const items = useLatest<NetworkItem[]>(endpointId, 'network') ?? [];
   const unit = unitOf(config);
   const shown = pickBusiest(items, selectedNames(config, 'interfaces'), (i) => i.interfaceName, netActivity, CHART_LIMIT);
@@ -73,6 +96,24 @@ export function NetworkChartWidget({
     }),
   ]);
 
+  // The heroes name the interface the widget picked, which is the answer to "busiest of what?" —
+  // an auto-selected item the panel never named was indistinguishable from a total.
+  const lead = shown[0];
+  const heroStats: HeroStat[] = lead
+    ? [
+        {
+          label: `${lead.alias ?? lead.interfaceName} ↓`,
+          value: formatRate(lead.rxRatePerSec, unit),
+          color: t.signal.info,
+        },
+        {
+          label: `${lead.alias ?? lead.interfaceName} ↑`,
+          value: formatRate(lead.txRatePerSec, unit),
+          color: t.signal.up,
+        },
+      ]
+    : [];
+
   return (
     <SeriesPanel
       readings={readings}
@@ -82,6 +123,8 @@ export function NetworkChartWidget({
       sizeClass={mode.tier}
       accentColor={accentColor}
       timeWindow={windowFromConfig(config)}
+      colors={directionColors(shown.map((item) => item.interfaceName), ['rx', 'tx'], t.signal.info, t.signal.up)}
+      heroStats={heroStats}
       formatStatValue={(value) => formatRate(value, unit)}
       {...(testID ? { testID } : {})}
     />
@@ -116,6 +159,7 @@ export function DiskIoChartWidget({
   accentColor,
   testID,
 }: WidgetProps) {
+  const { t } = useTelemetry();
   const items = useLatest<DiskIoItem[]>(endpointId, 'diskio') ?? [];
   const shown = pickBusiest(items, selectedNames(config, 'disks'), (i) => i.diskName, diskActivity, CHART_LIMIT);
   const shownNames = shown.map((item) => item.diskName).join(',');
@@ -142,6 +186,22 @@ export function DiskIoChartWidget({
     }),
   ]);
 
+  const lead = shown[0];
+  const heroStats: HeroStat[] = lead
+    ? [
+        {
+          label: `${lead.diskName} read`,
+          value: formatRate(lead.readRatePerSec),
+          color: t.signal.info,
+        },
+        {
+          label: `${lead.diskName} write`,
+          value: formatRate(lead.writeRatePerSec),
+          color: t.signal.up,
+        },
+      ]
+    : [];
+
   return (
     <SeriesPanel
       readings={readings}
@@ -151,6 +211,8 @@ export function DiskIoChartWidget({
       sizeClass={mode.tier}
       accentColor={accentColor}
       timeWindow={windowFromConfig(config)}
+      colors={directionColors(shown.map((item) => item.diskName), ['read', 'write'], t.signal.info, t.signal.up)}
+      heroStats={heroStats}
       formatStatValue={(value) => formatRate(value)}
       {...(testID ? { testID } : {})}
     />

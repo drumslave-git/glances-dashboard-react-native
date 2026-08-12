@@ -1,11 +1,12 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useState } from 'react';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Input, Label, Paragraph, ScrollView, Spinner, XStack, YStack } from 'tamagui';
+import { ScrollView, Spinner, XStack, YStack } from 'tamagui';
 
 import { ToolbarButton } from '@/components/telemetry/surfaces';
-import { Label as SectionLabel } from '@/components/telemetry/text';
+import { Label as SectionLabel, MicroLabel, TextField, UiText } from '@/components/telemetry/text';
 import { GEOMETRY } from '@/theme/telemetry';
+import { useTelemetry } from '@/theme/use-telemetry';
 
 import { coerceServerUrl } from '@/api/glances';
 import { probeEndpoint } from '@/data/probe';
@@ -19,6 +20,7 @@ type TestState =
 
 export function ServerFormScreen() {
   const router = useRouter();
+  const { t } = useTelemetry();
   const { id } = useLocalSearchParams<{ id: string }>();
   const isNew = !id || id === 'new';
 
@@ -84,8 +86,8 @@ export function ServerFormScreen() {
         <ScrollView flex={1} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
           <YStack gap="$4">
             <YStack gap="$2">
-              <Label htmlFor="server-name">Name</Label>
-              <Input
+              <MicroLabel>Name</MicroLabel>
+              <TextField
                 id="server-name"
                 value={name}
                 onChangeText={setName}
@@ -96,8 +98,8 @@ export function ServerFormScreen() {
             </YStack>
 
             <YStack gap="$2">
-              <Label htmlFor="server-url">Address</Label>
-              <Input
+              <MicroLabel>Address</MicroLabel>
+              <TextField
                 id="server-url"
                 value={url}
                 onChangeText={(next) => {
@@ -110,30 +112,30 @@ export function ServerFormScreen() {
                 keyboardType="url"
                 testID="server-url-input"
               />
-              <Paragraph size="$1" opacity={0.6}>
+              <UiText variant="footer" color="$textDim">
                 {/* The live resolution, so the rule below is visible rather than described: a bare
                     IP is a direct `glances -w`, a bare hostname is assumed proxied. */}
                 {trimmedUrl
                   ? coerceServerUrl(trimmedUrl)
                   : 'An IP gets http:// and port 61208; a hostname gets https:// on the default port.'}
-              </Paragraph>
+              </UiText>
             </YStack>
 
             <YStack gap="$2">
-              <Label htmlFor="server-refresh">Refresh interval (seconds)</Label>
-              <Input
+              <MicroLabel>Refresh interval (seconds)</MicroLabel>
+              <TextField
                 id="server-refresh"
                 value={refreshSeconds}
                 onChangeText={setRefreshSeconds}
                 keyboardType="decimal-pad"
                 testID="server-refresh-input"
               />
-              <Paragraph size="$1" opacity={0.6}>
+              <UiText variant="footer" color="$textDim">
                 {/* "Fetch once" was retired in M11: pausing is how an endpoint is stopped, and the
                     interval is floored at a second because the server caches its stats for that
                     long anyway. */}
                 Floored at 1 second. Pause an endpoint to stop polling it.
-              </Paragraph>
+              </UiText>
             </YStack>
 
             <YStack gap="$2">
@@ -148,15 +150,15 @@ export function ServerFormScreen() {
 
               {test.status === 'testing' && <Spinner testID="server-test-spinner" />}
               {test.status === 'ok' && (
-                <Paragraph size="$2" theme="green" testID="server-test-ok">
+                <UiText variant="metric" style={{ color: t.signal.up }} testID="server-test-ok">
                   {`Glances ${test.version}` +
                     (test.pluginCount > 0 ? ` · ${test.pluginCount} plugins` : '')}
-                </Paragraph>
+                </UiText>
               )}
               {test.status === 'error' && (
-                <Paragraph size="$2" theme="red" testID="server-test-error">
+                <UiText variant="metric" style={{ color: t.signal.error }} testID="server-test-error">
                   {test.message}
-                </Paragraph>
+                </UiText>
               )}
             </YStack>
           </YStack>

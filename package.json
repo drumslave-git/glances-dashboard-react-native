@@ -14,6 +14,7 @@
     "build:desktop": "tauri build",
     "tauri": "tauri",
     "setup:skia-web": "node node_modules/@shopify/react-native-skia/scripts/setup-canvaskit.js public",
+    "icons:app": "node scripts/make-app-icons.js",
     "icons:web": "node scripts/make-pwa-icons.js",
     "lint": "expo lint",
     "typecheck": "tsc --noEmit",

@@ -52,7 +52,7 @@ interface ToolbarProps {
   editMode: boolean;
   /** Polling cadence of the default server, e.g. `5s`. */
   refreshLabel?: string | null;
-  /** In full screen the bar is an overlay, and offers only the way out (ref §7.1). */
+  /** In full screen the bar is a hover-revealed overlay — the same bar, with ⛶ as the way out. */
   fullScreen?: boolean;
   onAddWidget: () => void;
   onToggleEditMode: () => void;
@@ -83,17 +83,11 @@ export function Toolbar({
 
   // Labels shorten before anything is dropped: a narrow toolbar loses words, not
   // controls, because every one of these is the only route to what it does.
-  const labelledActions = fullScreen ? (
-    // The board has the whole screen; adding and editing can wait until it is given back.
-    <XStack items="center" gap={8} shrink={0}>
-      <ToolbarButton
-        label={wide ? 'Leave full screen' : 'Leave'}
-        glyph="⛶"
-        onPress={onToggleFullScreen}
-        testID="toolbar-leave-full-screen"
-      />
-    </XStack>
-  ) : (
+  //
+  // Full screen gets the **same** bar. It used to strip everything but a "Leave" button, and the
+  // owner's review read the hover-reveal as a different header entirely — the way out is the ⛶
+  // glyph turning accent, not a different toolbar.
+  const labelledActions = (
     <XStack items="center" gap={8} shrink={0}>
       <ToolbarButton
         label={wide ? 'Add widget' : 'Add'}
@@ -111,13 +105,13 @@ export function Toolbar({
     </XStack>
   );
 
-  const glyphActions = fullScreen ? null : (
+  const glyphActions = (
     <XStack items="center" gap={4} shrink={0}>
       <GlyphButton
         glyph="⛶"
-        label="Full screen"
+        label={fullScreen ? 'Leave full screen' : 'Full screen'}
         onPress={onToggleFullScreen}
-        color={t.text.secondary}
+        color={fullScreen ? t.text.primary : t.text.secondary}
         testID="toolbar-full-screen"
       />
       <GlyphButton

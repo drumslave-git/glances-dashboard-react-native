@@ -1,4 +1,4 @@
-import { Text, type TextProps } from 'tamagui';
+import { Input, Text, type InputProps, type TextProps } from 'tamagui';
 
 import { useTelemetry } from '@/theme/use-telemetry';
 import type { TypeRole } from '@/utils/typeScale';
@@ -83,6 +83,24 @@ export function UiText({ variant = 'metric', ...props }: TelemetryTextProps) {
       fontSize={size(variant)}
       letterSpacing={tracking(variant)}
       color="$textSecondary"
+      {...props}
+    />
+  );
+}
+
+/**
+ * A text input on the reading channel. Tamagui's `Input` sizes off the static
+ * font tokens, which is exactly how form fields ended up ignoring the user's
+ * font-size setting — every input goes through this instead.
+ */
+export function TextField({ variant = 'readout', ...props }: Omit<InputProps, 'fontSize'> & { variant?: TypeRole }) {
+  const { size } = useTelemetry();
+  const fontSize = size(variant);
+  return (
+    <Input
+      fontFamily="$body"
+      fontSize={fontSize}
+      height={Math.max(40, Math.round(fontSize * 2.6))}
       {...props}
     />
   );

@@ -1,11 +1,11 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useState } from 'react';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Input, Label as FieldLabel, Paragraph, ScrollView, XStack, YStack } from 'tamagui';
+import { ScrollView, XStack, YStack } from 'tamagui';
 
 import { EndpointChip } from '@/components/telemetry/chips';
 import { ToolbarButton } from '@/components/telemetry/surfaces';
-import { Label, MicroLabel, UiText } from '@/components/telemetry/text';
+import { Label, MicroLabel, TextField, UiText } from '@/components/telemetry/text';
 import { useLatest } from '@/data/feed-store';
 import { useEndpointState } from '@/hooks/useEndpointState';
 import { useMetricsPreview } from '@/hooks/useMetricsPreview';
@@ -137,17 +137,17 @@ export function WidgetConfigScreen() {
             </UiText>
 
             <YStack gap="$2">
-              <FieldLabel htmlFor="widget-title">Title</FieldLabel>
-              <Input
+              <MicroLabel>Title</MicroLabel>
+              <TextField
                 id="widget-title"
                 value={title}
                 onChangeText={setTitle}
                 placeholder={definition.label}
                 testID="widget-title-input"
               />
-              <Paragraph size="$1" opacity={0.6}>
+              <UiText variant="footer" color="$textDim">
                 Leave blank to use the type’s own name.
-              </Paragraph>
+              </UiText>
             </YStack>
 
             {isGlobal ? (

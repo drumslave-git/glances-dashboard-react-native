@@ -5,6 +5,7 @@
  * "memory is full and the host has started paying for it".
  */
 import { useLatest } from '@/data/feed-store';
+import { useTelemetry } from '@/theme/use-telemetry';
 import type { MemStats, MemSwapStats } from '@/types/glances';
 import { formatFieldValue, formatLooseNumber } from '@/utils/widgetData';
 
@@ -30,6 +31,7 @@ export function MemoryChartWidget({
   accentColor,
   testID,
 }: WidgetProps) {
+  const { t } = useTelemetry();
   const mem = useLatest<MemStats>(endpointId, 'mem');
   const swap = useLatest<MemSwapStats>(endpointId, 'memswap');
   const showSwap = config.showSwap !== false;
@@ -53,6 +55,8 @@ export function MemoryChartWidget({
       sizeClass={mode.tier}
       accentColor={accentColor}
       timeWindow={windowFromConfig(config)}
+      // Swap in the warning hue: it is the "started paying for it" line, not a second memory.
+      colors={{ used: accentColor, swap: t.signal.warning }}
       {...(testID ? { testID } : {})}
     />
   );

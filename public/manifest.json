@@ -1,5 +1,5 @@
 {
-  "name": "Glances Dashboard",
+  "name": "Glances Telemetry",
   "short_name": "Glances",
   "description": "A configurable dashboard for Glances system monitors.",
   "id": "/",
@@ -7,8 +7,8 @@
   "scope": "/",
   "display": "standalone",
   "orientation": "any",
-  "background_color": "#101113",
-  "theme_color": "#101113",
+  "background_color": "#07080a",
+  "theme_color": "#07080a",
   "icons": [
     {
       "src": "/icons/icon-192.png",

@@ -13,9 +13,10 @@ import { useMemo } from 'react';
 import { XStack, YStack } from 'tamagui';
 
 import { ChartView } from '@/components/charts/chart-view';
-import { HeroValue, StatCluster, StatFooterLine } from '@/components/telemetry/hero';
+import { HeroValue, StatCluster, StatFooterLine, StatValue } from '@/components/telemetry/hero';
 import { Meter } from '@/components/telemetry/meter';
-import { MonoText } from '@/components/telemetry/text';
+import { MicroLabel, MonoText } from '@/components/telemetry/text';
+import { useTelemetry } from '@/theme/use-telemetry';
 import {
   recentSamples,
   seriesDomain,
@@ -24,7 +25,14 @@ import {
   type Sample,
   type TimeWindow,
 } from '@/utils/sampleBuffer';
-import { chartRung, ringDiameter, statClusterRung, type WidgetSizeClass } from '@/utils/typeScale';
+import {
+  chartRung,
+  heroPairFontSizes,
+  heroRowHeight,
+  ringDiameter,
+  statClusterRung,
+  type WidgetSizeClass,
+} from '@/utils/typeScale';
 import { formatStat, type FieldReading } from '@/utils/widgetPresentation';
 
 /** The rows under a ring — the design's SWAP / CACHED lines. */
@@ -119,7 +127,19 @@ export function RingPanel({ readings, width, height, accentColor, testID }: Ring
   );
 }
 
-const HERO_ROW_HEIGHT = 52;
+/**
+ * A labelled hero — the network chart's `ETH0 ↓` over its download rate. The label doubles as the
+ * answer to "which interface am I looking at": when the widget picked the busiest item itself,
+ * the pick's name is the label.
+ */
+export interface HeroStat {
+  label: string;
+  /** Already formatted, unit included unless `unit` is passed separately. */
+  value: string;
+  unit?: string | null;
+  /** Colours the label and the numeral — the same colour as the series it summarises. */
+  color?: string;
+}
 
 export interface SeriesPanelProps {
   /** The first reading leads as the hero; every reading with a value gets a trace. */
@@ -133,6 +153,11 @@ export interface SeriesPanelProps {
   timeWindow: TimeWindow;
   /** Per-series colours, keyed by reading name. Falls back to the accent. */
   colors?: Record<string, string>;
+  /**
+   * Labelled heroes replacing the single anonymous numeral — a bidirectional metric leads with
+   * both directions, each named and coloured like its trace, so the chart needs no legend.
+   */
+  heroStats?: HeroStat[];
   /**
    * How to print the derived peak and average.
    *
@@ -160,10 +185,13 @@ export function SeriesPanel({
   accentColor,
   timeWindow,
   colors,
+  heroStats,
   formatStatValue,
   testID,
 }: SeriesPanelProps) {
+  const { scale, size } = useTelemetry();
   const primary = readings.find((reading) => reading.value != null) ?? null;
+  const labelledHeroes = heroStats != null && heroStats.length > 0;
 
   const layers = useMemo(
     () =>
@@ -182,13 +210,24 @@ export function SeriesPanel({
   );
 
   const percentage = primary?.percent != null;
+  // Every layer feeds the domain: a Y scale fitted to the download trace alone would clip the
+  // upload trace whenever tx outruns rx.
   const domain = useMemo(
-    () => seriesDomain(layers[0]?.samples ?? [], { percentage }),
+    () => seriesDomain(layers.flatMap((layer) => layer.samples), { percentage }),
     [layers, percentage],
   );
 
   const statsRung = statClusterRung(sizeClass, height);
-  const chartHeight = Math.max(0, height - (primary ? HERO_ROW_HEIGHT : 0));
+  // Two labelled numerals share the row at pair-fitted sizes; a tight fit also drops the
+  // inline peak/avg cluster — the derived stats go before either direction does.
+  const pair = heroPairFontSizes(width, scale);
+  const showInlineStats = statsRung === 'inline' && (!labelledHeroes || !pair.fitted);
+  const heroRow = labelledHeroes
+    ? Math.round(pair.hero * 0.88) + 12 + size('micro') + 2
+    : primary
+      ? heroRowHeight(width, scale)
+      : 0;
+  const chartHeight = Math.max(0, height - heroRow);
   // The body sits inside the card's 17pt side padding.
   const chartWidth = Math.max(0, width - 34);
   const rung = chartRung(sizeClass, chartHeight);
@@ -205,7 +244,43 @@ export function SeriesPanel({
 
   return (
     <YStack flex={1} gap={6} testID={testID ? `${testID}-body` : undefined}>
-      {primary && (
+      {heroStats != null && heroStats.length > 0 ? (
+        <XStack items="flex-end" gap={20}>
+          {heroStats.map((stat, index) => (
+            <YStack key={stat.label} gap={2} minW={0} shrink={index === 0 ? 0 : 1}>
+              <MicroLabel numberOfLines={1} {...(stat.color ? { style: { color: stat.color } } : {})}>
+                {stat.label}
+              </MicroLabel>
+              {index === 0 ? (
+                <HeroValue
+                  value={stat.value}
+                  {...(stat.unit ? { unit: stat.unit } : {})}
+                  {...(stat.color ? { color: stat.color } : {})}
+                  widgetWidth={width}
+                  fontSize={pair.hero}
+                  testID={testID ? `${testID}-hero` : undefined}
+                />
+              ) : (
+                <StatValue
+                  value={stat.value}
+                  {...(stat.unit ? { unit: stat.unit } : {})}
+                  {...(stat.color ? { color: stat.color } : {})}
+                  widgetWidth={width}
+                  fontSize={pair.stat}
+                  testID={testID ? `${testID}-hero-${index}` : undefined}
+                />
+              )}
+            </YStack>
+          ))}
+          {/* Derived stats yield space long before the second direction does: both numerals are
+              the readout, peak/avg only describe it. */}
+          {showInlineStats && (
+            <YStack shrink={4} minW={0}>
+              <StatCluster stats={stats} />
+            </YStack>
+          )}
+        </XStack>
+      ) : primary ? (
         <XStack items="flex-end" gap={20}>
           <HeroValue
             value={primary.text}
@@ -215,7 +290,7 @@ export function SeriesPanel({
           />
           {statsRung === 'inline' && <StatCluster stats={stats} />}
         </XStack>
-      )}
+      ) : null}
 
       {statsRung === 'footer' && stats.length > 0 && <StatFooterLine stats={stats} />}
 
