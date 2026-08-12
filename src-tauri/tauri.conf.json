@@ -2,7 +2,7 @@
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
   "productName": "Glances Telemetry",
   "mainBinaryName": "glances-dashboard",
-  "version": "0.2.2",
+  "version": "0.2.3",
   "identifier": "com.glancesdashboard.app",
   "build": {
     "frontendDist": "../dist",
