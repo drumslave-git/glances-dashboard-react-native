@@ -1344,9 +1344,16 @@ server (CDP-driven, isolated `WEBVIEW2_USER_DATA_FOLDER` so the owner's real boa
 Also: the dead `src/components/config/` pair (formatter-editor, option-list — orphaned since the
 typed-widget realignment retired the generic config screen) is deleted.
 
-**Not re-verified on Android in this pass** — the changes are platform-shared (the drag's native
-path runs the same code the Jest gesture tests drive), but the emulator round was skipped; run
-`npm run android:emulator` before the next release if in doubt.
+**Re-verified on the Android emulator (2026-08-13)**, dev build against the live server: the
+GPU utilization trace, the network chart's coloured + labelled dual heroes (picker previews
+included), the scale set to Largest reaching the toolbar, summary strip, settings/endpoints
+text, the appearance editor and the meter rows — and pair-fitting the network heroes — then
+reset to Default; the launcher shows the lime mark named "Glances Telemetry". Two operational
+notes: **the launcher label/icon only update after `npx expo prebuild --platform android`** —
+`run-android.ps1` builds the gitignored `android/` as-is, so a stale prebuild ships the old
+identity silently; and a Gradle rebuild kicked off right after prebuild hung for half an hour
+against the previous build's daemons (frozen CPU counters gave it away) — `Stop-Process` on the
+daemons and a rerun built clean in ~75 s.
 
 ---
 
