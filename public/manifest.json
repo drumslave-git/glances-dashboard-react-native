@@ -1,5 +1,5 @@
 {
-  "name": "Glances Telemetry",
+  "name": "Glances Dashboard",
   "short_name": "Glances",
   "description": "A configurable dashboard for Glances system monitors.",
   "id": "/",

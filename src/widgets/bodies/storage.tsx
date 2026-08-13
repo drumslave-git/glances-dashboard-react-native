@@ -345,8 +345,13 @@ export function GpuWidget({
   // but only when "whatever is left" is a chart worth reading rather than a sliver.
   const stackedRow = meterRowHeights(size('metric')).stacked;
   const metersHeight = rows.length * stackedRow + Math.max(0, rows.length - 1) * METER_STACKED_GAP;
-  const labelHeight = size('micro') + 8;
-  const traceHeight = height - metersHeight - labelHeight;
+  // The label's *rendered* line, pinned below so the arithmetic cannot drift from the layout —
+  // the default line height is the platform's, and guessing it is how the trace overflowed the
+  // card and lost its time axis in 0.2.3.
+  const labelLineHeight = Math.round(size('micro') * 1.4);
+  // What the column spends around the trace: two 4pt gaps and the label's 4pt top margin.
+  const traceChrome = 4 + 4 + 4;
+  const traceHeight = height - metersHeight - labelLineHeight - traceChrome;
   const showTrace = !mode.short && gpus.length > 0 && traceHeight >= GPU_TRACE_FROM_PX;
 
   if (!showTrace) {
@@ -372,8 +377,12 @@ export function GpuWidget({
           {...(testID ? { testID: `${testID}-meters` } : {})}
         />
       </YStack>
-      <MicroLabel mt={4}>Utilization · 5m</MicroLabel>
-      <YStack flex={1} minH={0}>
+      <MicroLabel mt={4} numberOfLines={1} style={{ lineHeight: labelLineHeight }}>
+        Utilization · 5m
+      </MicroLabel>
+      {/* The trace's box is the arithmetic's answer, not a flex leftover: the two must agree
+          exactly or the canvas paints past the card bottom. */}
+      <YStack height={Math.max(0, traceHeight)}>
         <ChartView
           kind="line"
           segments={[]}

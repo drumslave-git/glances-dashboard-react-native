@@ -89,7 +89,7 @@ export function LogoMark({ size = 25, testID }: { size?: number; testID?: string
   );
 }
 
-/** `GLANCES TELEMETRY`, the two-weight wordmark beside the logo. */
+/** `GLANCES DASHBOARD`, the two-weight wordmark beside the logo. */
 export function Wordmark({ compact = false }: { compact?: boolean }) {
   const { size } = useTelemetry();
   return (
@@ -112,7 +112,7 @@ export function Wordmark({ compact = false }: { compact?: boolean }) {
           letterSpacing={2.1}
           color="$textDim"
         >
-          TELEMETRY
+          DASHBOARD
         </Text>
       )}
     </XStack>

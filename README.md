@@ -150,7 +150,7 @@ writes two things, after re-running `npm run build:web` so the bundle is never s
 | Artifact | Path |
 | --- | --- |
 | Portable executable | `src-tauri/target/release/glances-dashboard.exe` |
-| Installer | `src-tauri/target/release/bundle/nsis/Glances Telemetry_<version>_x64-setup.exe` |
+| Installer | `src-tauri/target/release/bundle/nsis/Glances Dashboard_<version>_x64-setup.exe` |
 
 The installer is per-user: it needs no administrator rights, installs to `%LOCALAPPDATA%\Glances
 Dashboard`, adds a Start Menu entry, and ships its own `uninstall.exe`. Both artifacts embed the
@@ -267,7 +267,7 @@ yet, whatever the commit history looks like:
 
 | Asset | Built by |
 | --- | --- |
-| `Glances Telemetry_<version>_x64-setup.exe` | `windows-latest`, Rust + `npm run build:desktop` |
+| `Glances Dashboard_<version>_x64-setup.exe` | `windows-latest`, Rust + `npm run build:desktop` |
 | `glances-dashboard-<version>-portable.exe` | the same build, unpacked |
 | `glances-dashboard-<version>.apk` | `expo prebuild` + `gradlew assembleRelease` |
 | `glances-dashboard-web-<version>.zip` | `npm run build:web`, zipped `dist/` |

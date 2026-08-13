@@ -8,6 +8,16 @@ import type { MeterRung } from '@/utils/typeScale';
 import { MonoText } from './text';
 
 /**
+ * The meter texts' line, relative to their font size — pinned, because the row budget
+ * (`meterRowHeights`, 30pt stacked at the default scale) is a design constant and the platform's
+ * default line height is not: WebView2 resolves ~1.83× and the rows overflowed their budget,
+ * which is how the GPU widget's label ended up printed across its Fan bar.
+ */
+export function meterTextLineHeight(metricFontSize: number): number {
+  return Math.round(metricFontSize * 1.4);
+}
+
+/**
  * A labelled bar — the GPU widget's Utilization / Memory / Fan rows, and what a
  * ring gauge becomes when it drops below the 72pt floor.
  *
@@ -45,18 +55,24 @@ export function Meter({
   color,
   testID,
 }: MeterProps) {
-  const { t } = useTelemetry();
+  const { t, size } = useTelemetry();
   const filled = clampPercent(percent);
   const readout = value ?? `${Math.round(filled)}%`;
+  const textLine = { lineHeight: meterTextLineHeight(size('metric')) };
 
   const readoutRow = (
     <XStack items="center" gap={8} shrink={0}>
       {detail != null && (
-        <MonoText variant="metric" color="$textTertiary" numberOfLines={1}>
+        <MonoText variant="metric" color="$textTertiary" numberOfLines={1} style={textLine}>
           {detail}
         </MonoText>
       )}
-      <MonoText variant="metric" color="$textStrong" testID={testID ? `${testID}-value` : undefined}>
+      <MonoText
+        variant="metric"
+        color="$textStrong"
+        style={textLine}
+        testID={testID ? `${testID}-value` : undefined}
+      >
         {readout}
       </MonoText>
     </XStack>
@@ -90,7 +106,7 @@ export function Meter({
   if (rung === 'value') {
     return (
       <XStack items="center" justify="space-between" gap={10} testID={testID}>
-        <MeterLabel label={label} />
+        <MeterLabel label={label} lineHeight={textLine.lineHeight} />
         {readoutRow}
       </XStack>
     );
@@ -100,7 +116,7 @@ export function Meter({
   if (rung === 'inline') {
     return (
       <XStack items="center" gap={10} testID={testID}>
-        <MeterLabel label={label} />
+        <MeterLabel label={label} lineHeight={textLine.lineHeight} />
         {track(true)}
         {readoutRow}
       </XStack>
@@ -110,7 +126,7 @@ export function Meter({
   return (
     <YStack gap={5} testID={testID}>
       <XStack items="center" justify="space-between" gap={10}>
-        <MeterLabel label={label} />
+        <MeterLabel label={label} lineHeight={textLine.lineHeight} />
         {readoutRow}
       </XStack>
       {track(false)}
@@ -118,9 +134,9 @@ export function Meter({
   );
 }
 
-function MeterLabel({ label }: { label: string }) {
+function MeterLabel({ label, lineHeight }: { label: string; lineHeight: number }) {
   return (
-    <MonoText variant="metric" color="$textSecondary" numberOfLines={1} shrink={1}>
+    <MonoText variant="metric" color="$textSecondary" numberOfLines={1} shrink={1} style={{ lineHeight }}>
       {label}
     </MonoText>
   );

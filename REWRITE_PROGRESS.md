@@ -1355,6 +1355,58 @@ identity silently; and a Gradle rebuild kicked off right after prebuild hung for
 against the previous build's daemons (frozen CPU counters gave it away) — `Stop-Process` on the
 daemons and a rerun built clean in ~75 s.
 
+### Post-0.2.3 — the owner's third review: the name, the drag, the GPU trace, the palette (2026-08-13)
+
+Four complaints from a screen recording, all reproduced and fixed; verified on the dev-build
+Tauri window over CDP against the live TCloud server.
+
+1. **The app is called Glances Dashboard again — everywhere.** The 0.2.3 "One brand" change
+   renamed the product to "Glances Telemetry" without ever being asked to; the owner's reaction
+   was unambiguous. "Telemetry" was only ever the *design system's* name from the M8 handoff.
+   Window title, `productName`, `expo.name`, PWA manifest, README and the toolbar wordmark
+   (`GLANCES DASHBOARD` now) all say Glances Dashboard; the design-system internals
+   (`src/theme/telemetry.ts`, `components/telemetry/`) keep their name. Naming is the owner's
+   call — recorded in auto-memory so no session repeats this.
+2. **The drag really was broken, and not where 0.2.3 looked.** Root cause found by driving the
+   window over CDP with component logging: the *native* `Gesture.Pan` — which can never activate
+   on web (`usePointerDrag` exists because of that) — was still **enabled** there, and an enabled
+   pan runs its state machine: >10px of motion inside the `activateAfterLongPress` window FAILS
+   the gesture and its `onFinalize` fired `endGesture` into the middle of every mouse drag. That
+   unfroze the origin, killed the settle, and left the card offset by its last translation —
+   the "random jumps", and how a card could sit visually outside the grid. Three fixes:
+   - Native gestures are disabled on web (`Platform.OS !== 'web'`); the DOM pointer path owns
+     the platform it was written for.
+   - `usePointerDrag` self-heals a lost `pointerup` (release outside the window): any move with
+     the primary button no longer down ends the drag, a stale drag is finished on the next
+     press, and native HTML `dragstart` is prevented so it cannot kill the pointer stream.
+     Deliberately **no** `setPointerCapture`: capturing a CDP-synthetic pointer wedges
+     WebView2's input pipeline (release vanishes, all further injected input dropped) — the
+     `buttons` guard covers the same case without it.
+   - The settle timer moved to its own effect: it lived in the carry effect, whose own re-run
+     (origin flipping null) cleared it before it fired, so `settling` stuck true and every
+     dragged card kept its lifted z-index and lost its layout transition permanently.
+   Verified with in-page PointerEvent suites: same-slot release settles to zero transform,
+   cross-slot release commits and lands pixel-exact, a lost-up drag ends itself and later
+   pointer movement moves nothing. (CDP `Input.dispatchMouseEvent` proved unreliable for this —
+   it wedges after a captured drag — hence the in-page harness.)
+3. **The GPU trace no longer overflows its card.** Two under-accountings: `traceHeight` ignored
+   the column's gaps and the label's real line height, and — the bigger one — the meter rows
+   rendered 33px against the predicted 30 because WebView2's default line height (~1.83×) blew
+   the budget, so the meters overflowed their fixed box and the `UTILIZATION · 5M` label printed
+   across the Fan bar. Meter texts now pin `lineHeight` (`meterTextLineHeight`, 1.4×) so the
+   design's 30pt stacked row holds, and the trace arithmetic accounts for gaps + pinned label
+   line. Measured after: last meter inside its box, canvas bottom = content bottom exactly.
+   (No time axis on a one-column GPU card is the chart ladder — `regular` tier caps at `grid`.)
+4. **Endpoint colours: three → eight.** `AccentName` gains `slate`, `clay`, `mint`, `mauve`,
+   `rose` — the series palette's own muted register, so endpoint chips and chart series stay one
+   family. Appended after the original three so persisted `accentIndex` data keeps its colours.
+   Dark and light values all clear the 4.5:1 floor (the existing contrast tests iterate
+   `ACCENT_ORDER`, so they enforce it); the settings picker wraps its now-nine swatches.
+
+736 tests, typecheck and lint clean. Android not re-run this round: the native drag path is
+untouched (`nativeGestures` is true there), and the meter line-height + palette changes are
+covered by the suite — worth an eye in the next emulator round all the same.
+
 ---
 
 ## Decisions log

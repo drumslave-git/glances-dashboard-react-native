@@ -1,6 +1,6 @@
 {
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
-  "productName": "Glances Telemetry",
+  "productName": "Glances Dashboard",
   "mainBinaryName": "glances-dashboard",
   "version": "0.2.3",
   "identifier": "com.glancesdashboard.app",
@@ -13,7 +13,7 @@
   "app": {
     "windows": [
       {
-        "title": "Glances Telemetry",
+        "title": "Glances Dashboard",
         "width": 1280,
         "height": 800,
         "minWidth": 420,

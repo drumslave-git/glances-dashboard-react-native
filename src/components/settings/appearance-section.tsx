@@ -242,7 +242,8 @@ export function AccentPicker({
   const options: (AccentName | null)[] = [null, ...ACCENT_ORDER];
 
   return (
-    <XStack gap={8} items="center" testID={testID}>
+    // Wraps: nine swatches no longer fit one row on a phone.
+    <XStack gap={8} items="center" flexWrap="wrap" testID={testID}>
       <MicroLabel>Colour</MicroLabel>
       {options.map((option) => {
         const selected = color === option;

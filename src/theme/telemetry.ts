@@ -15,8 +15,20 @@
 
 export type ThemeMode = 'dark' | 'light';
 
-/** Named accents. One hue per metric family, re-used as the endpoint palette. */
-export type AccentName = 'lime' | 'cyan' | 'amber';
+/**
+ * Named accents. The first three are the design's metric-family hues; the rest widen the
+ * *endpoint* palette (the owner's ask — three colours cannot tell five hosts apart) with the
+ * series palette's own muted register, so an endpoint chip and a chart series stay one family.
+ */
+export type AccentName =
+  | 'lime'
+  | 'cyan'
+  | 'amber'
+  | 'slate'
+  | 'clay'
+  | 'mint'
+  | 'mauve'
+  | 'rose';
 
 /** Surfaces the design specifies as two-stop gradients. */
 export type Gradient = readonly [string, string];
@@ -252,6 +264,38 @@ const ACCENT_VALUES: Record<ThemeMode, Record<AccentName, AccentValues>> = {
       fill: '#d9a13c',
       chip: { text: '#cf9c3d', border: '#2e2618', bg: '#14110c' },
     },
+    // The extended endpoint hues, cut from the series palette's register. Every value below
+    // clears the 4.5:1 floor the tests hold the first three to.
+    slate: {
+      stroke: '#6f8fd0',
+      text: '#6f8fd0',
+      fill: '#6f8fd0',
+      chip: { text: '#7d99d2', border: '#1e2430', bg: '#0d0f15' },
+    },
+    clay: {
+      stroke: '#c98a6a',
+      text: '#c98a6a',
+      fill: '#c98a6a',
+      chip: { text: '#cb9071', border: '#302219', bg: '#14100c' },
+    },
+    mint: {
+      stroke: '#7fd1a8',
+      text: '#7fd1a8',
+      fill: '#7fd1a8',
+      chip: { text: '#82c9a4', border: '#1d2f26', bg: '#0d1310' },
+    },
+    mauve: {
+      stroke: '#b98fd0',
+      text: '#b98fd0',
+      fill: '#b98fd0',
+      chip: { text: '#bb95d0', border: '#2a2130', bg: '#120e15' },
+    },
+    rose: {
+      stroke: '#d0757a',
+      text: '#d0757a',
+      fill: '#d0757a',
+      chip: { text: '#d08388', border: '#301d1e', bg: '#150d0e' },
+    },
   },
   light: {
     lime: {
@@ -274,11 +318,53 @@ const ACCENT_VALUES: Record<ThemeMode, Record<AccentName, AccentValues>> = {
       fill: '#7d520c',
       chip: { text: '#8a5a0e', border: '#e4d6b8', bg: '#faf3e4' },
     },
+    slate: {
+      stroke: '#42598f',
+      text: '#42598f',
+      fill: '#42598f',
+      chip: { text: '#42598f', border: '#ccd2e0', bg: '#eef1f8' },
+    },
+    clay: {
+      stroke: '#8a5334',
+      text: '#8a5334',
+      fill: '#8a5334',
+      chip: { text: '#8a5334', border: '#e0d0c4', bg: '#f8f0ea' },
+    },
+    mint: {
+      stroke: '#297a58',
+      text: '#297a58',
+      fill: '#297a58',
+      chip: { text: '#297a58', border: '#c2dcd0', bg: '#ecf6f1' },
+    },
+    mauve: {
+      stroke: '#6f4a8f',
+      text: '#6f4a8f',
+      fill: '#6f4a8f',
+      chip: { text: '#6f4a8f', border: '#d8cce0', bg: '#f4eef8' },
+    },
+    rose: {
+      stroke: '#9c4348',
+      text: '#9c4348',
+      fill: '#9c4348',
+      chip: { text: '#9c4348', border: '#e4c8ca', bg: '#faeeef' },
+    },
   },
 };
 
-/** Assignment order for endpoints, cycling when there are more than three. */
-export const ACCENT_ORDER: readonly AccentName[] = ['lime', 'cyan', 'amber'];
+/**
+ * Assignment order for endpoints, cycling only past the eighth. The original three lead, so
+ * persisted `accentIndex` data from v1 keeps the colour it always had.
+ */
+export const ACCENT_ORDER: readonly AccentName[] = [
+  'lime',
+  'cyan',
+  'amber',
+  'slate',
+  'clay',
+  'mint',
+  'mauve',
+  'rose',
+];
 
 /** Endpoints store an index rather than a colour, so a theme switch re-resolves. */
 export function accentNameForIndex(accentIndex: number): AccentName {

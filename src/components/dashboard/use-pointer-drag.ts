@@ -73,6 +73,14 @@ export function usePointerDrag({
     const move = (event: PointerEvent) => {
       const state = drag.current;
       if (!state) return;
+      // The primary button is no longer down: the `pointerup` was lost — released outside the
+      // window without capture, or eaten by the OS. Before this guard a lost up left the drag
+      // live forever: the card trailed the idle mouse across the board and the next press
+      // teleported it, which is the "completely broken, random jumps" drag of the 0.2.3 review.
+      if ((event.buttons & 1) === 0) {
+        finish();
+        return;
+      }
       const dx = event.clientX - state.startX;
       const dy = event.clientY - state.startY;
       if (!state.active) {
@@ -86,15 +94,27 @@ export function usePointerDrag({
     const down = (event: PointerEvent) => {
       // Left button only: a right-click belongs to the context menu, a middle-click to scrolling.
       if (event.button !== 0) return;
+      // A drag that somehow survived its release must not swallow this press.
+      if (drag.current) finish();
       drag.current = { startX: event.clientX, startY: event.clientY, active: false };
+      // Deliberately NO `setPointerCapture` here: capturing a synthetic (CDP-driven) mouse
+      // pointer wedges WebView2's input pipeline — the release vanishes and every later input
+      // is dropped until restart. A release outside the window is instead recovered by the
+      // `buttons` guard above on the next move that makes it back in.
       window.addEventListener('pointermove', move);
       window.addEventListener('pointerup', finish);
       window.addEventListener('pointercancel', finish);
     };
 
+    // A drag is a transform, not a transfer: without this the browser starts a native HTML
+    // drag from selected text or an image inside the card, and the pointer stream dies mid-drag.
+    const nativeDrag = (event: Event) => event.preventDefault();
+
     element.addEventListener('pointerdown', down);
+    element.addEventListener('dragstart', nativeDrag);
     return () => {
       element.removeEventListener('pointerdown', down);
+      element.removeEventListener('dragstart', nativeDrag);
       finish();
     };
   }, [enabled, onBegin, onEnd, onMove, threshold]);

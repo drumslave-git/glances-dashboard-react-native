@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "Glances Telemetry",
+    "name": "Glances Dashboard",
     "slug": "glances-dashboard",
     "version": "0.2.3",
     "orientation": "default",

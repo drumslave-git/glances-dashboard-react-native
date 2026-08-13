@@ -133,13 +133,15 @@ describe('endpoint accents', () => {
     expect(accentNameForIndex(2)).toBe('amber');
   });
 
-  it('cycles beyond the palette rather than running out', () => {
-    expect(accentNameForIndex(3)).toBe('lime');
-    expect(accentNameForIndex(7)).toBe('cyan');
+  it('continues into the extended hues, then cycles', () => {
+    expect(accentNameForIndex(3)).toBe('slate');
+    expect(accentNameForIndex(7)).toBe('rose');
+    expect(accentNameForIndex(8)).toBe('lime');
+    expect(accentNameForIndex(9)).toBe('cyan');
   });
 
   it('survives the junk a persisted index can hold', () => {
-    expect(accentNameForIndex(-1)).toBe('amber');
+    expect(accentNameForIndex(-1)).toBe('rose');
     expect(accentNameForIndex(Number.NaN)).toBe('lime');
     expect(accentNameForIndex(1.7)).toBe('cyan');
   });

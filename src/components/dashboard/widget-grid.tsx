@@ -1,5 +1,5 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type { LayoutChangeEvent } from 'react-native';
+import { Platform, type LayoutChangeEvent } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, {
   LinearTransition,
@@ -286,18 +286,32 @@ function GridCellInner({
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setOrigin(null);
     setSettling(true);
+  }, [dragging, origin, rect.left, rect.top, dragX, dragY]);
+
+  // Its own effect, deliberately: this timer used to live in the carry effect above, whose own
+  // re-run (origin flipping to null) cleared it before it fired — `settling` stuck true, the
+  // card kept its lifted z-index forever and its layout transition never came back.
+  useEffect(() => {
+    if (!settling) return;
     const timer = setTimeout(() => setSettling(false), SLIDE_MS);
     return () => clearTimeout(timer);
-  }, [dragging, origin, rect.left, rect.top, dragX, dragY]);
+  }, [settling]);
 
   const animatedStyle = useAnimatedStyle(() => ({
     transform: [{ translateX: dragX.value }, { translateY: dragY.value }],
   }));
 
+  // The native gestures are **off on web**, not merely inert. A web `Pan` can never activate
+  // (see `usePointerDrag`), but an *enabled* one still runs its state machine: move >10px inside
+  // the long-press window and it FAILS, and `onFinalize` fires `endGesture` into the middle of
+  // the pointer drag — unfreezing the origin, killing the settle, and leaving the card offset by
+  // its last translation. That mid-drag finalize was the whole "random jumps" drag of 0.2.3.
+  const nativeGestures = Platform.OS !== 'web';
+
   const pan = useMemo(
     () =>
       Gesture.Pan()
-        .enabled(editMode)
+        .enabled(editMode && nativeGestures)
         .activateAfterLongPress(LONG_PRESS_MS)
         // Lets tests drive the drag through gesture-handler's jest utils.
         .withTestId(`widget-drag-${widget.id}`)
@@ -319,13 +333,13 @@ function GridCellInner({
         .onFinalize(() => {
           runOnJS(onGestureEnd)();
         }),
-    [dragX, dragY, editMode, onDragBegin, onDragMove, onGestureEnd, widget.id],
+    [dragX, dragY, editMode, nativeGestures, onDragBegin, onDragMove, onGestureEnd, widget.id],
   );
 
   const resize = useMemo(
     () =>
       Gesture.Pan()
-        .enabled(editMode && resizable)
+        .enabled(editMode && resizable && nativeGestures)
         .withTestId(`widget-resize-${widget.id}`)
         .onStart(() => {
           runOnJS(onResizeBegin)(widget.id);
@@ -336,7 +350,7 @@ function GridCellInner({
         .onFinalize(() => {
           runOnJS(onGestureEnd)();
         }),
-    [editMode, onGestureEnd, onResizeBegin, onResizeMove, resizable, widget.id],
+    [editMode, nativeGestures, onGestureEnd, onResizeBegin, onResizeMove, resizable, widget.id],
   );
 
   // The same two drags, for the platforms where a gesture-handler `Pan` cannot start (see
