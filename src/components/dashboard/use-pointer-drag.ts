@@ -56,6 +56,19 @@ export function usePointerDrag({
   const ref = useRef<TamaguiElement | null>(null);
   const drag = useRef<DragState | null>(null);
 
+  /**
+   * The callbacks, reached through a ref so the subscription below does not depend on them.
+   *
+   * They are rebuilt whenever the grid's layout changes identity, and the subscription's cleanup
+   * ends any live drag — so binding to them directly means *any* re-render during a drag silently
+   * drops the card and stops the pointer being followed at all. That is the drag "randomly
+   * stopping" mid-stroke; the listeners have to outlive every render between press and release.
+   */
+  const handlers = useRef({ onBegin, onMove, onEnd });
+  useEffect(() => {
+    handlers.current = { onBegin, onMove, onEnd };
+  });
+
   useEffect(() => {
     if (Platform.OS !== 'web' || !enabled) return;
     const element = asElement(ref.current);
@@ -67,7 +80,7 @@ export function usePointerDrag({
       window.removeEventListener('pointermove', move);
       window.removeEventListener('pointerup', finish);
       window.removeEventListener('pointercancel', finish);
-      if (state?.active) onEnd();
+      if (state?.active) handlers.current.onEnd();
     };
 
     const move = (event: PointerEvent) => {
@@ -86,9 +99,9 @@ export function usePointerDrag({
       if (!state.active) {
         if (Math.hypot(dx, dy) < threshold) return;
         state.active = true;
-        onBegin();
+        handlers.current.onBegin();
       }
-      onMove(dx, dy);
+      handlers.current.onMove(dx, dy);
     };
 
     const down = (event: PointerEvent) => {
@@ -117,7 +130,7 @@ export function usePointerDrag({
       element.removeEventListener('dragstart', nativeDrag);
       finish();
     };
-  }, [enabled, onBegin, onEnd, onMove, threshold]);
+  }, [enabled, threshold]);
 
   return { ref };
 }

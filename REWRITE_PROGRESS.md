@@ -18,7 +18,11 @@ desktop window **and re-verified on the Android emulator** (see *Post-0.2.0*, 20
 second review (2026-08-12) filed seven more — font scale not unified, one-colour bidirectional
 charts, an unnamed "busiest" pick, no GPU trace, mismatched branding, a stripped fullscreen
 header, and a choppy drag — all fixed and verified on the built Windows app against the live
-server (see *Post-0.2.2*). Ready for the owner's next release bump.
+server (see *Post-0.2.2*). The third review (2026-08-13) restored the name and found the real
+cause of the drag (see *Post-0.2.3*); the fourth, the same day, found the rest of it — a card
+anchored to a slot the drag had already left, no drop placeholder, a snap with no dead band, a
+re-render that dropped the card mid-stroke, and the release flash (see *Post-0.2.4*). Ready for
+the owner's next release bump.
 
 **How it got here.** M0–M9 ported a Vite + React + **Mantine** web app with five *generic* widgets,
 and shipped v0.1.2. On 2026-08-04 the reference was re-examined at **v1.13.0** and turned out to be
@@ -1406,6 +1410,59 @@ Tauri window over CDP against the live TCloud server.
 736 tests, typecheck and lint clean. Android not re-run this round: the native drag path is
 untouched (`nativeGestures` is true there), and the meter line-height + palette changes are
 covered by the suite — worth an eye in the next emulator round all the same.
+
+### Post-0.2.4 — the owner's fourth review: the drag is legible now (2026-08-13)
+
+"drag&drop is still horrible. + when position on widget is changed — first it flashes at original
+position, then in new one." Both reproduced frame-by-frame on the built Tauri window (rAF sampler
+over CDP recording every cell's slot and transform), and both were real.
+
+**The flash.** Captured exactly: at release the card sat at `slot(11,585)+t(634,250)`; the next
+frame the transform was **0** with the slot still at 585 — the card at its *pre-drag* place — and
+the frame after that the slot became `(645,667)`, the true destination. Cause: `endGesture` cleared
+the preview and committed to the store in one call, but the store's answer only reaches the grid a
+render later, so one frame necessarily painted the *old* layout. `endGesture` now **holds** the
+committed layout as the preview and drops it when `base` comes back changed.
+
+**The rest of "horrible", measured.** A scripted drag showed the board thrashing: one card moved
+and five re-placed themselves, twice flipping back on the next 30px of pointer travel. Four causes,
+all fixed:
+
+- **The dragged card's anchor was self-captured.** The cell froze its own `rect` on the render
+  where `dragging` turned true — but that rect is the *previewed* one, which the drag has already
+  moved. A cell that captured it a frame late anchored to a slot the drag had left and then rode
+  the pointer from there: the card travelling at twice the speed of the mouse (visible in the
+  owner's recording, 430px of card per 219px of cursor). The grid now freezes the origin in
+  `beginDrag`, from `base`, and passes it down.
+- **No drop placeholder.** The only feedback a drag gave was the neighbours reflowing around a hole
+  you could not see. There is now an accent outline at the target slot (`widget-drop-target`) —
+  the same affordance react-grid-layout gives the reference.
+- **Rows are 82px and a widget is four of them**, so half a row is inside a hand tremor and every
+  crossing recompacts the whole board. `cellDelta`/`spanDelta` take an optional *current* delta and
+  a 0.2-track dead band around leaving it. Same drag after: one neighbour moved, once.
+- **A re-render mid-drag silently dropped the card.** `usePointerDrag` subscribed with its
+  callbacks in the dependency array; they are rebuilt whenever the grid's layout changes identity,
+  and the cleanup ends any live drag. The handlers now go through a ref so the subscription depends
+  only on `enabled`/`threshold` and outlives every render between press and release.
+
+**One animator per cell.** `LinearTransition` is gone — it never ran on web, which is why every
+neighbour teleported there. Each cell now keeps an offset shared value and one `useLayoutEffect`
+whose single rule is: measure how far the slot moved, add it to the offset (leaving the card
+exactly where it was on screen), then animate the offset to zero unless the pointer is driving.
+Neighbour slides, the release glide and a slot corrected twice are all the same code path, and no
+frame can render without the compensation — a `useEffect` would paint one frame first, which is
+the flash all over again. This also retired the `origin`/`lifted` state machine.
+
+Verified on the rebuilt Windows app: mid-drag the card sits at `origin + pointer delta` exactly
+(`box(648,442)` for a `slot(328,11)` origin and a `(320,300)` drag) at z-index 10 over its
+neighbours, the placeholder marks `(646,142)`, and the release lands on `(646,142)` with no
+intermediate frame.
+
+**Not a bug — this machine has Windows animations off.** `SPI_GETCLIENTAREAANIMATION` returns 0, so
+WebView2 reports `prefers-reduced-motion: reduce` and Reanimated makes every animation instant.
+Every slide in the app is a teleport on that desktop, by design and correctly. Worth knowing before
+chasing "the animation does not run" again: Settings → Accessibility → Visual effects → Animation
+effects.
 
 ---
 

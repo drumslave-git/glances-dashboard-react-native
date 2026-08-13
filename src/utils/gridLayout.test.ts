@@ -16,6 +16,7 @@ import {
   normalizeLayout,
   resizeItem,
   rowHeightForViewport,
+  spanDelta,
   trackSize,
   tracksFor,
   type GridItem,
@@ -101,6 +102,22 @@ describe('tracks', () => {
     expect(cellDelta(160, 0, 300, 70, 11)).toEqual({ dx: 1, dy: 0 });
     expect(cellDelta(150, 0, 300, 70, 11)).toEqual({ dx: 0, dy: 0 });
     expect(cellDelta(0, -120, 300, 70, 11)).toEqual({ dx: 0, dy: -1 });
+  });
+
+  it('holds the cell it is already on until the pointer is clear of the boundary', () => {
+    // A row is 81px here, so half of one is 40 — inside a hand tremor. Sitting just past the
+    // halfway point must not flip the target back and forth; 0.2 of a track further does.
+    const current = { dx: 0, dy: 0 };
+    expect(cellDelta(0, 45, 300, 70, 11, current)).toEqual({ dx: 0, dy: 0 });
+    expect(cellDelta(0, 60, 300, 70, 11, current)).toEqual({ dx: 0, dy: 1 });
+    // And the band is symmetric: having moved on, the way back is just as long.
+    expect(cellDelta(0, 40, 300, 70, 11, { dx: 0, dy: 1 })).toEqual({ dx: 0, dy: 1 });
+    expect(cellDelta(0, 20, 300, 70, 11, { dx: 0, dy: 1 })).toEqual({ dx: 0, dy: 0 });
+  });
+
+  it('takes the same band on a resize', () => {
+    expect(spanDelta(170, 0, 300, 70, 11, { dx: 0, dy: 0 })).toEqual({ dw: 0, dh: 0 });
+    expect(spanDelta(230, 0, 300, 70, 11, { dx: 0, dy: 0 })).toEqual({ dw: 1, dh: 0 });
   });
 });
 

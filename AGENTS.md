@@ -191,6 +191,22 @@ Verify against installed types (`node_modules/**/*.d.ts`) rather than memory —
   "transparency works"), and CDP `Page.captureScreenshot` / `PrintWindow` composite over their own
   white, so neither can see this bug. The probe that works: put a known-colour window directly
   behind the app (`SetWindowPos`), sample single pixels, and demand the blend arithmetic.
+- **This machine has Windows animation effects off, so Reanimated animates nothing.**
+  `SystemParametersInfo(SPI_GETCLIENTAREAANIMATION)` returns 0, WebView2 reports
+  `prefers-reduced-motion: reduce`, and Reanimated honours it by making every `withTiming` finish
+  instantly. Every slide in the desktop app is a teleport there — correct behaviour, not a bug, and
+  not something to "fix" app-side. Check it before chasing a missing animation:
+  `matchMedia('(prefers-reduced-motion: reduce)').matches` over CDP. (Settings → Accessibility →
+  Visual effects → Animation effects, if you want to see the motion for real.)
+- **Reanimated's `LinearTransition` does nothing on web** — every cell teleports between
+  placements. The grid animates its own offset instead (`GridCellInner` in `widget-grid.tsx`), one
+  animator per cell on every platform. Don't reintroduce a layout animator alongside a transform.
+- **A position that has to survive a re-layout needs `useLayoutEffect`, not `useEffect`.** If the
+  compensating transform is written after paint, the browser shows one frame of the element at its
+  new slot without it — which is exactly what a "flash at the old position" is.
+- **`fireGestureHandler` always appends the END event**, so there is no way to inspect the tree
+  *during* a gesture through it. Emit the two `DeviceEventEmitter` events yourself to hold a drag
+  open — `holdDrag` in `widget-grid.test.tsx` is the worked example.
 - **`AbortSignal.timeout` rejections are nondeterministic to observe.** Chromium may GC a pending timeout signal before it fires, so a bug triggered by late aborts (the plugin-http invalid-rid one was) can show zero rejections for a 45 s window and then fire on every poll minutes later. A quiet `unhandledrejection` hook is not proof — force the failing sequence directly before trusting it.
 
 ## The "Telemetry" design system (M8)

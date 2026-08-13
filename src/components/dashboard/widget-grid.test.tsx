@@ -1,4 +1,4 @@
-import { StyleSheet } from 'react-native';
+import { DeviceEventEmitter, StyleSheet } from 'react-native';
 import { State } from 'react-native-gesture-handler';
 import {
   fireGestureHandler,
@@ -74,6 +74,30 @@ async function renderGrid(widgets: WidgetInstance[], editMode = true, box = GRID
 /** The committed layout, keyed by widget id. */
 const committed = (onLayoutChange: jest.Mock): Map<string, GridItem> =>
   new Map((onLayoutChange.mock.calls.at(-1)?.[0] as GridItem[]).map((item) => [item.id, item]));
+
+/**
+ * A drag left in the hand, so the board can be looked at *during* one.
+ *
+ * `fireGestureHandler` always appends the END — by the time it returns the drag is over and
+ * committed — so the two events it would emit up to that point are sent directly instead.
+ */
+function holdDrag(gestureTestId: string, translationY: number, translationX = 0) {
+  const { handlerTag } = getByGestureTestId(gestureTestId);
+  const common = { handlerTag, numberOfPointers: 1, x: 0, y: 0, absoluteX: 0, absoluteY: 0 };
+  DeviceEventEmitter.emit('onGestureHandlerStateChange', {
+    ...common,
+    state: State.ACTIVE,
+    oldState: State.BEGAN,
+    translationX: 0,
+    translationY: 0,
+  });
+  DeviceEventEmitter.emit('onGestureHandlerEvent', {
+    ...common,
+    state: State.ACTIVE,
+    translationX,
+    translationY,
+  });
+}
 
 const rectOf = (element: { props: { style?: unknown } }) =>
   StyleSheet.flatten(element.props.style as never) as {
@@ -161,6 +185,41 @@ describe('WidgetGrid', () => {
 
     await waitFor(() => expect(onLayoutChange).toHaveBeenCalled());
     expect(committed(onLayoutChange).get('w-2')).toMatchObject({ x: 1, y: 0 });
+  });
+
+  it('marks where a dragged card would land, and leaves the card itself under the pointer', async () => {
+    const { getByTestId, queryByTestId } = await renderGrid(makeWidgets(3));
+    expect(queryByTestId('widget-drop-target')).toBeNull();
+
+    const anchor = rectOf(getByTestId('widget-cell-w-1'));
+    holdDrag('widget-drag-w-1', 360);
+    await waitFor(() => expect(queryByTestId('widget-drop-target')).not.toBeNull());
+
+    // The placeholder has moved down the board; the card has not, because it is riding the
+    // pointer through its transform and its slot must stay where the press found it.
+    expect(rectOf(getByTestId('widget-drop-target')).top).toBeGreaterThan(anchor.top);
+    expect(rectOf(getByTestId('widget-cell-w-1')).top).toBe(anchor.top);
+  });
+
+  it('holds the dropped arrangement on screen instead of falling back to the old one', async () => {
+    // The parent commits to a store and the answer returns a render later. Until it does, the
+    // board must keep showing where the card was dropped — the frame of the pre-drag layout is
+    // the flash the owner reported.
+    const { getByTestId, onLayoutChange } = await renderGrid(makeWidgets(3));
+
+    fireGestureHandler<PanGesture>(getByGestureTestId('widget-drag-w-1'), [
+      { state: State.BEGAN, translationX: 0, translationY: 0 },
+      { state: State.ACTIVE, translationX: 0, translationY: 0 },
+      { state: State.ACTIVE, translationX: 0, translationY: 360 },
+      { state: State.END, translationX: 0, translationY: 360 },
+    ]);
+
+    await waitFor(() => expect(onLayoutChange).toHaveBeenCalled());
+    const layout = committed(onLayoutChange);
+    const first = rectOf(getByTestId('widget-cell-w-1'));
+    const second = rectOf(getByTestId('widget-cell-w-2'));
+    expect(layout.get('w-1')!.y).toBeGreaterThan(layout.get('w-2')!.y);
+    expect(first.top).toBeGreaterThan(second.top);
   });
 
   it('commits nothing when a drag goes nowhere', async () => {

@@ -1,8 +1,7 @@
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Platform, type LayoutChangeEvent } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, {
-  LinearTransition,
   runOnJS,
   useAnimatedStyle,
   useSharedValue,
@@ -53,6 +52,11 @@ const GRIP_SIZE = 22;
  * shared values, which never touches React (the owner's review called the snapping "choppy, zero
  * smoothness", and it was: the card teleported a whole column at a time and this transition was
  * the only motion). Only the cells flowing around it animate between placements.
+ *
+ * Reanimated's `LinearTransition` used to do the sliding and **did nothing on web** — every
+ * neighbour teleported between arrangements, which is most of why the drag read as chaos there.
+ * Each cell now animates its own offset (see `GridCellInner`), which is one animator on every
+ * platform rather than a layout animator fighting a transform.
  */
 const SLIDE_MS = 130;
 
@@ -106,10 +110,22 @@ export function WidgetGrid({ widgets, editMode, onEdit, onRemove, onLayoutChange
   // `setState` updater — those run during the *render* phase, and committing the layout from one
   // means writing to the widgets store while React is rendering this component.
   const previewRef = useRef<GridItem[] | null>(null);
-  const [draggingId, setDraggingId] = useState<string | null>(null);
+  /**
+   * The live drag, with the dragged widget's placement **as it was when the press landed**.
+   *
+   * Frozen here rather than worked out by the cell from its own rect, because that rect is the
+   * *previewed* one and moves under the card mid-drag: a cell that captured it a frame late
+   * anchored itself to a slot the drag had already left, and then rode the pointer from there —
+   * the card running at twice the speed of the mouse.
+   */
+  const [drag, setDrag] = useState<{ id: string; origin: GridItem } | null>(null);
   const [resizingId, setResizingId] = useState<string | null>(null);
-  // Last snapped target, so a drag that has not crossed a cell boundary does no React work.
-  const lastTarget = useRef<{ x: number; y: number } | null>(null);
+  // The snapped delta this gesture last acted on: the dead band in `cellDelta` measures from it,
+  // and an unchanged delta does no React work at all.
+  const lastDelta = useRef<{ dx: number; dy: number } | null>(null);
+  // The `base` a commit was made against, so the preview can be held until the store's answer
+  // comes back through props. See `endGesture`.
+  const heldBase = useRef<GridItem[] | null>(null);
 
   const layout = preview ?? base;
   const byId = useMemo(() => new Map(layout.map((item) => [item.id, item])), [layout]);
@@ -123,8 +139,9 @@ export function WidgetGrid({ widgets, editMode, onEdit, onRemove, onLayoutChange
   const beginDrag = useCallback(
     (widgetId: string) => {
       const origin = base.find((item) => item.id === widgetId);
-      lastTarget.current = origin ? { x: origin.x, y: origin.y } : null;
-      setDraggingId(widgetId);
+      if (!origin) return;
+      lastDelta.current = { dx: 0, dy: 0 };
+      setDrag({ id: widgetId, origin });
     },
     [base],
   );
@@ -133,24 +150,31 @@ export function WidgetGrid({ widgets, editMode, onEdit, onRemove, onLayoutChange
     (widgetId: string, translationX: number, translationY: number) => {
       const origin = base.find((item) => item.id === widgetId);
       if (!origin) return;
-      const { dx, dy } = cellDelta(translationX, translationY, colWidth, rowHeight, gap);
-      const target = { x: origin.x + dx, y: Math.max(0, origin.y + dy) };
-      if (lastTarget.current && lastTarget.current.x === target.x && lastTarget.current.y === target.y) return;
-      lastTarget.current = target;
-      showPreview(moveItem(base, widgetId, target.x, target.y, columns));
+      const previous = lastDelta.current ?? undefined;
+      const delta = cellDelta(translationX, translationY, colWidth, rowHeight, gap, previous);
+      if (previous && previous.dx === delta.dx && previous.dy === delta.dy) return;
+      lastDelta.current = delta;
+      showPreview(
+        moveItem(base, widgetId, origin.x + delta.dx, Math.max(0, origin.y + delta.dy), columns),
+      );
     },
     [base, colWidth, columns, gap, rowHeight, showPreview],
   );
+
+  const beginResize = useCallback((widgetId: string) => {
+    lastDelta.current = { dx: 0, dy: 0 };
+    setResizingId(widgetId);
+  }, []);
 
   const resizeTo = useCallback(
     (widgetId: string, translationX: number, translationY: number) => {
       const origin = base.find((item) => item.id === widgetId);
       if (!origin) return;
-      const { dw, dh } = spanDelta(translationX, translationY, colWidth, rowHeight, gap);
-      const target = { w: origin.w + dw, h: origin.h + dh };
-      if (lastTarget.current && lastTarget.current.x === target.w && lastTarget.current.y === target.h) return;
-      lastTarget.current = { x: target.w, y: target.h };
-      showPreview(resizeItem(base, widgetId, target.w, target.h, columns));
+      const previous = lastDelta.current ?? undefined;
+      const { dw, dh } = spanDelta(translationX, translationY, colWidth, rowHeight, gap, previous);
+      if (previous && previous.dx === dw && previous.dy === dh) return;
+      lastDelta.current = { dx: dw, dy: dh };
+      showPreview(resizeItem(base, widgetId, origin.w + dw, origin.h + dh, columns));
     },
     [base, colWidth, columns, gap, rowHeight, showPreview],
   );
@@ -158,12 +182,31 @@ export function WidgetGrid({ widgets, editMode, onEdit, onRemove, onLayoutChange
   const endGesture = useCallback(() => {
     const committed = previewRef.current;
     previewRef.current = null;
-    setDraggingId(null);
+    setDrag(null);
     setResizingId(null);
-    lastTarget.current = null;
+    lastDelta.current = null;
+    if (!committed) {
+      // A second, redundant end — a pointer release the native gesture also finalizes — must not
+      // drop a preview that is still standing in for a commit the store has yet to answer.
+      if (heldBase.current === null) setPreview(null);
+      return;
+    }
+    // **Hold** the committed arrangement rather than dropping back to `base`. The store's answer
+    // arrives through props a render later, so clearing here paints the *pre-drag* board for a
+    // frame: the card snaps home, then jumps to where it was dropped. That flash is what the owner
+    // reported (review, 2026-08-13), and it is visible at 60 Hz.
+    heldBase.current = base;
+    setPreview(committed);
+    onLayoutChange(committed);
+  }, [base, onLayoutChange]);
+
+  // The store has answered — `base` is a new array whatever it decided — so the held preview has
+  // done its job and the board goes back to rendering what is actually stored.
+  useEffect(() => {
+    if (heldBase.current === null || heldBase.current === base) return;
+    heldBase.current = null;
     setPreview(null);
-    if (committed) onLayoutChange(committed);
-  }, [onLayoutChange]);
+  }, [base]);
 
   // The kebab's footprints are the same edit as the corner grip, which is why they commit the
   // same way: a phone has no grip, but it must not have a lesser layout model.
@@ -179,11 +222,20 @@ export function WidgetGrid({ widgets, editMode, onEdit, onRemove, onLayoutChange
 
   const measured = box.width > 0;
 
+  // Where the card would land if it were dropped now. Without it the only feedback a drag gives is
+  // the neighbours reflowing around a hole you cannot see — the board looks like it is rearranging
+  // itself at random, which is precisely how the drag read.
+  const dropTarget = useMemo(() => {
+    if (!drag) return null;
+    const item = byId.get(drag.id);
+    return item ? cellRect(item, colWidth, rowHeight, gap) : null;
+  }, [byId, colWidth, drag, gap, rowHeight]);
+
   return (
     <ScrollView
       flex={1}
       // A lifted card must not drag the page with it.
-      scrollEnabled={draggingId === null && resizingId === null}
+      scrollEnabled={drag === null && resizingId === null}
       showsVerticalScrollIndicator={false}
       onLayout={measure}
       testID="widget-grid"
@@ -191,22 +243,37 @@ export function WidgetGrid({ widgets, editMode, onEdit, onRemove, onLayoutChange
       {/* Tamagui emits no `position` on web, so an absolutely-placed child would escape to some
           ancestor. The explicit stacking context keeps the dragged card above its neighbours. */}
       <YStack position="relative" style={{ zIndex: 0 }} height={contentHeight(layout, rowHeight, gap)}>
+        {dropTarget && (
+          <YStack
+            position="absolute"
+            rounded="$4"
+            borderWidth={2}
+            borderColor="$accent"
+            opacity={0.45}
+            pointerEvents="none"
+            style={{ ...dropTarget, zIndex: 0 }}
+            testID="widget-drop-target"
+          />
+        )}
         {measured &&
           widgets.map((widget) => {
             const item = byId.get(widget.id);
             if (!item) return null;
+            // The dragged card is anchored where the press found it and moves by transform alone;
+            // its previewed slot belongs to the placeholder above, not to the card.
+            const placement = drag?.id === widget.id ? drag.origin : item;
             return (
               <GridCell
                 key={widget.id}
                 widget={widget}
-                rect={cellRect(item, colWidth, rowHeight, gap)}
-                dragging={draggingId === widget.id}
+                rect={cellRect(placement, colWidth, rowHeight, gap)}
+                dragging={drag?.id === widget.id}
                 editMode={editMode}
                 resizable={columns > 1}
                 onDragBegin={beginDrag}
                 onDragMove={dragTo}
                 onResizeMove={resizeTo}
-                onResizeBegin={setResizingId}
+                onResizeBegin={beginResize}
                 onGestureEnd={endGesture}
                 onEdit={onEdit}
                 onRemove={onRemove}
@@ -255,42 +322,66 @@ function GridCellInner({
   // DOM pointermove handler on web.
   const dragX = useSharedValue(0);
   const dragY = useSharedValue(0);
+  // How far the card is drawn from the slot `rect` puts it in. Every discrete jump the layout
+  // makes is absorbed here and then animated away, so the card's *visual* position is continuous
+  // no matter how many renders the layout takes to settle.
+  const offX = useSharedValue(0);
+  const offY = useSharedValue(0);
+  // The slot last reconciled against, so the effect below can tell how far the layout moved.
+  const slot = useRef({ left: rect.left, top: rect.top });
+  // Whether the glide this cell is about to start is a *release* rather than a neighbour getting
+  // out of the way — only a released card keeps the lifted z-index while it travels.
+  const held = useRef(false);
+  // Holds the lifted z-index for as long as the settle glide, so the card is not overlapped by the
+  // neighbours it is still travelling across.
+  const [settling, setSettling] = useState(false);
 
   /**
-   * The cell's rect, frozen at drag start. While a drag is live the preview keeps moving this
-   * cell's *slot*, but the card on screen must stay `origin + translation` — tracking the live
-   * slot is what made the old drag oscillate. Captured by render-phase reconciliation (the
-   * sanctioned adjust-state-on-prop-change shape) because the gesture callbacks are memoized
-   * without `rect` and would close over a stale one.
+   * Keep the card where it is drawn, whatever the layout just did to its slot.
+   *
+   * One rule covers every case: measure how far the slot moved, add that to the offset — which
+   * leaves the card exactly where it was on screen — and then animate the offset to zero unless
+   * the pointer is driving. A neighbour slides out of the way; a released card glides from under
+   * the hand into its cell; a card whose slot is corrected a second time re-aims mid-glide instead
+   * of jumping. Nothing can teleport, because no frame ever renders without the compensation.
+   *
+   * A **layout** effect: `useEffect` runs after the browser has painted, so the one frame between
+   * the new slot and its compensation is a visible flash of the card at the wrong place.
    */
-  const [origin, setOrigin] = useState<typeof rect | null>(null);
-  // Keeps the layout transition off while the card animates its release remainder to zero, so
-  // the slide is the transform's and not fought over by two animators.
-  const [settling, setSettling] = useState(false);
-  if (dragging && origin === null) {
-    setOrigin(rect);
-    if (settling) setSettling(false);
-  }
+  useLayoutEffect(() => {
+    const from = slot.current;
+    const shiftX = from.left - rect.left;
+    const shiftY = from.top - rect.top;
+    slot.current = { left: rect.left, top: rect.top };
 
-  // Drag just ended: the card sits at `origin + translation`; its slot is `rect`. Carry the
-  // difference into the transform and time it out, so the card glides the last stretch into its
-  // cell instead of teleporting. This must react to the `dragging` prop flipping and it must
-  // write shared values, which only an effect may do — the state writes alongside are what hand
-  // the card from "frozen at origin" to "settling at its slot", so they belong to the same step.
-  useEffect(() => {
-    if (dragging || origin === null) return;
-    dragX.value = origin.left + dragX.value - rect.left;
-    dragY.value = origin.top + dragY.value - rect.top;
-    dragX.value = withTiming(0, { duration: SLIDE_MS });
-    dragY.value = withTiming(0, { duration: SLIDE_MS });
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setOrigin(null);
-    setSettling(true);
-  }, [dragging, origin, rect.left, rect.top, dragX, dragY]);
+    if (dragging) {
+      // The pointer owns the card: absorb the slot's movement and animate nothing.
+      if (shiftX !== 0) offX.value += shiftX;
+      if (shiftY !== 0) offY.value += shiftY;
+      held.current = true;
+      return;
+    }
 
-  // Its own effect, deliberately: this timer used to live in the carry effect above, whose own
-  // re-run (origin flipping to null) cleared it before it fired — `settling` stuck true, the
-  // card kept its lifted z-index forever and its layout transition never came back.
+    const released = held.current;
+    held.current = false;
+    // Whatever the drag had accumulated becomes part of the distance still to travel.
+    const restX = shiftX + dragX.value;
+    const restY = shiftY + dragY.value;
+    if (restX === 0 && restY === 0 && offX.value === 0 && offY.value === 0) return;
+    dragX.value = 0;
+    dragY.value = 0;
+    offX.value = offX.value + restX;
+    offY.value = offY.value + restY;
+    offX.value = withTiming(0, { duration: SLIDE_MS });
+    offY.value = withTiming(0, { duration: SLIDE_MS });
+    // A neighbour flowing around the drag glides too, but it must not be lifted while it does —
+    // it would be drawn over the card the user is holding.
+    if (released) setSettling(true);
+  }, [dragging, rect.left, rect.top, dragX, dragY, offX, offY]);
+
+  // Its own effect, deliberately: this timer used to live in the reconcile effect above, whose own
+  // re-run cleared it before it fired — `settling` stuck true and the card kept its lifted
+  // z-index forever.
   useEffect(() => {
     if (!settling) return;
     const timer = setTimeout(() => setSettling(false), SLIDE_MS);
@@ -298,7 +389,10 @@ function GridCellInner({
   }, [settling]);
 
   const animatedStyle = useAnimatedStyle(() => ({
-    transform: [{ translateX: dragX.value }, { translateY: dragY.value }],
+    transform: [
+      { translateX: offX.value + dragX.value },
+      { translateY: offY.value + dragY.value },
+    ],
   }));
 
   // The native gestures are **off on web**, not merely inert. A web `Pan` can never activate
@@ -392,17 +486,13 @@ function GridCellInner({
     ? footprintOf(widget.type, { w: widget.w, h: widget.h })
     : null;
 
-  // While dragged (or settling) the card is positioned at its frozen origin and moved by the
-  // transform alone; the layout transition is handed back only once both are over, so the two
-  // animators never fight over one card. Neighbours keep the transition throughout — the flow
-  // around the finger is theirs.
-  const lifted = origin !== null || settling;
-  const position = origin ?? rect;
+  // Lifted while the pointer has it and for as long as the settle glide, so it travels over the
+  // neighbours rather than through them.
+  const lifted = dragging || settling;
 
   return (
     <Animated.View
-      layout={lifted ? undefined : LinearTransition.duration(SLIDE_MS)}
-      style={[{ position: 'absolute', ...position, zIndex: lifted ? 10 : 1 }, animatedStyle]}
+      style={[{ position: 'absolute', ...rect, zIndex: lifted ? 10 : 1 }, animatedStyle]}
       testID={`widget-cell-${widget.id}`}
     >
       <GestureDetector gesture={pan}>

@@ -129,8 +129,30 @@ export function contentHeight(items: readonly GridItem[], rowHeight: number, gap
 }
 
 /**
+ * How far past a track's halfway point the pointer must be to leave the track it is already on.
+ *
+ * Rows are short — a windowful is eight or nine of them — while an ordinary widget is four rows
+ * tall, so half a row is a few dozen pixels and an ordinary hand tremor crosses it. Every crossing
+ * recompacts the whole board, and without a dead band the neighbours flip between two arrangements
+ * for as long as the pointer rests near a boundary: the drag reads as the board arguing with
+ * itself. The band is only in the way of *leaving* the current track, so the motion stays
+ * symmetric.
+ */
+const SNAP_BAND = 0.2;
+
+/** One axis of the two below. `current` absent means a plain round, with no track to stay in. */
+function snapTrack(translation: number, pitch: number, current: number | undefined): number {
+  const exact = translation / pitch;
+  if (current !== undefined && Math.abs(exact - current) <= 0.5 + SNAP_BAND) return current;
+  return Math.round(exact);
+}
+
+/**
  * A drag translation in cells. Rounded rather than floored, so a card follows the finger at the
  * halfway point of a track instead of only once it has fully crossed one.
+ *
+ * `current` is the delta this gesture last settled on; pass it to get the dead band described
+ * above, and leave it out for a one-shot conversion.
  */
 export function cellDelta(
   translationX: number,
@@ -138,10 +160,11 @@ export function cellDelta(
   colWidth: number,
   rowHeight: number,
   gap: number,
+  current?: { dx: number; dy: number },
 ): { dx: number; dy: number } {
   return {
-    dx: Math.round(translationX / (colWidth + gap)),
-    dy: Math.round(translationY / (rowHeight + gap)),
+    dx: snapTrack(translationX, colWidth + gap, current?.dx),
+    dy: snapTrack(translationY, rowHeight + gap, current?.dy),
   };
 }
 
@@ -152,8 +175,9 @@ export function spanDelta(
   colWidth: number,
   rowHeight: number,
   gap: number,
+  current?: { dx: number; dy: number },
 ): { dw: number; dh: number } {
-  const { dx, dy } = cellDelta(translationX, translationY, colWidth, rowHeight, gap);
+  const { dx, dy } = cellDelta(translationX, translationY, colWidth, rowHeight, gap, current);
   return { dw: dx, dh: dy };
 }
 
