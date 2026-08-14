@@ -157,6 +157,15 @@ Verify against installed types (`node_modules/**/*.d.ts`) rather than memory —
 - **Tamagui does not set `position` on web**, so a plain `YStack` is `static` and absolutely-positioned children escape it — on native every `View` is a containing block, so the same tree lays out correctly there. Any `position="absolute"` needs an explicit `position="relative"` on the box it is meant to be measured against.
 - **An absolute child also paints *over* its in-flow siblings on web**, which native does not do — there, tree order alone puts an earlier child behind. So a "background" layer needs both halves: `position="relative"` plus `style={{ zIndex: 0 }}` on the parent to make it a stacking context, and `zIndex: -1` on the layer itself. Without the stacking context the `-1` sends the layer behind an *ancestor's* background instead. `GradientSurface` in `components/telemetry/surfaces.tsx` is the worked example; it shipped in v0.1.1 with neither half, and the toolbar's gradient covered the entire desktop window — the app was fully laid out, themed and clickable underneath (the gradient is `pointerEvents="none"`), just invisible. **A blank window whose DOM is correct is this bug, not a crash.** Diagnose it by promoting everything to its own compositor layer — inject `#root, #root * { will-change: transform }` over CDP; if the UI appears, something is painting on top of it.
 - **The desktop target runs the *web* bundle**, so `Platform.OS === 'web'` is true inside the Tauri window and there is no desktop-specific branch to write. It is a real WebView2: it enforces CORS exactly like a browser, from the origin `http://tauri.localhost`.
+- **Cargo cannot see `dist/`, so a desktop build can ship the previous frontend.**
+  `tauri::generate_context!` embeds the assets from a **proc macro**, which cannot emit
+  `cargo:rerun-if-changed`, and `tauri_build::build()` emits it only for `tauri.conf.json`,
+  `capabilities/`, resources and sidecars. Change app code, run `npm run build:desktop`, and
+  `beforeBuildCommand` re-exports `dist/` — then cargo declines to recompile, so the installer
+  carries the *old* bundle while stamping the *new* version into the exe: it installs cleanly and
+  behaves like the previous build. `src-tauri/build.rs` emits the directive for `../dist` by hand;
+  if a build ever looks stale again, check that it is still there. The tell is
+  `cargo build --release` finishing in **under a second** right after a web export.
 - **Tamagui v5 *does* have `shrink` and `grow` shorthands** (for `flexShrink`/`flexGrow`), even
   though the long names are not props. The earlier note about "no `grow` shorthand" applied to a
   plain style object passed to `contentContainerStyle`, which is a different type.

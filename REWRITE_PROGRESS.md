@@ -1524,6 +1524,41 @@ from wherever it starts. Worth revisiting only if the owner minds where new widg
 
 ---
 
+### Post-0.2.5 — a desktop build could ship the previous frontend (2026-08-14)
+
+"I have to uninstall and clear data every time to install new version, otherwise I don't see
+changes." The installer was doing its job; the binary it installed was the problem.
+
+**Cargo cannot see `dist/`.** The frontend is embedded by `tauri::generate_context!`, a **proc
+macro** — proc macros cannot emit `cargo:rerun-if-changed`, and `tauri_build::build()` emits it only
+for `tauri.conf.json`, `capabilities/`, bundled resources and sidecars (read in `tauri-build`
+2.6.3). Nothing in the build graph mentions `frontendDist`. Measured: added a marker to
+`dist/index.html`, `cargo build --release` **finished in 0.39s and left the binary untouched**.
+
+So `npm run build:desktop` re-exports `dist/` through `beforeBuildCommand`, cargo then declines to
+recompile, and the NSIS installer carries the *previous* frontend — it installs cleanly, stamps the
+new version into the exe's version resource, and behaves like the old build. `src-tauri/build.rs`
+now emits `cargo:rerun-if-changed=../dist` (cargo walks a directory path recursively, so the hashed
+bundles are covered). Verified both ways: a `dist/` change forces the recompile, an unchanged tree
+is still a 0.37s no-op.
+
+It hid behind anything else that moves the graph — a Rust edit, or the version bump a release
+writes into `tauri.conf.json` — which is why releases usually looked right and builds between them
+did not.
+
+**Ruled out on the way, so nobody re-chases them.** The WebView2 profile is not caching: on a real
+release build across two launches with a clean profile, every asset was a full transfer, there was
+no service-worker registration and Cache Storage was empty — Tauri's asset protocol sends only
+`content-type` and `access-control-allow-origin`, so with no `Cache-Control` and no validator
+Chromium cannot reuse a response at all. The installed exe's version resource matched the release,
+both shortcuts pointed at the single `%LOCALAPPDATA%` install, and there was no second copy in
+Program Files. The "clear data" half of the workaround was almost certainly coincidence.
+
+*(Unrelated, noted while looking: `…\com.glancesdashboard.app\EBWebView\Default\Code Cache` had
+grown to 645 MB. V8's compiled-code cache — harmless, but it only grows.)*
+
+---
+
 ## Decisions log
 
 | Date | Decision | Why |
