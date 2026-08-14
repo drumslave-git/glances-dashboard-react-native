@@ -21,8 +21,11 @@ header, and a choppy drag — all fixed and verified on the built Windows app ag
 server (see *Post-0.2.2*). The third review (2026-08-13) restored the name and found the real
 cause of the drag (see *Post-0.2.3*); the fourth, the same day, found the rest of it — a card
 anchored to a slot the drag had already left, no drop placeholder, a snap with no dead band, a
-re-render that dropped the card mid-stroke, and the release flash (see *Post-0.2.4*). Ready for
-the owner's next release bump.
+re-render that dropped the card mid-stroke, and the release flash (see *Post-0.2.4*). The fifth
+(2026-08-14) closed the drag out: the last "jump" was the release glide never running under this
+machine's reduced-motion setting, loudest on a newly added widget because that is the placement
+with the furthest to fall — and the network widget's numerals moved onto the secondary display
+channel they were specified on (see *Post-0.2.5*). Ready for the owner's next release bump.
 
 **How it got here.** M0–M9 ported a Vite + React + **Mantine** web app with five *generic* widgets,
 and shipped v0.1.2. On 2026-08-04 the reference was re-examined at **v1.13.0** and turned out to be
@@ -1462,7 +1465,62 @@ intermediate frame.
 WebView2 reports `prefers-reduced-motion: reduce` and Reanimated makes every animation instant.
 Every slide in the app is a teleport on that desktop, by design and correctly. Worth knowing before
 chasing "the animation does not run" again: Settings → Accessibility → Visual effects → Animation
-effects.
+effects. *(Corrected one release later — see Post-0.2.5. It was the cause of the remaining jump.)*
+
+---
+
+### Post-0.2.5 — the owner's fifth review: the jump was the missing glide (2026-08-14)
+
+"bug with drag&drop jumping — still there, repro only with newly added widget to the grid. first
+move operation is broken — all next work fine." Reproduced on the built Tauri window, driven over
+CDP through the *real* add flow (toolbar → picker → variant → add), sampling the dragged cell's
+rect every 12ms.
+
+**The measurement.** Press the new widget, drag it 634px right into an empty column, release. At
+release the card sat at `(645,388)` — exactly under the cursor, correct — and the placeholder had
+been at `(646,142)` for most of the stroke. The next sample: `(646,142)`. **246px in one frame.**
+Every later drag of the same widget showed a card and a placeholder within a pixel of each other,
+so nothing jumped. That is the reported pattern exactly.
+
+**Why only a new widget, and only once.** `addWidget` places a new widget at `x: 0`, at the bottom
+row (`bottomRow`). Vertical gravity is *vertical*, so at column 0 it can never move sideways into a
+free column: a new widget always lands under the first column's stack, three or four rows down.
+Drag it anywhere with room above and `compactLayout` lifts it to row 0 — the card is at the pointer,
+its slot is a screenful up. After that one drag it is stored compacted at the top, so every later
+drag has nothing to travel. Nothing about the drag machinery was newly broken.
+
+**The 246px is meant to be a 130ms glide, and it was not running.** The Post-0.2.4 note above filed
+`prefers-reduced-motion: reduce` on this machine as "by design and correctly" — true of the chart
+draw-ins, wrong here. Reanimated's default `ReduceMotion.System` collapsed the settle to zero
+frames, so the one animation that *carries information* — where did the card I was holding go —
+never played on the owner's desktop. The grid's two `withTiming`s now pass `ReduceMotion.Never`
+(`NEVER_REDUCE` in `widget-grid.tsx`); the charts keep honouring the setting, because a trace
+drawing itself is decoration and 130ms of direct-manipulation feedback is not. Re-measured after
+the fix: `388 → 378 → 362 → 338 → 307 → 268 → 228 → 181 → 161 → 148 → 142`, an ease over ~130ms.
+
+**"why the fuck network numbers have such a huge size."** Two faults, both in the widget the
+screenshot showed:
+
+- The hero pair rendered rx at the **hero** channel (46pt) and tx at the **stat** channel (26pt).
+  Down and up are peers — the smaller-looking one was the larger number in the owner's own
+  screenshot — and the handoff calls throughput a *secondary* display numeral in the first place.
+  `heroPairFontSizes` is now `ratePairFontSize`: one size for both, off `statFontSize`.
+- The value handed to that numeral was `formatRate`'s joined string, so `16.7 KB/s` set **nine
+  glyphs** at display size where the channel is sized for `98%`. New `formatRateParts` splits the
+  two, and the unit rides at ~46% with an SI space (`unitGap`: word-like units take a space,
+  `%` and `°C` do not).
+
+Same widget, adjacent: the chart's Y axis counted in thousands (`2980k`) under a hero reading
+`KB/s` — two units on one card. `formatRateAxis` keeps the readings' 1024 scale in the width a 26pt
+gutter has (`2.84M`), threaded through `SeriesPanel` → `ChartView.formatValue`.
+
+Verified on the rebuilt window against the live server: `254 KB/s` and `4.25 MB/s` both at 26px
+with 12px units, peak/avg back inline beside them, axis at `1.17M / 2.34M / 3.51M / 4.68M`.
+
+**Left alone, deliberately.** `addWidget`'s `x: 0` placement is the reason a new widget always has
+the furthest to fall. Putting it in the first *free slot* needs the column count, which is a fact
+about the viewport and not the store's to know — and with the glide restored the drop is legible
+from wherever it starts. Worth revisiting only if the owner minds where new widgets land.
 
 ---
 

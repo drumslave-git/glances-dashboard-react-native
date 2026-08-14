@@ -9,10 +9,11 @@ import {
   gaugeValueFontSize,
   headerRung,
   heroFontSize,
-  heroPairFontSizes,
   heroRowHeight,
   heroUnitFontSize,
   meterRung,
+  ratePairFontSize,
+  ratePairRowHeight,
   readingSize,
   ringDiameter,
   roleLetterSpacing,
@@ -94,17 +95,20 @@ describe('display channel', () => {
     expect(heroRowHeight(900, 2)).toBeGreaterThan(heroRowHeight(900, 1));
   });
 
-  it('shrinks a hero pair to fit one row, flagging the tight fit', () => {
-    // Roomy at the default scale: the full display sizes come back untouched.
-    expect(heroPairFontSizes(623, 1)).toEqual({ hero: 46, stat: 26, fitted: false });
-    // At the largest scale the pair shrinks together instead of truncating a numeral.
-    const tight = heroPairFontSizes(623, 2);
+  it('sizes a rate pair off the stat channel, both directions alike', () => {
+    // Down and up are peers, and a rate is a long string: the pair sits on the *secondary*
+    // display numeral, never the hero (owner's review, 2026-08-14).
+    expect(ratePairFontSize(623, 1)).toEqual({ size: 26, fitted: false });
+    expect(ratePairFontSize(623, 1).size).toBeLessThan(heroFontSize(623, 1));
+    // A one-column card still fits both without shrinking.
+    expect(ratePairFontSize(306, 1).fitted).toBe(false);
+    // Where it cannot, the pair shrinks together instead of truncating a numeral.
+    const tight = ratePairFontSize(240, 2);
     expect(tight.fitted).toBe(true);
-    expect(tight.hero).toBeLessThan(heroFontSize(623, 2));
-    expect(tight.stat).toBeLessThan(statFontSize(623, 2));
-    // Both directions must still be legible.
-    expect(tight.hero).toBeGreaterThanOrEqual(24);
-    expect(tight.stat).toBeGreaterThanOrEqual(15);
+    expect(tight.size).toBeLessThan(statFontSize(240, 2));
+    expect(tight.size).toBeGreaterThanOrEqual(15);
+    // The row reserved above the chart follows the pair, label included.
+    expect(ratePairRowHeight(26, 9)).toBe(Math.round(26 * 0.95) + 12 + 9 + 2);
   });
 
   it('sizes network stat numerals and gauge centres off their own boxes', () => {

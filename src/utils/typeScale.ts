@@ -156,29 +156,41 @@ export function statUnitFontSize(widgetWidth: number, scale = 1): number {
 }
 
 /**
- * Display sizes when **two** numerals share the hero row (a bidirectional rate pair).
+ * The display size when **two** numerals share the hero row (a bidirectional rate pair).
  *
- * Each direction is budgeted ~10 mono characters at the JetBrains Mono ~0.62em advance; when the
- * pair at full display size cannot fit the row, both shrink by the same factor — the numbers stay
- * whole, because truncating a numeral is worse than shrinking it. `fitted` reports that the row is
- * tight, which is the caller's cue to drop derived stats before anything else.
+ * Both directions get the **same** size, and it is the stat channel's rather than the hero's. Two
+ * reasons, both learned from the shipped 0.2.5 network widget (owner's review, 2026-08-14):
+ *
+ * - Down and up are *peers*. Rendering rx at 46pt and tx at 26pt asserts a hierarchy the data does
+ *   not have — and reads as broken the moment the smaller number is the larger one, which on any
+ *   machine that serves more than it fetches is most of the time.
+ * - A rate is a long string. The hero channel is sized for `98%` — three glyphs; `16.7 KB/s` is
+ *   nine, so the same 46pt is three times the ink and swallows the card. That is why the handoff
+ *   calls throughput a *secondary* display numeral (`statFontSize`) in the first place.
+ *
+ * Each direction is budgeted ~8 mono characters at the JetBrains Mono ~0.62em advance — four or
+ * five for the numeral plus a unit run at ~46% of it. When the pair cannot fit the row both shrink
+ * by the same factor, because truncating a numeral is worse than shrinking it. `fitted` reports
+ * that the row is tight, which is the caller's cue to drop derived stats before anything else.
  */
-export function heroPairFontSizes(
+export function ratePairFontSize(
   widgetWidth: number,
   scale = 1,
-): { hero: number; stat: number; fitted: boolean } {
-  const hero = heroFontSize(widgetWidth, scale);
-  const stat = statFontSize(widgetWidth, scale);
+): { size: number; fitted: boolean } {
+  const size = statFontSize(widgetWidth, scale);
   // The card's 34pt side padding plus the 20pt gap between the pair.
   const budget = Math.max(120, widgetWidth - 54);
-  const need = (hero + stat) * 10 * 0.62;
-  if (need <= budget) return { hero, stat, fitted: false };
-  const fit = budget / need;
-  return {
-    hero: Math.max(24, Math.round(hero * fit)),
-    stat: Math.max(15, Math.round(stat * fit)),
-    fitted: true,
-  };
+  const need = size * 2 * 8 * 0.62;
+  if (need <= budget) return { size, fitted: false };
+  return { size: Math.max(15, Math.round(size * (budget / need))), fitted: true };
+}
+
+/**
+ * The row a rate pair occupies above its chart: the numeral's line height, its micro-label, and the
+ * same breathing room a hero gets.
+ */
+export function ratePairRowHeight(pairSize: number, labelSize: number): number {
+  return Math.round(pairSize * 0.95) + 12 + labelSize + 2;
 }
 
 /** Ring gauge centre value: 32 inside the reference 158pt ring. */

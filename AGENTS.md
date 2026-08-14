@@ -191,13 +191,30 @@ Verify against installed types (`node_modules/**/*.d.ts`) rather than memory —
   "transparency works"), and CDP `Page.captureScreenshot` / `PrintWindow` composite over their own
   white, so neither can see this bug. The probe that works: put a known-colour window directly
   behind the app (`SetWindowPos`), sample single pixels, and demand the blend arithmetic.
-- **This machine has Windows animation effects off, so Reanimated animates nothing.**
-  `SystemParametersInfo(SPI_GETCLIENTAREAANIMATION)` returns 0, WebView2 reports
-  `prefers-reduced-motion: reduce`, and Reanimated honours it by making every `withTiming` finish
-  instantly. Every slide in the desktop app is a teleport there — correct behaviour, not a bug, and
-  not something to "fix" app-side. Check it before chasing a missing animation:
+- **This machine has Windows animation effects off, so Reanimated animates nothing** *unless the
+  animation opts out*. `SystemParametersInfo(SPI_GETCLIENTAREAANIMATION)` returns 0, WebView2
+  reports `prefers-reduced-motion: reduce`, and Reanimated's default `ReduceMotion.System` makes
+  every `withTiming` finish instantly. For decoration that is correct and not a bug — the chart
+  draw-ins keep it. But an animation that *carries information* must pass
+  `reduceMotion: ReduceMotion.Never`, or it silently becomes a teleport on this desktop: the grid's
+  release glide is the only thing connecting a dragged card to the slot gravity gave it, and
+  without the opt-out a drop looked like the card jumping across the board (0.2.5, `NEVER_REDUCE`
+  in `widget-grid.tsx`). Check the setting before chasing a missing animation:
   `matchMedia('(prefers-reduced-motion: reduce)').matches` over CDP. (Settings → Accessibility →
   Visual effects → Animation effects, if you want to see the motion for real.)
+- **A second copy of the app cannot get its own CDP port.** WebView2 keys its browser process on
+  the user-data folder, so launching `target/debug/glances-dashboard.exe` while the *installed*
+  app is running attaches to the existing browser — which was started without
+  `--remote-debugging-port`, and the flag is silently ignored. Set
+  `WEBVIEW2_USER_DATA_FOLDER` to a scratch path alongside
+  `WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS` and the debug window gets its own profile *and* its own
+  port, with the owner's running app left alone. (Fresh profile ⇒ empty `localStorage`, so seed
+  the board again there.)
+- **The automation pane cannot render this app at all.** Its tab is `visibilityState: 'hidden'`,
+  and React Native Web resolves `onLayout` through `requestAnimationFrame`, which never fires
+  there — so the grid measures `width: 0`, `measured` stays false and **not one widget mounts**,
+  while the toolbar and summary strip render fine. A grid that is empty in the pane is this, not a
+  crash. Drive the Tauri window over CDP instead.
 - **Reanimated's `LinearTransition` does nothing on web** — every cell teleports between
   placements. The grid animates its own offset instead (`GridCellInner` in `widget-grid.tsx`), one
   animator per cell on every platform. Don't reintroduce a layout animator alongside a transform.

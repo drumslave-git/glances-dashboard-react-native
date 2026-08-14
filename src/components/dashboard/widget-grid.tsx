@@ -2,6 +2,7 @@ import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useStat
 import { Platform, type LayoutChangeEvent } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, {
+  ReduceMotion,
   runOnJS,
   useAnimatedStyle,
   useSharedValue,
@@ -59,6 +60,23 @@ const GRIP_SIZE = 22;
  * platform rather than a layout animator fighting a transform.
  */
 const SLIDE_MS = 130;
+
+/**
+ * The settle and the neighbour slides run **whatever the reduce-motion setting says**.
+ *
+ * They are not decoration. A dragged card can be several rows from the slot it will land in —
+ * gravity lifts it the moment the pointer enters a column with room above — and this glide is the
+ * only thing that connects the two. With `ReduceMotion.System` (Reanimated's default) every
+ * `withTiming` here finishes in zero frames, and on a machine with Windows animation effects off
+ * that turned every drop into a teleport: the card vanished from under the hand and reappeared a
+ * screenful away. That is the "drag jumps" the owner reported (reviews 2026-08-13 and -08-14), and
+ * it was loudest on a **newly added** widget, which `addWidget` places at the bottom of column 0 —
+ * the placement with the furthest to fall.
+ *
+ * The charts do the opposite (`useReducedMotion` in `series-canvas.tsx`) and should: a trace that
+ * draws itself is decoration, and 130ms of direct-manipulation feedback is not.
+ */
+const NEVER_REDUCE = { duration: SLIDE_MS, reduceMotion: ReduceMotion.Never } as const;
 
 interface WidgetGridProps {
   widgets: WidgetInstance[];
@@ -372,8 +390,8 @@ function GridCellInner({
     dragY.value = 0;
     offX.value = offX.value + restX;
     offY.value = offY.value + restY;
-    offX.value = withTiming(0, { duration: SLIDE_MS });
-    offY.value = withTiming(0, { duration: SLIDE_MS });
+    offX.value = withTiming(0, NEVER_REDUCE);
+    offY.value = withTiming(0, NEVER_REDUCE);
     // A neighbour flowing around the drag glides too, but it must not be lifted while it does —
     // it would be drawn over the card the user is holding.
     if (released) setSettling(true);

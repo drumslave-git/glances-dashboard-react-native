@@ -27,8 +27,9 @@ import {
 } from '@/utils/sampleBuffer';
 import {
   chartRung,
-  heroPairFontSizes,
   heroRowHeight,
+  ratePairFontSize,
+  ratePairRowHeight,
   ringDiameter,
   statClusterRung,
   type WidgetSizeClass,
@@ -166,6 +167,8 @@ export interface SeriesPanelProps {
    * rate, and reads as noise beside a hero that says `493 KB/s`.
    */
   formatStatValue?: (value: number) => string;
+  /** How to print a Y gridline. Defaults to the chart's own thousands counter. */
+  formatAxisValue?: (value: number) => string;
   testID?: string;
 }
 
@@ -187,6 +190,7 @@ export function SeriesPanel({
   colors,
   heroStats,
   formatStatValue,
+  formatAxisValue,
   testID,
 }: SeriesPanelProps) {
   const { scale, size } = useTelemetry();
@@ -218,12 +222,12 @@ export function SeriesPanel({
   );
 
   const statsRung = statClusterRung(sizeClass, height);
-  // Two labelled numerals share the row at pair-fitted sizes; a tight fit also drops the
+  // Two labelled numerals share the row at one pair-fitted size; a tight fit also drops the
   // inline peak/avg cluster — the derived stats go before either direction does.
-  const pair = heroPairFontSizes(width, scale);
+  const pair = ratePairFontSize(width, scale);
   const showInlineStats = statsRung === 'inline' && (!labelledHeroes || !pair.fitted);
   const heroRow = labelledHeroes
-    ? Math.round(pair.hero * 0.88) + 12 + size('micro') + 2
+    ? ratePairRowHeight(pair.size, size('micro'))
     : primary
       ? heroRowHeight(width, scale)
       : 0;
@@ -251,25 +255,15 @@ export function SeriesPanel({
               <MicroLabel numberOfLines={1} {...(stat.color ? { style: { color: stat.color } } : {})}>
                 {stat.label}
               </MicroLabel>
-              {index === 0 ? (
-                <HeroValue
-                  value={stat.value}
-                  {...(stat.unit ? { unit: stat.unit } : {})}
-                  {...(stat.color ? { color: stat.color } : {})}
-                  widgetWidth={width}
-                  fontSize={pair.hero}
-                  testID={testID ? `${testID}-hero` : undefined}
-                />
-              ) : (
-                <StatValue
-                  value={stat.value}
-                  {...(stat.unit ? { unit: stat.unit } : {})}
-                  {...(stat.color ? { color: stat.color } : {})}
-                  widgetWidth={width}
-                  fontSize={pair.stat}
-                  testID={testID ? `${testID}-hero-${index}` : undefined}
-                />
-              )}
+              {/* Both directions at one size: see `ratePairFontSize` for why neither leads. */}
+              <StatValue
+                value={stat.value}
+                {...(stat.unit ? { unit: stat.unit } : {})}
+                {...(stat.color ? { color: stat.color } : {})}
+                widgetWidth={width}
+                fontSize={pair.size}
+                testID={testID ? `${testID}-hero${index === 0 ? '' : `-${index}`}` : undefined}
+              />
             </YStack>
           ))}
           {/* Derived stats yield space long before the second direction does: both numerals are
@@ -302,6 +296,7 @@ export function SeriesPanel({
           series={layers}
           domain={domain}
           rung={rung}
+          {...(formatAxisValue ? { formatValue: formatAxisValue } : {})}
           accentColor={accentColor}
           explicitSize={{ width: chartWidth, height: chartHeight }}
           {...(testID ? { testID: `${testID}-chart` } : {})}

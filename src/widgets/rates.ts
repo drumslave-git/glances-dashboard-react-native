@@ -11,7 +11,7 @@ export type RateUnit = 'bytes' | 'bits';
 const BYTE_STEPS = ['B', 'KB', 'MB', 'GB', 'TB', 'PB'];
 const BIT_STEPS = ['b', 'Kb', 'Mb', 'Gb', 'Tb', 'Pb'];
 
-function scale(value: number, steps: string[]): string {
+function scaleParts(value: number, steps: string[]): { value: string; unit: string } {
   let n = Math.abs(value);
   let i = 0;
   while (n >= 1024 && i < steps.length - 1) {
@@ -22,7 +22,32 @@ function scale(value: number, steps: string[]): string {
   // Two decimals below 10, one below 100, none above — the same "cap, don't pad" rule
   // `formatLooseNumber` follows, so a rate never jitters its own width by more than a digit.
   const decimals = n < 10 ? 2 : n < 100 ? 1 : 0;
-  return `${sign}${n.toFixed(decimals)} ${steps[i]}`;
+  return { value: `${sign}${n.toFixed(decimals)}`, unit: steps[i] ?? '' };
+}
+
+function scale(value: number, steps: string[]): string {
+  const parts = scaleParts(value, steps);
+  return `${parts.value} ${parts.unit}`;
+}
+
+/**
+ * A rate split into its numeral and its unit, for the display channel.
+ *
+ * The one-string `formatRate` is right for a table row or a key/value line, where the whole reading
+ * is one run of type. A hero numeral renders the two at different sizes — `16.7` big, `KB/s` at
+ * ~46% of it — so handing it the joined string sets nine glyphs at display size, which is what made
+ * the network widget swallow its own card (owner's review, 2026-08-14).
+ *
+ * `unit` is `null` for a missing reading: a dash has no unit.
+ */
+export function formatRateParts(
+  bytesPerSec: number | null | undefined,
+  unit: RateUnit = 'bytes',
+): { value: string; unit: string | null } {
+  if (bytesPerSec == null || !Number.isFinite(bytesPerSec)) return { value: '—', unit: null };
+  const parts =
+    unit === 'bits' ? scaleParts(bytesPerSec * 8, BIT_STEPS) : scaleParts(bytesPerSec, BYTE_STEPS);
+  return { value: parts.value, unit: `${parts.unit}/s` };
 }
 
 /**
@@ -37,6 +62,22 @@ export function formatRate(bytesPerSec: number | null | undefined, unit: RateUni
   return unit === 'bits'
     ? `${scale(bytesPerSec * 8, BIT_STEPS)}/s`
     : `${scale(bytesPerSec, BYTE_STEPS)}/s`;
+}
+
+/**
+ * A rate for a **chart axis**: scaled the same way, but as short as a 26pt gutter allows.
+ *
+ * The default axis formatter counts in thousands (`2980k`), which on a throughput chart is a raw
+ * byte figure sitting under a hero that reads `KB/s` — two units on one widget, and the axis is the
+ * one nobody can decode. This keeps the 1024 scale the readings use and drops to the prefix alone:
+ * `2.91M` under `197 KB/s` is the same measurement, and the `/s` is already established above.
+ */
+export function formatRateAxis(bytesPerSec: number, unit: RateUnit = 'bytes'): string {
+  if (!Number.isFinite(bytesPerSec)) return '';
+  const parts =
+    unit === 'bits' ? scaleParts(bytesPerSec * 8, BIT_STEPS) : scaleParts(bytesPerSec, BYTE_STEPS);
+  // `KB` → `K`, `Kb` → `K`, and plain bytes get no prefix at all.
+  return `${parts.value}${parts.unit.replace(/[Bb]/g, '')}`;
 }
 
 /** A lifetime total — the `_gauge` counter. Never a rate, so it carries no `/s`. */

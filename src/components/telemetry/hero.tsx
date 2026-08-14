@@ -22,6 +22,17 @@ import { MicroLabel, MonoText, TABULAR } from './text';
  * necessary. The ring gauge stays box-only: its value must fit the ring.
  */
 
+/**
+ * The space between a numeral and its unit, as a fraction of the numeral's size.
+ *
+ * SI convention, and it reads: a word-like unit (`KB/s`, `MB`) takes a space, a symbol (`%`, `°C`)
+ * sits tight against the number. Rendering the unit as its own smaller run is what makes this a
+ * decision at all — the joined string `formatRate` returns carries its own space.
+ */
+function unitGap(unit: string | undefined, size: number): number {
+  return unit != null && unit.length > 1 ? Math.round(size * 0.14) : 0;
+}
+
 interface HeroValueProps {
   /** Already formatted — this component sizes and lays out, it does not format. */
   value: string;
@@ -29,7 +40,7 @@ interface HeroValueProps {
   unit?: string;
   /** The measured width of the widget box. */
   widgetWidth: number;
-  /** Display-channel override — a pair-fitted size from `heroPairFontSizes`. */
+  /** Display-channel override — a pair-fitted size from `ratePairFontSize`. */
   fontSize?: number;
   color?: string;
   testID?: string;
@@ -41,7 +52,7 @@ export function HeroValue({ value, unit, widgetWidth, fontSize, color, testID }:
   const unitSize = Math.round(size * (19 / 46));
 
   return (
-    <XStack items="flex-end" testID={testID}>
+    <XStack items="flex-end" gap={unitGap(unit, size)} testID={testID}>
       <Text
         fontFamily="$mono"
         fontWeight="600"
@@ -75,7 +86,7 @@ interface StatValueProps {
   value: string;
   unit?: string;
   widgetWidth: number;
-  /** Display-channel override — a pair-fitted size from `heroPairFontSizes`. */
+  /** Display-channel override — a pair-fitted size from `ratePairFontSize`. */
   fontSize?: number;
   color?: string;
   testID?: string;
@@ -88,7 +99,7 @@ export function StatValue({ value, unit, widgetWidth, fontSize, color, testID }:
   const unitSize = Math.round(Math.min(24, Math.max(9, size * (12 / 26))));
 
   return (
-    <XStack items="flex-end" testID={testID}>
+    <XStack items="flex-end" gap={unitGap(unit, size)} testID={testID}>
       <Text
         fontFamily="$mono"
         fontWeight="600"

@@ -47,6 +47,12 @@ export interface ChartViewProps {
   mirrored?: boolean;
   /** Which rung of the chart degrade ladder to draw. */
   rung?: ChartRung;
+  /**
+   * How to print a Y gridline's value. Defaults to counting in thousands, which is right for a
+   * percentage or a count and wrong for anything with a scale of its own — a throughput axis needs
+   * the same 1024 steps its readings use (see `formatRateAxis`).
+   */
+  formatValue?: (value: number) => string;
 
   /** `gauge` only — 0–100, plus the text for the middle of the ring. */
   percent?: number;
@@ -123,6 +129,7 @@ function LineChartView({
   domain = [0, 100],
   mirrored = false,
   rung = 'full',
+  formatValue = formatAxisValue,
   accentColor,
   explicitSize,
   testID,
@@ -176,7 +183,7 @@ function LineChartView({
                 pointerEvents="none"
               >
                 <MonoText variant="axis" color="$textFaint">
-                  {formatAxisValue(rule.value)}
+                  {formatValue(rule.value)}
                 </MonoText>
               </YStack>
             ))}

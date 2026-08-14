@@ -15,7 +15,14 @@ import type { DiskIoItem, NetworkItem } from '@/types/glances';
 
 import { SeriesPanel, reading, type HeroStat } from '../panels';
 import { TextReadout, type ReadoutGroup, type ReadoutRow } from '../readout';
-import { formatRate, formatTotal, pickBusiest, type RateUnit } from '../rates';
+import {
+  formatRate,
+  formatRateAxis,
+  formatRateParts,
+  formatTotal,
+  pickBusiest,
+  type RateUnit,
+} from '../rates';
 import type { WidgetProps } from '../types';
 import { useMultiSeries } from '../use-series';
 import { windowFromConfig } from './common';
@@ -103,12 +110,12 @@ export function NetworkChartWidget({
     ? [
         {
           label: `${lead.alias ?? lead.interfaceName} ↓`,
-          value: formatRate(lead.rxRatePerSec, unit),
+          ...formatRateParts(lead.rxRatePerSec, unit),
           color: t.signal.info,
         },
         {
           label: `${lead.alias ?? lead.interfaceName} ↑`,
-          value: formatRate(lead.txRatePerSec, unit),
+          ...formatRateParts(lead.txRatePerSec, unit),
           color: t.signal.up,
         },
       ]
@@ -126,6 +133,7 @@ export function NetworkChartWidget({
       colors={directionColors(shown.map((item) => item.interfaceName), ['rx', 'tx'], t.signal.info, t.signal.up)}
       heroStats={heroStats}
       formatStatValue={(value) => formatRate(value, unit)}
+      formatAxisValue={(value) => formatRateAxis(value, unit)}
       {...(testID ? { testID } : {})}
     />
   );
@@ -191,12 +199,12 @@ export function DiskIoChartWidget({
     ? [
         {
           label: `${lead.diskName} read`,
-          value: formatRate(lead.readRatePerSec),
+          ...formatRateParts(lead.readRatePerSec),
           color: t.signal.info,
         },
         {
           label: `${lead.diskName} write`,
-          value: formatRate(lead.writeRatePerSec),
+          ...formatRateParts(lead.writeRatePerSec),
           color: t.signal.up,
         },
       ]
@@ -214,6 +222,7 @@ export function DiskIoChartWidget({
       colors={directionColors(shown.map((item) => item.diskName), ['read', 'write'], t.signal.info, t.signal.up)}
       heroStats={heroStats}
       formatStatValue={(value) => formatRate(value)}
+      formatAxisValue={(value) => formatRateAxis(value)}
       {...(testID ? { testID } : {})}
     />
   );

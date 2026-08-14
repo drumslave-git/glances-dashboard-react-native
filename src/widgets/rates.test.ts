@@ -3,6 +3,8 @@ import {
   formatElapsed,
   formatPercent,
   formatRate,
+  formatRateAxis,
+  formatRateParts,
   formatTotal,
   pickBusiest,
   shortenMountPath,
@@ -78,6 +80,37 @@ describe('formatRate', () => {
     expect(formatRate(9 * 1024)).toBe('9.00 KB/s');
     expect(formatRate(50 * 1024)).toBe('50.0 KB/s');
     expect(formatRate(500 * 1024)).toBe('500 KB/s');
+  });
+});
+
+describe('formatRateParts', () => {
+  it('splits the numeral from its unit, so a hero can size the two differently', () => {
+    expect(formatRateParts(2048)).toEqual({ value: '2.00', unit: 'KB/s' });
+    expect(formatRateParts(1024, 'bits')).toEqual({ value: '8.00', unit: 'Kb/s' });
+    expect(formatRateParts(500 * 1024)).toEqual({ value: '500', unit: 'KB/s' });
+  });
+
+  it('agrees with the joined form, which is what a table row still uses', () => {
+    for (const rate of [0, 5, 2048, 5 * 1024 * 1024]) {
+      const parts = formatRateParts(rate);
+      expect(`${parts.value} ${parts.unit}`).toBe(formatRate(rate));
+    }
+  });
+
+  it('gives a missing reading no unit — a dash is not measured in anything', () => {
+    expect(formatRateParts(null)).toEqual({ value: '—', unit: null });
+    expect(formatRateParts(Number.NaN)).toEqual({ value: '—', unit: null });
+  });
+});
+
+describe('formatRateAxis', () => {
+  it('keeps the readings 1024 scale, in the width a gutter has', () => {
+    // The default axis counts in thousands: 2,980,000 B/s printed as `2980k` under a hero that
+    // reads `KB/s` is two units on one widget (owner's review, 2026-08-14).
+    expect(formatRateAxis(2980 * 1000)).toBe('2.84M');
+    expect(formatRateAxis(512)).toBe('512');
+    expect(formatRateAxis(200 * 1024)).toBe('200K');
+    expect(formatRateAxis(1024, 'bits')).toBe('8.00K');
   });
 });
 
