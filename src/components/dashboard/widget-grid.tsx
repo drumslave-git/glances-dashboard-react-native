@@ -413,11 +413,16 @@ function GridCellInner({
     ],
   }));
 
-  // The native gestures are **off on web**, not merely inert. A web `Pan` can never activate
-  // (see `usePointerDrag`), but an *enabled* one still runs its state machine: move >10px inside
-  // the long-press window and it FAILS, and `onFinalize` fires `endGesture` into the middle of
-  // the pointer drag — unfreezing the origin, killing the settle, and leaving the card offset by
-  // its last translation. That mid-drag finalize was the whole "random jumps" drag of 0.2.3.
+  // The native gestures are **not mounted on web** — no `GestureDetector` in the tree at all.
+  // Disabling them (0.2.3) was not enough: a *disabled* web Pan still registers DOM listeners,
+  // tracks the pointer into BEGAN on press, and `GestureDetector`'s own `useEffect` re-applies
+  // the config on every re-render — where gesture-handler force-finalizes a disabled BEGAN
+  // handler (`cancel(true)`), firing `onFinalize` → `endGesture` one frame after `beginDrag`'s
+  // render. The drag state died while the pointer drag ran on, so the card's anchor followed the
+  // preview and gained a column of error per crossing — the 0.2.7 "new widget drag runs away
+  // from the mouse" (only *reliably* on a fresh press with small first moves; a fast flick made
+  // the Pan fail by distance first, which is why it looked widget-specific). With no detector
+  // mounted there is no handler, no state machine, and nothing to finalize.
   const nativeGestures = Platform.OS !== 'web';
 
   const pan = useMemo(
@@ -508,55 +513,56 @@ function GridCellInner({
   // neighbours rather than through them.
   const lifted = dragging || settling;
 
+  const card = (
+    <YStack
+      flex={1}
+      opacity={dragging ? 0.9 : 1}
+      // The whole card is the drag surface in edit mode, and a pointer should say so.
+      // Buttons inside still win with their own `pointer`.
+      cursor={editMode ? (dragging ? 'grabbing' : 'grab') : undefined}
+      {...panPointer}
+    >
+      <WidgetFrame
+        widget={widget}
+        editMode={editMode}
+        footprint={footprint}
+        onEdit={onEdit}
+        onRemove={onRemove}
+        onFootprint={onFootprint}
+      />
+    </YStack>
+  );
+
+  const grip = editMode && resizable && (
+    <YStack
+      position="absolute"
+      r={0}
+      b={0}
+      width={GRIP_SIZE}
+      height={GRIP_SIZE}
+      items="flex-end"
+      justify="flex-end"
+      pr={4}
+      pb={4}
+      cursor="nwse-resize"
+      role="button"
+      aria-label={`Resize ${widget.title ?? widget.type}`}
+      testID={`widget-grip-${widget.id}`}
+      {...resizePointer}
+    >
+      {/* Two hairlines meeting at the corner — the design's language for a grip, and the
+          only thing on a widget that is chrome for editing rather than a readout. */}
+      <YStack width={10} height={10} borderRightWidth={2} borderBottomWidth={2} borderColor="$accent" />
+    </YStack>
+  );
+
   return (
     <Animated.View
       style={[{ position: 'absolute', ...rect, zIndex: lifted ? 10 : 1 }, animatedStyle]}
       testID={`widget-cell-${widget.id}`}
     >
-      <GestureDetector gesture={pan}>
-        <YStack
-          flex={1}
-          opacity={dragging ? 0.9 : 1}
-          // The whole card is the drag surface in edit mode, and a pointer should say so.
-          // Buttons inside still win with their own `pointer`.
-          cursor={editMode ? (dragging ? 'grabbing' : 'grab') : undefined}
-          {...panPointer}
-        >
-          <WidgetFrame
-            widget={widget}
-            editMode={editMode}
-            footprint={footprint}
-            onEdit={onEdit}
-            onRemove={onRemove}
-            onFootprint={onFootprint}
-          />
-        </YStack>
-      </GestureDetector>
-
-      {editMode && resizable && (
-        <GestureDetector gesture={resize}>
-          <YStack
-            position="absolute"
-            r={0}
-            b={0}
-            width={GRIP_SIZE}
-            height={GRIP_SIZE}
-            items="flex-end"
-            justify="flex-end"
-            pr={4}
-            pb={4}
-            cursor="nwse-resize"
-            role="button"
-            aria-label={`Resize ${widget.title ?? widget.type}`}
-            testID={`widget-grip-${widget.id}`}
-            {...resizePointer}
-          >
-            {/* Two hairlines meeting at the corner — the design's language for a grip, and the
-                only thing on a widget that is chrome for editing rather than a readout. */}
-            <YStack width={10} height={10} borderRightWidth={2} borderBottomWidth={2} borderColor="$accent" />
-          </YStack>
-        </GestureDetector>
-      )}
+      {nativeGestures ? <GestureDetector gesture={pan}>{card}</GestureDetector> : card}
+      {nativeGestures && grip ? <GestureDetector gesture={resize}>{grip}</GestureDetector> : grip}
     </Animated.View>
   );
 }

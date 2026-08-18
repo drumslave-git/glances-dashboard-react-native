@@ -25,7 +25,11 @@ re-render that dropped the card mid-stroke, and the release flash (see *Post-0.2
 (2026-08-14) closed the drag out: the last "jump" was the release glide never running under this
 machine's reduced-motion setting, loudest on a newly added widget because that is the placement
 with the furthest to fall — and the network widget's numerals moved onto the secondary display
-channel they were specified on (see *Post-0.2.5*). Ready for the owner's next release bump.
+channel they were specified on (see *Post-0.2.5*). The sixth (2026-08-18) ended the drag saga for
+real: the 0.2.3 "disabled" web gestures were never inert — gesture-handler tracked every press into
+a BEGAN state and force-finalized it one frame into the drag, killing the grid's drag state while
+the pointer ran on — so web no longer mounts `GestureDetector` at all (see *Post-0.2.7*). Ready
+for the owner's next release bump.
 
 **How it got here.** M0–M9 ported a Vite + React + **Mantine** web app with five *generic* widgets,
 and shipped v0.1.2. On 2026-08-04 the reference was re-examined at **v1.13.0** and turned out to be
@@ -1559,6 +1563,50 @@ grown to 645 MB. V8's compiled-code cache — harmless, but it only grows.)*
 
 ---
 
+### Post-0.2.7 — the sixth review: the disabled gesture was never inert (2026-08-18)
+
+"drag&drop of newly added widget is still broken", with a screen recording: the card tracks the
+pointer for half a second, then runs away — by the end of the stroke it is a full screen from the
+cursor, and dropping leaves it somewhere arbitrary. Reproduced on the built window over CDP and
+instrumented three ways: a per-frame recorder (cell rect + drop-target presence as a proxy for the
+grid's `drag` state), a breakpoint inside `endGesture` with async stacks, and a breakpoint inside
+gesture-handler's `updateGestureConfig`.
+
+**The measurement.** The drop target appears at t≈146ms (drag begins) and is gone at t≈152 — one
+frame — while the pointer stroke runs another six seconds. From then on the card's anchor follows
+the live preview instead of the frozen origin, so every crossing adds a column of error: the
+double-speed drag, back. `endGesture` was called at t≈150 with no JS caller — async parent:
+`updateHandlers` (react-native-gesture-handler) → `requestAnimationFrame`. The second breakpoint
+caught the trigger red-handed: `updateGestureConfig` on a **Pan in state BEGAN, `enabled: false`,
+tracking 1 pointer**, taking the `cancel(true)` path — which *force-sends* the cancellation to a
+disabled handler (that is what `sendIfDisabled` means), so the gesture's `onFinalize` ran
+`runOnJS(onGestureEnd)` into the middle of the pointer drag.
+
+**Why a disabled gesture has a state at all.** RNGH's web delegate registers its DOM listeners in
+`init()` unconditionally — `enabled(false)` only stops *events being sent*, not tracking — so the
+"off" Pan still takes every pointerdown to BEGAN. And `GestureDetector` re-applies the config from
+a `useEffect` keyed on `[props]`, i.e. on **every re-render** of the cell, one rAF later. The first
+re-render after a press is `beginDrag`'s own render: config re-applied → disabled handler in BEGAN
+→ forced finalize → `endGesture` one frame after the drag began.
+
+**Why it looked like "only newly added widgets".** The kill needs the Pan still in BEGAN when that
+rAF lands. `Pan.onPointerMove` runs its fail checks even when disabled, so ~10px of processed
+movement fails the handler back to UNDETERMINED, where the config re-application is harmless — a
+press that flows straight into a fast pull survives; a deliberate press-then-drag (grabbing a new
+widget you just placed) dies. Measured both on the built window: press+60ms-hold killed every
+widget, old or new; press-and-instantly-move survived. The 0.2.3 fix (`enabled(false)` on web) was
+therefore only half of it — a disabled web gesture is not inert, it is a loaded state machine.
+
+**The fix.** On web the `GestureDetector`s are not mounted at all — `GridCellInner` renders the
+card and the grip bare, and the DOM pointer hook (`usePointerDrag`) is the only drag driver, as it
+already effectively was. No handler, no tracking, nothing to finalize. Native keeps the detectors
+unchanged. Re-measured on the rebuilt window: all four kill profiles clean, the add-flow drag holds
+a constant pointer offset through five crossings (and the card now shows its 0.9 drag opacity —
+previously the detector's `display: contents` div sat between the cell and the card), the release
+glide runs, the drop commits, and the corner-grip resize still works.
+
+---
+
 ## Decisions log
 
 | Date | Decision | Why |
@@ -1661,6 +1709,7 @@ grown to 645 MB. V8's compiled-code cache — harmless, but it only grows.)*
 | 2026-08-08 | `MIN_COL_WIDTH_PX` sits **above** the compact breakpoint (302 > 300) | A stretched column must never render compact — 290 put whole desktop windows into the degraded rung with no way to see why |
 | 2026-08-12 | **The display channel takes the font-size multiplier** — after its box clamp, under a width ceiling; supersedes M8's "reading channel only" rule | Owner's review: a setting the hero ignores reads as broken. What the old rule protected against is kept by scaling the row the hero sits in (`heroRowHeight`) instead of freezing the glyphs |
 | 2026-08-12 | The app presents as **Glances Telemetry** everywhere, wearing the in-app logo mark; identifiers (`com.glancesdashboard.app`, exe name, slug) unchanged | The title bar, Start Menu, launcher and installer disagreed with the wordmark; identifiers stay so upgrades and docs keep working |
+| 2026-08-18 | **`GestureDetector` is not mounted on web** — the grid renders cards and grips bare there, and the DOM pointer hook is the only web drag driver | A *disabled* RNGH web gesture still tracks pointers into BEGAN, and the detector re-applies its config on every re-render, force-finalizing the handler — which fired `endGesture` one frame into every deliberate drag (see Post-0.2.7) |
 | 2026-08-12 | **Shared-value writes from gesture callbacks are allowed, behind documented lint disables** | The rule that forbade them is why M15's drag snapped cell-to-cell; the owner's review judged that unusable, and a per-frame transform outside React is the standard Reanimated drag |
 | 2026-08-08 | `httpGet` forwards the caller's signal through a **local controller and detaches it once the body is read** | tauri-plugin-http (2.5.9, latest) never removes its abort listeners, so the poller's 5 s timeout signal fired `fetch_cancel_body` on already-freed Rust resources after every completed poll — a continuous stream of unhandled "The resource id NNN is invalid" rejections in the desktop build, confirmed and re-verified over CDP |
 | 2026-08-04 | **The transparent window is in scope** | Confirmed with the owner. It is what makes the appearance model's alpha mean anything on desktop. Note the reference's own trade: a transparent window cannot be edge-resized and loses the WM drop shadow, so it is only requested when an alpha is actually below 1 |
